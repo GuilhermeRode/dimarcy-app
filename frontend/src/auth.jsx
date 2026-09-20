@@ -1,19 +1,13 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { api } from "./api";
 
 const Ctx = createContext(null);
-
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
-}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const u = localStorage.getItem("user");
     return u ? JSON.parse(u) : null;
   });
-
-  useEffect(() => { applyTheme(user?.theme); }, [user?.theme]);
 
   async function login(email, password) {
     const { data } = await api.post("/auth/login", { email, password });
