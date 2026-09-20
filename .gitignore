@@ -1,0 +1,36 @@
+# --- secrets / local config ---
+.env
+!.env.example
+backend/uploads/
+
+# --- backend (Python) ---
+backend/.venv/
+backend/__pycache__/
+backend/app/__pycache__/
+backend/app/routers/__pycache__/
+**/__pycache__/
+*.pyc
+
+# --- database (local dev data — never commit real customer data) ---
+backend/*.db
+backend/*.db-journal
+backend/*.db.bak
+
+# --- frontend (Node) ---
+frontend/node_modules/
+frontend/dist/
+frontend/release/
+
+# --- Electron / Capacitor Android build artifacts ---
+frontend/android/.gradle/
+frontend/android/build/
+frontend/android/app/build/
+frontend/android/local.properties
+frontend/android/captures/
+frontend/android/.idea/
+frontend/android/*.iml
+frontend/android/app/*.iml
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db

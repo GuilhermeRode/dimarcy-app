@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Di Marcy Pedidos</string>
+    <string name="title_activity_main">Di Marcy Pedidos</string>
+    <string name="package_name">com.dimarcy.pedidos</string>
+    <string name="custom_url_scheme">com.dimarcy.pedidos</string>
+</resources>
