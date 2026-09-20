@@ -26,6 +26,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(20), default="seller")  # admin | seller
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(300))
+    theme: Mapped[str] = mapped_column(String(10), default="light")  # light | dark — personal UI preference
 
 
 class Customer(Base):

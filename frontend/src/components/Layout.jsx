@@ -5,6 +5,7 @@ import {
   ColorsIcon, CustomersIcon, DashboardIcon, MenuIcon, OrdersIcon, ProductionIcon,
   ProductsIcon, RevenueIcon, UsersAdminIcon,
 } from "./icons";
+import { Avatar } from "./ui";
 import logoIcon from "../assets/logo-icon.png";
 
 const DASHBOARD_LINK = { to: "/", label: "Painel", end: true, Icon: DashboardIcon };
@@ -47,7 +48,13 @@ export default function Layout() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <div className="user-name">{user?.name}</div>
+          <button className="sidebar-user" onClick={() => { closeMenu(); nav("/profile"); }}>
+            <Avatar url={user?.avatar_url} name={user?.name} size="sm" />
+            <span>
+              <span className="user-name">{user?.name}</span>
+              <span className="user-role">Meu perfil</span>
+            </span>
+          </button>
           <button className="logout-link" onClick={logout}>Sair</button>
         </div>
       </aside>

@@ -19,6 +19,8 @@ class UserBase(ORM):
     email: str
     role: str = "seller"
     active: bool = True
+    avatar_url: str | None = None
+    theme: str = "light"
 
 
 class UserIn(UserBase):
@@ -33,6 +35,15 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class ProfileIn(BaseModel):
+    """Self-service profile update — changing the email or setting a new password requires the current password."""
+    name: str = Field(min_length=2)
+    email: str
+    current_password: str | None = None
+    new_password: str | None = None
+    theme: str | None = None
 
 
 # ---------- Customers ----------

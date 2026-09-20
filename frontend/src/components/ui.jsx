@@ -1,4 +1,5 @@
 import { STATUS } from "../format";
+import { fileUrl } from "../api";
 
 export function Modal({ title, onClose, children, wide }) {
   return (
@@ -19,6 +20,14 @@ export const Status = ({ s }) => <span className={`status st-${s}`}>{STATUS[s] |
 export const Swatch = ({ hex, size = 14 }) => (
   <span className="swatch" style={{ background: hex, width: size, height: size }} />
 );
+
+export function Avatar({ url, name, size = "sm" }) {
+  const initial = (name || "?").trim().charAt(0).toUpperCase();
+  const cls = `avatar-${size}`;
+  return url
+    ? <img src={fileUrl(url)} alt="" className={`avatar ${cls}`} />
+    : <span className={`avatar-placeholder ${cls}`}>{initial}</span>;
+}
 
 export function Field({ label, children, span }) {
   return (

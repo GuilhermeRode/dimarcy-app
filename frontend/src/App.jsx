@@ -14,6 +14,7 @@ import Revenue from "./pages/Revenue";
 import Production from "./pages/Production";
 import ProductionPrint from "./pages/ProductionPrint";
 import ClientPrint from "./pages/ClientPrint";
+import Profile from "./pages/Profile";
 
 function Protected({ children, admin }) {
   const { user } = useAuth();
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/orders/:id/client-print" element={<Protected admin><ClientPrint /></Protected>} />
           <Route path="/" element={<Protected><Layout /></Protected>}>
             <Route index element={<Dashboard />} />
+            <Route path="profile" element={<Profile />} />
             <Route path="orders/new" element={<OrderForm />} />
             <Route path="orders" element={<Protected admin><Orders /></Protected>} />
             <Route path="orders/:id" element={<Protected admin><OrderDetail /></Protected>} />
