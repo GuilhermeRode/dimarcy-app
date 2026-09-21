@@ -1,11 +1,10 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { Avatar, ErrorBox, Field } from "../components/ui";
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
-  const fileInput = useRef(null);
   const [form, setForm] = useState({
     name: user.name, email: user.email, current_password: "", new_password: "",
   });
@@ -59,9 +58,11 @@ export default function Profile() {
       <section className="panel profile-header">
         <Avatar url={user.avatar_url} name={user.name} size="lg" />
         <div className="profile-avatar-actions">
-          <button type="button" className="btn btn-light" onClick={() => fileInput.current.click()}>Trocar foto</button>
+          <label className="btn btn-light">
+            Trocar foto
+            <input type="file" accept="image/*" hidden onChange={onAvatarPick} />
+          </label>
           {user.avatar_url && <button type="button" className="btn-x" style={{ fontSize: "0.85rem" }} onClick={removeAvatar}>Remover foto</button>}
-          <input ref={fileInput} type="file" accept="image/*" hidden onChange={onAvatarPick} />
         </div>
       </section>
 
