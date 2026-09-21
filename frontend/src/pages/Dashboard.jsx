@@ -187,29 +187,31 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
 
-            <div className="panel">
+            <div className="panel panel-fill">
               <h3>Situação dos pedidos</h3>
-              {d.by_status.length ? (
-                <div className="donut-row">
-                  <ResponsiveContainer width={168} height={168}>
-                    <PieChart>
-                      <Pie data={d.by_status} dataKey="count" nameKey="status" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                        {d.by_status.map((s) => <Cell key={s.status} fill={STATUS_COLORS[s.status] || "#8b96b3"} />)}
-                      </Pie>
-                      <Tooltip formatter={(v, n, p) => [`${v} pedido(s)`, STATUS[p.payload.status]]} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <ul className="donut-legend">
-                    {d.by_status.map((s) => (
-                      <li key={s.status}>
-                        <span className="legend-dot" style={{ background: STATUS_COLORS[s.status] || "#8b96b3" }} />
-                        <span className="legend-name">{STATUS[s.status] || s.status}</span>
-                        <span className="legend-qty">{s.count}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : <p className="muted">Sem pedidos no período.</p>}
+              <div className="panel-fill-body">
+                {d.by_status.length ? (
+                  <div className="donut-row">
+                    <ResponsiveContainer width={168} height={168}>
+                      <PieChart>
+                        <Pie data={d.by_status} dataKey="count" nameKey="status" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                          {d.by_status.map((s) => <Cell key={s.status} fill={STATUS_COLORS[s.status] || "#8b96b3"} />)}
+                        </Pie>
+                        <Tooltip formatter={(v, n, p) => [`${v} pedido(s)`, STATUS[p.payload.status]]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <ul className="donut-legend">
+                      {d.by_status.map((s) => (
+                        <li key={s.status}>
+                          <span className="legend-dot" style={{ background: STATUS_COLORS[s.status] || "#8b96b3" }} />
+                          <span className="legend-name">{STATUS[s.status] || s.status}</span>
+                          <span className="legend-qty">{s.count}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : <p className="muted">Sem pedidos no período.</p>}
+              </div>
             </div>
 
             <div className="panel">
