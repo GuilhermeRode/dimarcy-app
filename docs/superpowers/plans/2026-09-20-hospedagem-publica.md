@@ -149,3 +149,32 @@ DNS de `dimarcy.com.br` é gerenciado via Cloudflare, sem acesso do usuário. Su
 - [ ] **Passo 3:** Marcar como entregue, checar e-mail (inbox **e spam**) em `di_marcy@hotmail.com`.
 - [ ] **Passo 4:** Apagar os dados de teste.
 - [ ] **Passo 5:** `sudo reboot` na VM, esperar ~1 min, `curl https://144-22-219-124.sslip.io/api/health` deve voltar sozinho (confirma `systemctl enable`), dados reais intactos.
+
+---
+
+## Task 10 (adicional, fora do escopo original): acesso via navegador (iPhone) — ✅ concluído
+
+Extensão pedida depois da Task 9 ser planejada: como não existe app nativo iOS possível sem Mac/Xcode, o frontend passou a ser servido também como site simples, para acesso via Safari/Chrome de qualquer navegador.
+
+- [x] Build do frontend (`frontend/dist/`, o mesmo já usado no Electron/Capacitor) copiado para `/opt/dimarcy/frontend-dist` na VM.
+- [x] Caddyfile atualizado para diferenciar por caminho na mesma URL:
+  ```
+  144-22-219-124.sslip.io {
+      handle /api/* {
+          reverse_proxy 127.0.0.1:8000
+      }
+      handle /uploads/* {
+          reverse_proxy 127.0.0.1:8000
+      }
+      handle {
+          root * /opt/dimarcy/frontend-dist
+          try_files {path} /index.html
+          file_server
+      }
+  }
+  ```
+  (`/uploads/*` também precisa ir para o backend — é onde ficam as fotos de produtos/avatares, servidas pelo FastAPI fora do prefixo `/api`.)
+
+**Verificação:** `curl https://144-22-219-124.sslip.io/api/health` → `{"ok":true}`; `curl https://144-22-219-124.sslip.io/` → HTML do app; asset JS → HTTP 200. ✅ (Teste visual real no Safari do iPhone: pendente, só o usuário pode confirmar.)
+
+**Nota:** essa cópia do frontend na VM é estática — se o código do frontend mudar no futuro, é preciso repetir esse `tar`/copy manualmente (não há deploy automático configurado, por decisão de escopo do plano original).
