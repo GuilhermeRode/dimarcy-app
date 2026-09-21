@@ -116,7 +116,7 @@ export default function Orders() {
             <thead>
               <tr>
                 <th>{isAdmin ? "Nº" : "Data"}</th><th>Cliente</th><th>Entrega</th><th className="num">Peças</th>
-                <th className="num">Total</th><th></th><th>Situação</th>
+                <th className="num">Total</th><th>Situação</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -139,6 +139,7 @@ export default function Orders() {
                   <td>{o.delivery_date ? dateBR(o.delivery_date) : "—"}</td>
                   <td className="num">{o.pieces}</td>
                   <td className="num">{money(o.total)}</td>
+                  <td><Status s={o.status} /></td>
                   <td>
                     <div className="actions actions-end">
                       {isAdmin && (
@@ -147,17 +148,21 @@ export default function Orders() {
                       <button className="btn btn-light" onClick={() => nav(`/orders/${o.id}`)}>Abrir</button>
                     </div>
                   </td>
-                  <td><Status s={o.status} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
           <div className="table-footer">
             <span className="muted">Mostrando {pageItems.length} de {filtered.length} pedidos</span>
-            <div className="actions">
-              <button className="btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</button>
-              <button className="btn" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Próxima</button>
-            </div>
+            {totalPages > 1 && (
+              <div className="actions">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                  <button key={n} className={`btn btn-light ${n === page ? "btn-primary" : ""}`} onClick={() => setPage(n)}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}
