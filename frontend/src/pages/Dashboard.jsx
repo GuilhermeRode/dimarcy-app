@@ -180,13 +180,14 @@ export default function Dashboard() {
                   <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
                   <YAxis tickLine={false} axisLine={false} fontSize={12}
                     tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v)} />
-                  <Tooltip formatter={(v, n) => (n === "value" ? [money(v), "Faturamento"] : [v, "Peças"])} />
+                  <Tooltip cursor={{ fill: "rgba(47, 111, 237, 0.08)", radius: 6 }}
+                    formatter={(v, n) => (n === "value" ? [money(v), "Faturamento"] : [v, "Peças"])} />
                   <Bar dataKey="value" fill="url(#barColor)" radius={[4, 4, 0, 0]} maxBarSize={34} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
-            <div className="panel">
+            <div className="panel panel-center">
               <h3>Situação dos pedidos</h3>
               {d.by_status.length ? (
                 <div className="donut-row">
@@ -262,7 +263,8 @@ export default function Dashboard() {
                     <CartesianGrid vertical={false} stroke="#e3e8f2" />
                     <XAxis dataKey="size" tickLine={false} axisLine={false} fontSize={12} />
                     <YAxis tickLine={false} axisLine={false} fontSize={12} allowDecimals={false} />
-                    <Tooltip formatter={(v) => [`${v} peças`, ""]} labelFormatter={(l) => `Tamanho ${l}`} />
+                    <Tooltip cursor={{ fill: "rgba(47, 111, 237, 0.08)", radius: 6 }}
+                      formatter={(v) => [`${v} peças`, ""]} labelFormatter={(l) => `Tamanho ${l}`} />
                     <Bar dataKey="pieces" fill="url(#barColorSizes)" radius={[4, 4, 0, 0]} maxBarSize={40} />
                   </BarChart>
                 </ResponsiveContainer>

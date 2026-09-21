@@ -66,10 +66,12 @@ def _find(oid: int, db: Session) -> Order:
     return o
 
 
-@router.get("", dependencies=[Depends(require_admin)])
+@router.get("")
 def list_all(status: str = "", customer_id: int | None = None, start: date | None = None,
-             end: date | None = None, db: Session = Depends(get_db)):
+             end: date | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     q = db.query(Order)
+    if user.role != "admin":  # sellers only see their own orders
+        q = q.filter(Order.seller_id == user.id)
     if status:
         q = q.filter(Order.status == status)
     if customer_id:
@@ -81,9 +83,12 @@ def list_all(status: str = "", customer_id: int | None = None, start: date | Non
     return [summary(o) for o in q.order_by(Order.id.desc()).all()]
 
 
-@router.get("/{oid}", dependencies=[Depends(require_admin)])
-def get(oid: int, db: Session = Depends(get_db)):
-    return full(_find(oid, db))
+@router.get("/{oid}")
+def get(oid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    o = _find(oid, db)
+    if user.role != "admin" and o.seller_id != user.id:
+        raise HTTPException(404, "Order not found.")
+    return full(o)
 
 
 @router.post("", status_code=201)

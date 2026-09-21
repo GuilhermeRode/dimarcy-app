@@ -9,11 +9,13 @@ import { Avatar } from "./ui";
 import logoIcon from "../assets/logo-icon.png";
 
 const DASHBOARD_LINK = { to: "/", label: "Painel", end: true, Icon: DashboardIcon };
+const ORDERS_LINK = { to: "/orders", label: "Pedidos", Icon: OrdersIcon };
+const CUSTOMERS_LINK = { to: "/customers", label: "Clientes", Icon: CustomersIcon };
 const ADMIN_LINKS = [
-  { to: "/orders", label: "Pedidos", Icon: OrdersIcon },
+  ORDERS_LINK,
   { to: "/production", label: "Produção", Icon: ProductionIcon },
   { to: "/revenue", label: "Faturamento", Icon: RevenueIcon },
-  { to: "/customers", label: "Clientes", Icon: CustomersIcon },
+  CUSTOMERS_LINK,
   { to: "/products", label: "Produtos", Icon: ProductsIcon },
   { to: "/colors", label: "Cores", Icon: ColorsIcon },
   { to: "/users", label: "Usuários", Icon: UsersAdminIcon },
@@ -23,8 +25,8 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
-  // Sellers only see the dashboard (scoped to their own orders) and "Novo pedido"; admins see everything.
-  const links = user?.role === "admin" ? [DASHBOARD_LINK, ...ADMIN_LINKS] : [DASHBOARD_LINK];
+  // Sellers see the dashboard (scoped to their own orders), "Novo pedido", and their own orders/customers; admins see everything.
+  const links = user?.role === "admin" ? [DASHBOARD_LINK, ...ADMIN_LINKS] : [DASHBOARD_LINK, ORDERS_LINK, CUSTOMERS_LINK];
   const closeMenu = () => setMenuOpen(false);
 
   return (

@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api";
+import { useAuth } from "../auth";
 import { dateBR, money, orderNumber, STATUS } from "../format";
 import { ErrorBox, Status, EmptyState } from "../components/ui";
 
 export default function Orders() {
   const nav = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [orders, setOrders] = useState([]);
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
@@ -44,7 +47,7 @@ export default function Orders() {
       ) : (
         <table className="table">
           <thead>
-            <tr><th>Nº</th><th>Data</th><th>Entrega</th><th>Cliente</th><th>Vendedor</th><th className="num">Peças</th><th className="num">Total</th><th>Situação</th></tr>
+            <tr><th>Nº</th><th>Data</th><th>Entrega</th><th>Cliente</th>{isAdmin && <th>Vendedor</th>}<th className="num">Peças</th><th className="num">Total</th><th>Situação</th></tr>
           </thead>
           <tbody>
             {filtered.map((o) => (
@@ -53,7 +56,7 @@ export default function Orders() {
                 <td>{dateBR(o.date)}</td>
                 <td>{o.delivery_date ? dateBR(o.delivery_date) : "—"}</td>
                 <td>{o.customer_name}</td>
-                <td>{o.seller_name}</td>
+                {isAdmin && <td>{o.seller_name}</td>}
                 <td className="num">{o.pieces}</td>
                 <td className="num">{money(o.total)}</td>
                 <td><Status s={o.status} /></td>

@@ -36,12 +36,12 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="profile" element={<Profile />} />
             <Route path="orders/new" element={<OrderForm />} />
-            <Route path="orders" element={<Protected admin><Orders /></Protected>} />
-            <Route path="orders/:id" element={<Protected admin><OrderDetail /></Protected>} />
+            <Route path="orders" element={<Orders />} />
+            <Route path="orders/:id" element={<OrderDetail />} />
             <Route path="orders/:id/edit" element={<Protected admin><OrderForm /></Protected>} />
             <Route path="production" element={<Protected admin><Production /></Protected>} />
             <Route path="revenue" element={<Protected admin><Revenue /></Protected>} />
-            <Route path="customers" element={<Protected admin><Customers /></Protected>} />
+            <Route path="customers" element={<Customers />} />
             <Route path="products" element={<Protected admin><Products /></Protected>} />
             <Route path="colors" element={<Protected admin><Colors /></Protected>} />
             <Route path="users" element={<Protected admin><Users /></Protected>} />

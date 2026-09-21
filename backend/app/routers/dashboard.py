@@ -65,7 +65,10 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
     months.reverse()
     start12 = date(*months[0], 1)
     series = {k: {"value": 0.0, "pieces": 0} for k in months}
-    for o in db.query(Order).filter(Order.date >= start12, Order.status.in_(SALE_STATUSES)).all():
+    q12 = db.query(Order).filter(Order.date >= start12, Order.status.in_(SALE_STATUSES))
+    if user.role != "admin":  # sellers only see their own sales in the trend chart too
+        q12 = q12.filter(Order.seller_id == user.id)
+    for o in q12.all():
         k = (o.date.year, o.date.month)
         if k in series:
             series[k]["value"] += o.total

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
+import { useAuth } from "../auth";
 import { dateBR, money, orderNumber, STATUS } from "../format";
 import { ErrorBox, Status, Swatch } from "../components/ui";
 
 export default function OrderDetail() {
   const { id } = useParams();
   const nav = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [o, setO] = useState(null);
   const [error, setError] = useState("");
 
@@ -39,13 +42,17 @@ export default function OrderDetail() {
           <p className="muted">{o.customer_name} · {dateBR(o.date)} · vendedor {o.seller_name}</p>
         </div>
         <div className="actions">
-          <select value={o.status} onChange={(e) => changeStatus(e.target.value)} aria-label="Situação">
-            {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-          <button className="btn" onClick={() => nav(`/orders/${id}/client-print`)}>Imprimir p/ cliente</button>
-          <button className="btn" onClick={() => nav(`/orders/${id}/production-print`)}>Imprimir produção</button>
-          <button className="btn" onClick={() => nav(`/orders/${id}/edit`)}>Editar</button>
-          <button className="btn danger" onClick={remove}>Excluir</button>
+          {isAdmin ? (
+            <>
+              <select value={o.status} onChange={(e) => changeStatus(e.target.value)} aria-label="Situação">
+                {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+              <button className="btn" onClick={() => nav(`/orders/${id}/client-print`)}>Imprimir p/ cliente</button>
+              <button className="btn" onClick={() => nav(`/orders/${id}/production-print`)}>Imprimir produção</button>
+              <button className="btn" onClick={() => nav(`/orders/${id}/edit`)}>Editar</button>
+              <button className="btn danger" onClick={remove}>Excluir</button>
+            </>
+          ) : <Status s={o.status} />}
         </div>
       </header>
       <ErrorBox msg={error} />
