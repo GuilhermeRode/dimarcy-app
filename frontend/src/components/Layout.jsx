@@ -6,7 +6,7 @@ import {
   ProductsIcon, RevenueIcon, UsersAdminIcon,
 } from "./icons";
 import { Avatar } from "./ui";
-import logoIcon from "../assets/logo-icon.png";
+import logoFull from "../assets/logo-full.png";
 
 const DASHBOARD_LINK = { to: "/", label: "Painel", end: true, Icon: DashboardIcon };
 const ORDERS_LINK = { to: "/orders", label: "Pedidos", Icon: OrdersIcon };
@@ -34,11 +34,7 @@ export default function Layout() {
       {menuOpen && <div className="sidebar-backdrop" onClick={closeMenu} />}
       <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
         <div className="brand">
-          <img src={logoIcon} alt="" className="brand-icon" />
-          <span className="brand-text">
-            <span className="brand-name">Di Marcy</span>
-            <span className="brand-sub">Pedidos</span>
-          </span>
+          <img src={logoFull} alt="Di Marcy" className="brand-logo" />
         </div>
         <button className="btn btn-new" onClick={() => { closeMenu(); nav("/orders/new"); }}>+ Novo pedido</button>
         <nav>
@@ -65,8 +61,7 @@ export default function Layout() {
           <button className="mobile-menu-btn" onClick={() => setMenuOpen(true)} aria-label="Abrir menu">
             <MenuIcon />
           </button>
-          <img src={logoIcon} alt="" className="mobile-topbar-icon" />
-          <span className="mobile-topbar-name">Di Marcy</span>
+          <img src={logoFull} alt="Di Marcy" className="mobile-topbar-logo" />
         </div>
         <Outlet />
       </main>

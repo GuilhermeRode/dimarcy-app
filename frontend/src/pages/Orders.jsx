@@ -15,24 +15,6 @@ function daysUntil(dateStr) {
   return Math.round((d - today) / 86400000);
 }
 
-function deliveryBadge(deliveryDate) {
-  if (!deliveryDate) return null;
-  const days = daysUntil(deliveryDate);
-  if (days < 0) return { text: `Atrasado ${Math.abs(days)} d`, tone: "danger" };
-  if (days === 0) return { text: "Hoje", tone: "amber" };
-  if (days <= 5) return { text: `Em ${days} dia${days > 1 ? "s" : ""}`, tone: "amber" };
-  return { text: `Em ${days} dias`, tone: "muted" };
-}
-
-function toCsv(rows, isAdmin) {
-  const header = ["Nº", "Data", "Entrega", "Cliente", ...(isAdmin ? ["Vendedor"] : []), "Peças", "Total", "Situação"];
-  const lines = rows.map((o) => [
-    orderNumber(o.id), dateBR(o.date), o.delivery_date ? dateBR(o.delivery_date) : "",
-    o.customer_name, ...(isAdmin ? [o.seller_name] : []), o.pieces, o.total, STATUS[o.status] || o.status,
-  ]);
-  return [header, ...lines].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
-}
-
 export default function Orders() {
   const nav = useNavigate();
   const { user } = useAuth();
@@ -43,11 +25,10 @@ export default function Orders() {
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const [updatedAt, setUpdatedAt] = useState(null);
 
   useEffect(() => {
     api.get("/orders")
-      .then((r) => { setOrders(r.data); setUpdatedAt(new Date()); setError(""); })
+      .then((r) => { setOrders(r.data); setError(""); })
       .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoaded(true));
   }, []);
@@ -81,50 +62,31 @@ export default function Orders() {
     };
   }, [orders]);
 
-  function exportCsv() {
-    const blob = new Blob([toCsv(filtered, isAdmin)], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "pedidos.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <div className="page">
       <header className="page-header">
-        <div>
-          <h1>Pedidos</h1>
-          <p className="muted">
-            {filtered.length} de {orders.length} pedidos
-            {updatedAt && ` · atualizado hoje às ${updatedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}
-          </p>
-        </div>
-        <div className="actions">
-          <button className="btn" onClick={exportCsv} disabled={!filtered.length}>Exportar</button>
-          <button className="btn btn-primary" onClick={() => nav("/orders/new")}>Novo pedido</button>
-        </div>
+        <h1>Pedidos</h1>
+        <button className="btn btn-primary" onClick={() => nav("/orders/new")}>Novo pedido</button>
       </header>
 
       <section className="orders-kpis">
         <div className="kpi">
-          <div className="kpi-header"><span>Em aberto</span></div>
+          <div className="kpi-header"><span>Em aberto</span><span className="kpi-icon icon-indigo" aria-hidden="true">📋</span></div>
           <strong>{kpis.openCount}</strong>
           <span>pedidos ativos</span>
         </div>
         <div className="kpi">
-          <div className="kpi-header"><span>Valor em aberto</span></div>
+          <div className="kpi-header"><span>Valor em aberto</span><span className="kpi-icon" aria-hidden="true">💰</span></div>
           <strong>{money(kpis.openValue)}</strong>
           <span>soma dos pedidos ativos</span>
         </div>
         <div className="kpi">
-          <div className="kpi-header"><span>Peças</span></div>
+          <div className="kpi-header"><span>Peças</span><span className="kpi-icon icon-teal" aria-hidden="true">📦</span></div>
           <strong>{kpis.openPieces}</strong>
           <span>a produzir</span>
         </div>
         <div className="kpi">
-          <div className="kpi-header"><span>Entrega próxima</span></div>
+          <div className="kpi-header"><span>Entrega próxima</span><span className="kpi-icon icon-gold" aria-hidden="true">📅</span></div>
           <strong>{kpis.upcomingCount}</strong>
           <span>nos próximos 15 dias</span>
         </div>
@@ -150,50 +112,44 @@ export default function Orders() {
           action={<button className="btn" onClick={() => nav("/orders/new")}>Lançar o primeiro pedido</button>} />
       ) : (
         <>
-          <table className="table">
+          <table className="table table-orders">
             <thead>
               <tr>
-                <th>Nº</th><th>Cliente</th><th>Entrega</th><th className="num">Peças</th>
-                <th className="num">Total</th><th>Situação</th><th></th>
+                <th>{isAdmin ? "Nº" : "Data"}</th><th>Cliente</th><th>Entrega</th><th className="num">Peças</th>
+                <th className="num">Total</th><th></th><th>Situação</th>
               </tr>
             </thead>
             <tbody>
-              {pageItems.map((o) => {
-                const delivery = deliveryBadge(o.delivery_date);
-                return (
-                  <tr key={o.id}>
-                    <td>
+              {pageItems.map((o) => (
+                <tr key={o.id}>
+                  <td>
+                    {isAdmin ? (
                       <span className="cell-stack">
                         <span className="ref">{orderNumber(o.id)}</span>
                         <span className="cell-sub">{dateBR(o.date)}</span>
                       </span>
-                    </td>
-                    <td>
-                      <span className="cell-stack">
-                        <span>{o.customer_name}</span>
-                        {isAdmin && <span className="cell-sub">{o.seller_name}</span>}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="cell-stack">
-                        <span>{o.delivery_date ? dateBR(o.delivery_date) : "—"}</span>
-                        {delivery && <span className={`cell-sub cell-${delivery.tone}`}>{delivery.text}</span>}
-                      </span>
-                    </td>
-                    <td className="num">{o.pieces}</td>
-                    <td className="num">{money(o.total)}</td>
-                    <td><Status s={o.status} /></td>
-                    <td>
-                      <div className="actions actions-end">
-                        {isAdmin && (
-                          <button className="btn btn-light" onClick={() => nav(`/orders/${o.id}/production-print`)}>Imprimir</button>
-                        )}
-                        <button className="btn btn-light" onClick={() => nav(`/orders/${o.id}`)}>Abrir</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                    ) : <span className="ref">{dateBR(o.date)}</span>}
+                  </td>
+                  <td>
+                    <span className="cell-stack">
+                      <span>{o.customer_name}</span>
+                      {isAdmin && <span className="cell-sub">{o.seller_name}</span>}
+                    </span>
+                  </td>
+                  <td>{o.delivery_date ? dateBR(o.delivery_date) : "—"}</td>
+                  <td className="num">{o.pieces}</td>
+                  <td className="num">{money(o.total)}</td>
+                  <td>
+                    <div className="actions actions-end">
+                      {isAdmin && (
+                        <button className="btn btn-light" onClick={() => nav(`/orders/${o.id}/production-print`)}>Imprimir</button>
+                      )}
+                      <button className="btn btn-light" onClick={() => nav(`/orders/${o.id}`)}>Abrir</button>
+                    </div>
+                  </td>
+                  <td><Status s={o.status} /></td>
+                </tr>
+              ))}
             </tbody>
           </table>
           <div className="table-footer">
