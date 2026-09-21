@@ -38,7 +38,11 @@
       "electron/**"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "src/assets/logo-icon.png"
+    },
+    "nsis": {
+      "createDesktopShortcut": "always"
     }
   }
 }
