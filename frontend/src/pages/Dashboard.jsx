@@ -187,7 +187,7 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
 
-            <div className="panel panel-center">
+            <div className="panel">
               <h3>Situação dos pedidos</h3>
               {d.by_status.length ? (
                 <div className="donut-row">
