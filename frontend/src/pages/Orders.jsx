@@ -94,7 +94,7 @@ export default function Orders() {
 
       <div className="filter-bar">
         <input placeholder="Buscar por cliente ou número" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <div className="period-chips">
+        <div className="period-chips order-status-chips">
           <button type="button" className={`period-chip ${!status ? "on" : ""}`} onClick={() => setStatus("")}>
             Todas {orders.length}
           </button>

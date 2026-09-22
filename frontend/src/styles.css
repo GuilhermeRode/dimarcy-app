@@ -141,7 +141,7 @@ input[type="checkbox"] { width: auto; }
 .tag { margin-left: 8px; font-size: 0.75rem; background: var(--accent-light); color: var(--accent-strong); padding: 1px 7px; border-radius: 4px; font-weight: 600; }
 .tag-warning { background: var(--amber-light); color: var(--amber); }
 .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
-.filter-bar input { max-width: 380px; flex: 1; min-width: 200px; }
+.filter-bar input { max-width: 460px; flex: 1; min-width: 200px; }
 .filter-bar select { max-width: 220px; }
 .empty-state { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); padding: 40px; text-align: center; color: var(--muted); }
 
@@ -363,7 +363,8 @@ section.item-group { margin-top: 0; }
 
 /* ---------- customers ---------- */
 .header-search-group { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
-.header-search { flex: 1; min-width: 120px; max-width: 260px; }
+.header-search { flex: 1; min-width: 160px; max-width: 420px; }
+.order-status-chips .period-chip { padding: 8px 16px; font-size: 0.9rem; }
 .customer-group { display: flex; flex-direction: column; gap: 8px; }
 .customer-group-header {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
