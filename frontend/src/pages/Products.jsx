@@ -59,11 +59,11 @@ export default function Products() {
     <div className="page">
       <header className="page-header">
         <h1>Produtos</h1>
-        <button className="btn btn-primary" onClick={() => open(null)}>Cadastrar produto</button>
+        <div className="actions">
+          <input className="header-search" placeholder="Buscar por referência, nome ou coleção" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <button className="btn btn-primary" onClick={() => open(null)}>Cadastrar produto</button>
+        </div>
       </header>
-      <div className="filter-bar">
-        <input placeholder="Buscar por referência, nome ou coleção" value={search} onChange={(e) => setSearch(e.target.value)} />
-      </div>
       {!list.length ? <EmptyState text="Nenhum produto cadastrado." /> : (
         <table className="table">
           <thead><tr><th></th><th>Ref.</th><th>Descrição</th><th>Coleção</th><th>Tamanhos</th><th>Cores</th><th className="num">Preço</th></tr></thead>
