@@ -243,10 +243,30 @@ input[type="checkbox"] { width: auto; }
 .orders-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .revenue-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
 .city-map-layout { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; align-items: start; }
-.city-map-panel svg { display: block; margin: 0 auto; }
+.city-map-zoom { display: flex; align-items: center; gap: 6px; }
+.city-map-zoom .btn-x {
+  width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 6px; font-size: 1.1rem;
+  display: grid; place-items: center; line-height: 1;
+}
+.city-map-zoom .btn-x:hover { background: var(--surface-2); }
+.city-map-zoom .btn { padding: 4px 10px; font-size: 0.8rem; }
+.city-map-canvas { position: relative; background: linear-gradient(180deg, #f7faff 0%, #eef2f9 100%); border-radius: 8px; overflow: hidden; cursor: grab; }
+.city-map-canvas:active { cursor: grabbing; }
+.city-map-canvas svg { display: block; margin: 0 auto; }
+.city-bubble { transition: r .15s ease, filter .15s ease; filter: drop-shadow(0 2px 5px rgba(29,84,201,.45)); cursor: pointer; }
+.city-bubble:hover { filter: drop-shadow(0 3px 8px rgba(29,84,201,.6)) brightness(1.08); }
+.city-map-tooltip {
+  position: absolute; z-index: 5; pointer-events: none; background: var(--navy); color: #fff;
+  padding: 6px 10px; border-radius: 7px; font-size: 0.8rem; line-height: 1.4; box-shadow: 0 8px 20px -6px rgba(9,20,41,.5);
+  display: flex; flex-direction: column; gap: 1px; white-space: nowrap;
+}
+.city-map-tooltip span { color: #b9c7e6; font-size: 0.74rem; }
 .city-map-legend { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .city-map-legend-item { display: flex; align-items: center; gap: 4px; }
 .city-map-legend-dot { display: inline-block; border-radius: 50%; background: rgba(47,111,237,.35); border: 1.5px solid #1d54c9; }
+.ranking li { cursor: pointer; border-radius: 8px; padding: 4px 6px; margin: 0 -6px; transition: background .12s ease; }
+.ranking li:hover { background: var(--surface-2); }
+.ranking li.ranking-selected { background: var(--accent-light); }
 .kpi {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; box-shadow: var(--shadow);

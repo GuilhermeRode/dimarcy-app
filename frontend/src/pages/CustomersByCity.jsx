@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
 import { geoMercator } from "d3-geo";
 import { api, errorMessage } from "../api";
 import { money } from "../format";
@@ -10,6 +10,8 @@ import statesGeo from "../assets/br-states.geo.json";
 const STATES = ["PR", "RS", "SC", "SP"];
 const MAP_W = 560;
 const MAP_H = 560;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 8;
 const projection = geoMercator().fitSize([MAP_W, MAP_H], statesGeo);
 
 function monthsAgo(n) {
@@ -23,6 +25,10 @@ export default function CustomersByCity() {
   const [orders, setOrders] = useState([]);
   const [stateFilter, setStateFilter] = useState("");
   const [error, setError] = useState("");
+  const [zoom, setZoom] = useState(1);
+  const [hovered, setHovered] = useState(null); // { city, x, y }
+  const [selected, setSelected] = useState(null); // city key
+  const mapWrapRef = useRef(null);
 
   useEffect(() => {
     Promise.all([api.get("/customers"), api.get("/orders")])
@@ -68,14 +74,19 @@ export default function CustomersByCity() {
   }, [orders, customers, stateFilter, cutoff]);
 
   const maxActive = Math.max(1, ...cities.map((c) => c.active));
-  const radius = (active) => (active === 0 ? 3 : 4 + (Math.sqrt(active) / Math.sqrt(maxActive)) * 16);
+  const radius = (active) => (active === 0 ? 3 : 4 + (Math.sqrt(active) / Math.sqrt(maxActive)) * 15);
+
+  function pointerPos(e) {
+    const rect = mapWrapRef.current.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
 
   return (
     <div className="page page-wide">
       <header className="page-header">
         <div>
           <h1>Clientes por cidade</h1>
-          <p className="muted">Tamanho do círculo = clientes ativos (com pedido nos últimos 12 meses).</p>
+          <p className="muted">Tamanho do círculo = clientes ativos (com pedido nos últimos 12 meses). Arraste e use a roda do mouse para navegar.</p>
         </div>
         <div className="period-chips">
           <button type="button" className={`period-chip ${!stateFilter ? "on" : ""}`} onClick={() => setStateFilter("")}>Todos</button>
@@ -111,28 +122,66 @@ export default function CustomersByCity() {
 
       <div className="city-map-layout">
         <section className="panel city-map-panel">
-          <div className="panel-header"><h3>Mapa</h3><span className="muted">{stateFilter || "Sul e Sudeste"}</span></div>
-          <ComposableMap width={MAP_W} height={MAP_H} projection={projection} style={{ width: "100%", height: "auto" }}>
-            <Geographies geography={statesGeo}>
-              {({ geographies }) => geographies.map((geo) => (
-                <Geography key={geo.rsmKey} geography={geo}
-                  fill={stateFilter && geo.properties.uf !== stateFilter ? "#eef2f9" : "#e4eaf6"}
-                  stroke="#c7d3e8" strokeWidth={1}
-                  style={{ default: { outline: "none" }, hover: { outline: "none" }, pressed: { outline: "none" } }} />
-              ))}
-            </Geographies>
-            {cities.map((c) => {
-              const coords = cityCoords(c.city, c.state);
-              if (!coords) return null;
-              const r = radius(c.active);
-              return (
-                <Marker key={c.name} coordinates={[coords[1], coords[0]]}>
-                  <circle r={r} fill="rgba(47,111,237,.35)" stroke="#1d54c9" strokeWidth={1.5} />
-                  <text textAnchor="middle" y={-r - 6} fontSize={11} fontWeight={600} fill="#16233d">{c.city}</text>
-                </Marker>
-              );
-            })}
-          </ComposableMap>
+          <div className="panel-header">
+            <h3>Mapa</h3>
+            <div className="city-map-zoom">
+              <button type="button" className="btn-x" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 1))} aria-label="Diminuir zoom">−</button>
+              <span className="muted">{zoom.toFixed(1)}×</span>
+              <button type="button" className="btn-x" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 1))} aria-label="Aumentar zoom">+</button>
+              <button type="button" className="btn-light btn" onClick={() => setZoom(1)}>Redefinir</button>
+            </div>
+          </div>
+          <div className="city-map-canvas" ref={mapWrapRef}>
+            <ComposableMap width={MAP_W} height={MAP_H} projection={projection} style={{ width: "100%", height: "auto" }}>
+              <defs>
+                <radialGradient id="bubbleGrad" cx="35%" cy="30%" r="70%">
+                  <stop offset="0%" stopColor="#6fa0f7" stopOpacity="0.95" />
+                  <stop offset="100%" stopColor="#1d54c9" stopOpacity="0.6" />
+                </radialGradient>
+                <radialGradient id="bubbleGradSelected" cx="35%" cy="30%" r="70%">
+                  <stop offset="0%" stopColor="#ffcf7a" stopOpacity="0.95" />
+                  <stop offset="100%" stopColor="#b8862f" stopOpacity="0.65" />
+                </radialGradient>
+              </defs>
+              <ZoomableGroup zoom={zoom} minZoom={MIN_ZOOM} maxZoom={MAX_ZOOM} onMoveEnd={({ zoom: z }) => setZoom(z)}>
+                <Geographies geography={statesGeo}>
+                  {({ geographies }) => geographies.map((geo) => (
+                    <Geography key={geo.rsmKey} geography={geo}
+                      fill={stateFilter && geo.properties.uf !== stateFilter ? "#eef2f9" : "#e6ecf9"}
+                      stroke="#c7d3e8" strokeWidth={0.75}
+                      style={{
+                        default: { outline: "none", transition: "fill .15s ease" },
+                        hover: { outline: "none", fill: "#dbe4f5" },
+                        pressed: { outline: "none" },
+                      }} />
+                  ))}
+                </Geographies>
+                {cities.map((c) => {
+                  const coords = cityCoords(c.city, c.state);
+                  if (!coords) return null;
+                  const r = radius(c.active) / Math.sqrt(zoom);
+                  const isSelected = selected === c.name;
+                  return (
+                    <Marker key={c.name} coordinates={[coords[1], coords[0]]}
+                      onClick={() => setSelected(isSelected ? null : c.name)}
+                      onMouseEnter={(e) => setHovered({ city: c, ...pointerPos(e) })}
+                      onMouseMove={(e) => setHovered({ city: c, ...pointerPos(e) })}
+                      onMouseLeave={() => setHovered(null)}>
+                      <circle className="city-bubble" r={r}
+                        fill={isSelected ? "url(#bubbleGradSelected)" : "url(#bubbleGrad)"}
+                        stroke={isSelected ? "#9a5b12" : "#1d54c9"} strokeWidth={1.25} />
+                    </Marker>
+                  );
+                })}
+              </ZoomableGroup>
+            </ComposableMap>
+            {hovered && (
+              <div className="city-map-tooltip" style={{ left: hovered.x + 14, top: hovered.y + 10 }}>
+                <strong>{hovered.city.city}/{hovered.city.state}</strong>
+                <span>{hovered.city.active} ativo{hovered.city.active === 1 ? "" : "s"} · {hovered.city.total} cadastrado{hovered.city.total === 1 ? "" : "s"}</span>
+              </div>
+            )}
+          </div>
           <div className="city-map-legend">
             {[2, 8, 20].map((n) => (
               <span key={n} className="city-map-legend-item">
@@ -149,7 +198,8 @@ export default function CustomersByCity() {
           {cities.length ? (
             <ol className="ranking">
               {cities.map((c, k) => (
-                <li key={c.name}>
+                <li key={c.name} className={selected === c.name ? "ranking-selected" : ""}
+                  onClick={() => setSelected(selected === c.name ? null : c.name)}>
                   <div className="ranking-row">
                     <span className="ranking-left">
                       <span className={`ranking-rank ${k === 0 ? "gold" : ""}`}>{k + 1}</span>
