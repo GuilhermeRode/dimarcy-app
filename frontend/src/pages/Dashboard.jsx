@@ -61,8 +61,8 @@ function Delta({ cur, prev }) {
   );
 }
 
-function Ranking({ items, label, detail }) {
-  const max = Math.max(...items.map((i) => i.value), 1);
+function Ranking({ items, label, detail, value = (i) => i.value, formatValue = money }) {
+  const max = Math.max(...items.map(value), 1);
   if (!items.length) return <p className="muted">Sem vendas no período.</p>;
   return (
     <ol className="ranking">
@@ -73,9 +73,9 @@ function Ranking({ items, label, detail }) {
               <span className={`ranking-rank ${k === 0 ? "gold" : ""}`}>{k + 1}</span>
               <span className="ranking-name">{label(i)}</span>
             </span>
-            <span className="ranking-value">{money(i.value)}</span>
+            <span className="ranking-value">{formatValue(value(i))}</span>
           </div>
-          <div className="ranking-bar"><span style={{ width: `${(i.value / max) * 100}%` }} /></div>
+          <div className="ranking-bar"><span style={{ width: `${(value(i) / max) * 100}%` }} /></div>
           <div className="ranking-detail">{detail(i)}</div>
         </li>
       ))}
@@ -92,6 +92,7 @@ export default function Dashboard() {
   const [end, setEnd] = useState(today());
   const [d, setD] = useState(null);
   const [dPrev, setDPrev] = useState(null);
+  const [topCities, setTopCities] = useState([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -103,6 +104,20 @@ export default function Dashboard() {
       .then(([r1, r2]) => { setD(r1.data); setDPrev(r2.data); setError(""); })
       .catch((e) => setError(errorMessage(e)));
   }, [start, end]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.get("/customers").then((r) => {
+      const counts = new Map();
+      for (const c of r.data) {
+        if (!c.city) continue;
+        const key = `${c.city.trim()}/${(c.state || "").trim().toUpperCase()}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      setTopCities([...counts.entries()].map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count).slice(0, 5));
+    });
+  }, [isAdmin]);
 
   function applyPreset(p) {
     setActivePreset(p.key);
@@ -250,6 +265,17 @@ export default function Dashboard() {
               <Ranking items={d.top_customers} label={(i) => i.name}
                 detail={(i) => `${i.orders} pedidos · ${i.pieces} peças`} />
             </div>
+
+            {isAdmin && topCities.length > 0 && (
+              <div className="panel panel-clickable" onClick={() => nav("/customers-by-city")}>
+                <div className="panel-header">
+                  <h3>Clientes por cidade</h3>
+                  <span className="tag">Ver mapa →</span>
+                </div>
+                <Ranking items={topCities} label={(i) => i.name} detail={() => ""}
+                  value={(i) => i.count} formatValue={(v) => `${v} cliente${v > 1 ? "s" : ""}`} />
+              </div>
+            )}
 
             <div className="panel">
               <h3>Peças por tamanho</h3>
