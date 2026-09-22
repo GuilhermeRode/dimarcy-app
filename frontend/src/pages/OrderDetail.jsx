@@ -52,7 +52,12 @@ export default function OrderDetail() {
               <button className="btn" onClick={() => nav(`/orders/${id}/edit`)}>Editar</button>
               <button className="btn danger" onClick={remove}>Excluir</button>
             </>
-          ) : <Status s={o.status} />}
+          ) : (
+            <>
+              <Status s={o.status} />
+              <button className="btn" onClick={() => nav(`/orders/${id}/client-print`)}>Imprimir p/ cliente</button>
+            </>
+          )}
         </div>
       </header>
       <ErrorBox msg={error} />

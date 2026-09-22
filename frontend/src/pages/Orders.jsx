@@ -116,7 +116,7 @@ export default function Orders() {
             <thead>
               <tr>
                 <th>{isAdmin ? "Nº" : "Data"}</th><th>Cliente</th><th>Entrega</th><th className="num">Peças</th>
-                <th className="num">Total</th><th>Situação</th><th></th>
+                <th className="num">Total</th><th className="num">Situação</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -139,12 +139,9 @@ export default function Orders() {
                   <td>{o.delivery_date ? dateBR(o.delivery_date) : "—"}</td>
                   <td className="num">{o.pieces}</td>
                   <td className="num">{money(o.total)}</td>
-                  <td><Status s={o.status} /></td>
+                  <td className="num"><Status s={o.status} /></td>
                   <td>
                     <div className="actions actions-end">
-                      {isAdmin && (
-                        <button className="btn btn-light" onClick={() => nav(`/orders/${o.id}/production-print`)}>Imprimir</button>
-                      )}
                       <button className="btn btn-light" onClick={() => nav(`/orders/${o.id}`)}>Abrir</button>
                     </div>
                   </td>

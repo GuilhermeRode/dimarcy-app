@@ -31,7 +31,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           {/* Print previews render standalone (no sidebar) so the preview matches what actually prints */}
           <Route path="/orders/:id/production-print" element={<Protected admin><ProductionPrint /></Protected>} />
-          <Route path="/orders/:id/client-print" element={<Protected admin><ClientPrint /></Protected>} />
+          <Route path="/orders/:id/client-print" element={<Protected><ClientPrint /></Protected>} />
           <Route path="/" element={<Protected><Layout /></Protected>}>
             <Route index element={<Dashboard />} />
             <Route path="profile" element={<Profile />} />
