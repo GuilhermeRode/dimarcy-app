@@ -362,7 +362,8 @@ section.item-group { margin-top: 0; }
 .info-item strong { font-size: 0.92rem; }
 
 /* ---------- customers ---------- */
-.header-search { max-width: 260px; }
+.header-search-group { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
+.header-search { flex: 1; min-width: 120px; max-width: 260px; }
 .customer-group { display: flex; flex-direction: column; gap: 8px; }
 .customer-group-header {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;

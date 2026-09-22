@@ -59,7 +59,7 @@ export default function Products() {
     <div className="page">
       <header className="page-header">
         <h1>Produtos</h1>
-        <div className="actions">
+        <div className="header-search-group">
           <input className="header-search" placeholder="Buscar por referência, nome ou coleção" value={search} onChange={(e) => setSearch(e.target.value)} />
           <button className="btn btn-primary" onClick={() => open(null)}>Cadastrar produto</button>
         </div>

@@ -109,7 +109,7 @@ export default function Customers() {
     <div className="page">
       <header className="page-header">
         <h1>Clientes</h1>
-        <div className="actions">
+        <div className="header-search-group">
           <input className="header-search" placeholder="Buscar cliente" value={search} onChange={(e) => setSearch(e.target.value)} />
           <button className="btn btn-primary" onClick={() => { setError(""); setForm(EMPTY); }}>Cadastrar cliente</button>
         </div>
