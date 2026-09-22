@@ -100,7 +100,7 @@ input[type="checkbox"] { width: auto; }
 /* print previews render outside the app shell (no sidebar), so they need their own page chrome */
 .standalone-page { background: var(--bg); min-height: 100vh; padding: 32px 40px; }
 @media print { .standalone-page { padding: 0; background: #fff; min-height: 0; } }
-.page { max-width: 1200px; display: flex; flex-direction: column; gap: 18px; }
+.page { display: flex; flex-direction: column; gap: 18px; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
 .page-header p { margin: 4px 0 0; }
 
