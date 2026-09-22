@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { dateBR, money, orderNumber } from "../format";
-import { ErrorBox } from "../components/ui";
+import { ErrorBox, Avatar } from "../components/ui";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const diffDays = (a, b) => Math.round((new Date(`${a}T00:00:00`) - new Date(`${b}T00:00:00`)) / 86400000);
@@ -121,17 +121,19 @@ export default function Production() {
                           onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(o.id)); e.dataTransfer.effectAllowed = "move"; }}
                           onClick={() => nav(`/orders/${o.id}`)}>
                           <div className="ticket-top">
-                            <span className="ref">{orderNumber(o.id)}</span>
-                            {badge && <span className={`ticket-badge ticket-badge-${u}`}>{badge}</span>}
+                            <span className="ticket-ref">{orderNumber(o.id)}</span>
+                            <Avatar url={o.seller_avatar_url} name={o.seller_name} size="sm" />
                           </div>
                           <div className="ticket-customer">{o.customer_name}</div>
-                          <div className="ticket-seller">Vendedor: {o.seller_name}</div>
                           <div className="ticket-meta">
                             <span>{o.pieces} peças</span>
                             <span>{money(o.total)}</span>
                           </div>
-                          <div className="ticket-date">
-                            {o.delivery_date ? `Entrega ${dateBR(o.delivery_date)}` : "Sem data de entrega"}
+                          <div className="ticket-delivery-row">
+                            <span className="ticket-delivery">
+                              {o.delivery_date ? dateBR(o.delivery_date) : "Sem data de entrega"}
+                            </span>
+                            {badge && <span className={`ticket-badge ticket-badge-${u}`}>{badge}</span>}
                           </div>
                         </div>
                       );

@@ -1,7 +1,29 @@
 import { useEffect, useState } from "react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, errorMessage } from "../api";
 import { money } from "../format";
 import { ErrorBox } from "../components/ui";
+
+function RankedBarChart({ data, height }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
+        <defs>
+          <linearGradient id="barColorRevenue" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#1f5296" />
+            <stop offset="100%" stopColor="#2f6fed" />
+          </linearGradient>
+        </defs>
+        <CartesianGrid horizontal={false} stroke="#e3e8f2" />
+        <XAxis type="number" tickLine={false} axisLine={false} fontSize={12}
+          tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v)} />
+        <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} fontSize={12} width={130} />
+        <Tooltip cursor={{ fill: "rgba(47, 111, 237, 0.08)" }} formatter={(v) => [money(v), "Faturamento"]} />
+        <Bar dataKey="value" fill="url(#barColorRevenue)" radius={[0, 4, 4, 0]} maxBarSize={22} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
 
 const today = () => new Date().toISOString().slice(0, 10);
 const startOfYear = () => `${new Date().getFullYear()}-01-01`;
@@ -41,6 +63,7 @@ export default function Revenue() {
   }
 
   const sellers = d?.by_seller || [];
+  const cities = d?.by_city || [];
   const totals = sellers.reduce((a, s) => ({
     orders: a.orders + s.orders, pieces: a.pieces + s.pieces, value: a.value + s.value,
   }), { orders: 0, pieces: 0, value: 0 });
@@ -93,28 +116,21 @@ export default function Revenue() {
             </div>
           </section>
 
-          <section className="panel">
-            <h3>Por vendedor</h3>
-            {sellers.length ? (
-              <table className="table">
-                <thead>
-                  <tr><th>Vendedor</th><th className="num">Pedidos</th><th className="num">Peças</th>
-                    <th className="num">Ticket médio</th><th className="num">Faturamento</th></tr>
-                </thead>
-                <tbody>
-                  {sellers.map((s) => (
-                    <tr key={s.name}>
-                      <td>{s.name}</td>
-                      <td className="num">{s.orders}</td>
-                      <td className="num">{s.pieces}</td>
-                      <td className="num">{money(s.orders ? s.value / s.orders : 0)}</td>
-                      <td className="num">{money(s.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : <p className="muted">Sem vendas no período.</p>}
-          </section>
+          <div className="revenue-charts">
+            <section className="panel">
+              <h3>Por vendedor</h3>
+              {sellers.length ? (
+                <RankedBarChart data={sellers} height={Math.max(160, sellers.length * 40)} />
+              ) : <p className="muted">Sem vendas no período.</p>}
+            </section>
+
+            <section className="panel">
+              <h3>Por cidade</h3>
+              {cities.length ? (
+                <RankedBarChart data={cities} height={Math.max(160, cities.length * 40)} />
+              ) : <p className="muted">Sem vendas no período.</p>}
+            </section>
+          </div>
         </>
       )}
     </div>

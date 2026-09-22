@@ -36,7 +36,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         by_status[o.status]["count"] += 1
         by_status[o.status]["value"] += o.total
 
-    products, customers, colors, sellers, sizes = {}, {}, {}, {}, defaultdict(int)
+    products, customers, colors, sellers, cities, sizes = {}, {}, {}, {}, {}, defaultdict(int)
     for o in sales:
         c = customers.setdefault(o.customer_id, {"name": o.customer.name, "orders": 0, "pieces": 0, "value": 0.0})
         c["orders"] += 1
@@ -46,6 +46,11 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         s["orders"] += 1
         s["pieces"] += o.pieces
         s["value"] += o.total
+        city_key = f"{o.customer.city or 'Não informado'}/{o.customer.state or ''}".rstrip("/")
+        ci = cities.setdefault(city_key, {"name": city_key, "orders": 0, "pieces": 0, "value": 0.0})
+        ci["orders"] += 1
+        ci["pieces"] += o.pieces
+        ci["value"] += o.total
         for i in o.items:
             pr = products.setdefault(i.product_id, {"reference": i.product.reference,
                                                      "description": i.product.description, "pieces": 0, "value": 0.0})
@@ -88,6 +93,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         "top_products": _top(products),
         "top_customers": _top(customers),
         "by_seller": _top(sellers, 50),
+        "by_city": _top(cities, 50),
         "by_color": _top(colors, 10),
         "by_size": sorted(
             [{"size": t, "pieces": q} for t, q in sizes.items()],

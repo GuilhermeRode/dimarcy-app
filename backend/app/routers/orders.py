@@ -16,7 +16,7 @@ def summary(o: Order) -> dict:
     return {
         "id": o.id, "date": o.date, "delivery_date": o.delivery_date, "status": o.status,
         "customer_id": o.customer_id, "customer_name": o.customer.name,
-        "seller_name": o.seller.name, "pieces": o.pieces,
+        "seller_name": o.seller.name, "seller_avatar_url": o.seller.avatar_url, "pieces": o.pieces,
         "gross": o.gross, "discount": float(o.discount or 0), "total": o.total,
     }
 

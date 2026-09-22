@@ -241,6 +241,7 @@ input[type="checkbox"] { width: auto; }
 .kpis { display: grid; grid-template-columns: 1fr 1.7fr; gap: 12px; align-items: stretch; }
 .kpis-secondary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .orders-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.revenue-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
 .kpi {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; box-shadow: var(--shadow);
@@ -439,16 +440,21 @@ section.item-group { margin-top: 0; }
 .ticket:active { cursor: grabbing; }
 .ticket:hover { box-shadow: 0 4px 14px -6px rgba(13,42,82,.3); }
 .ticket-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.ticket-customer { font-weight: 600; font-size: 0.92rem; }
-.ticket-seller { font-size: 0.78rem; color: var(--muted); }
+.ticket-ref { font-size: 0.7rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ticket-customer { font-weight: 700; font-size: 1.05rem; color: var(--ink); line-height: 1.2; }
 .ticket-meta { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); }
-.ticket-date { font-size: 0.78rem; color: var(--muted); }
+.ticket-delivery-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 2px; }
+.ticket-delivery {
+  font-size: 0.82rem; font-weight: 700; color: var(--accent-strong); font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em; border: 1px solid var(--accent-light); background: var(--accent-light);
+  border-radius: 6px; padding: 2px 8px;
+}
 .ticket-badge { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
 .ticket-badge-amber { background: var(--amber-light); color: var(--amber); }
 .ticket-badge-red { background: var(--danger-light); color: var(--danger); }
 .ticket-amber { border-left-color: var(--amber); background: var(--amber-light); }
 .ticket-red { border-left-color: var(--danger); background: var(--danger-light); }
-.ticket-red .ticket-date { color: var(--danger); font-weight: 600; }
+.ticket-red .ticket-delivery { color: var(--danger); background: var(--danger-light); border-color: var(--danger-light); }
 
 @media (max-width: 1100px) {
   .kpis { grid-template-columns: 1fr; }
@@ -461,6 +467,7 @@ section.item-group { margin-top: 0; }
 @media (max-width: 720px) {
   .kpis-secondary { grid-template-columns: 1fr; }
   .orders-kpis { grid-template-columns: repeat(2, 1fr); }
+  .revenue-charts { grid-template-columns: 1fr; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .panel-wide { grid-column: span 1; }
   .board { grid-template-columns: 1fr; }
