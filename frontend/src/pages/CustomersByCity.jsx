@@ -6,12 +6,21 @@ import { money } from "../format";
 import { ErrorBox } from "../components/ui";
 import statesGeo from "../assets/br-states.geo.json";
 
-const STATES = ["PR", "RS", "SC", "SP"];
-const MAP_W = 560;
-const MAP_H = 560;
+const STATES = ["GO", "MG", "PR", "RJ", "RS", "SC", "SP"];
+const MAP_W = 620;
+const MAP_H = 600;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
 const projection = geoMercator().fitSize([MAP_W, MAP_H], statesGeo);
+
+const STATE_COLOR_LOW = [232, 240, 254]; // --accent-light
+const STATE_COLOR_HIGH = [29, 84, 201]; // --accent-strong
+
+function stateColor(count, max) {
+  const t = max > 0 ? Math.min(1, count / max) : 0;
+  const [r, g, b] = STATE_COLOR_LOW.map((v, i) => Math.round(v + (STATE_COLOR_HIGH[i] - v) * t));
+  return `rgb(${r}, ${g}, ${b})`;
+}
 
 function monthsAgo(n) {
   const d = new Date();
@@ -23,6 +32,7 @@ export default function CustomersByCity() {
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [stateFilter, setStateFilter] = useState("");
+  const [viewMode, setViewMode] = useState("both"); // "both" | "cities" | "states"
   const [error, setError] = useState("");
   const [zoom, setZoom] = useState(1);
   const [hovered, setHovered] = useState(null); // { city, x, y }
@@ -37,12 +47,28 @@ export default function CustomersByCity() {
 
   const cutoff = monthsAgo(12);
 
-  const cities = useMemo(() => {
-    const lastOrderByCustomer = new Map();
+  const lastOrderByCustomer = useMemo(() => {
+    const m = new Map();
     for (const o of orders) {
-      const prev = lastOrderByCustomer.get(o.customer_id);
-      if (!prev || o.date > prev) lastOrderByCustomer.set(o.customer_id, o.date);
+      const prev = m.get(o.customer_id);
+      if (!prev || o.date > prev) m.set(o.customer_id, o.date);
     }
+    return m;
+  }, [orders]);
+
+  const stateActive = useMemo(() => {
+    const m = new Map();
+    for (const c of customers) {
+      const state = (c.state || "").trim().toUpperCase();
+      if (!state) continue;
+      const last = lastOrderByCustomer.get(c.id);
+      if (last && last >= cutoff) m.set(state, (m.get(state) || 0) + 1);
+    }
+    return m;
+  }, [customers, lastOrderByCustomer, cutoff]);
+  const maxStateActive = Math.max(1, ...STATES.map((s) => stateActive.get(s) || 0));
+
+  const cities = useMemo(() => {
     const groups = new Map();
     for (const c of customers) {
       if (!c.city) continue;
@@ -59,7 +85,7 @@ export default function CustomersByCity() {
     if (stateFilter) list = list.filter((g) => g.state === stateFilter);
     list.sort((a, b) => b.active - a.active || b.total - a.total);
     return list;
-  }, [customers, orders, stateFilter, cutoff]);
+  }, [customers, lastOrderByCustomer, stateFilter, cutoff]);
 
   const activeClients = cities.reduce((s, c) => s + c.active, 0);
   const totalCadastrados = customers.filter((c) => !stateFilter || (c.state || "").toUpperCase() === stateFilter).length;
@@ -81,12 +107,15 @@ export default function CustomersByCity() {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
+  const showCities = viewMode !== "states";
+  const showStates = viewMode !== "cities";
+
   return (
     <div className="page page-wide">
       <header className="page-header">
         <div>
           <h1>Clientes por cidade</h1>
-          <p className="muted">Tamanho do círculo = clientes ativos (com pedido nos últimos 12 meses). Arraste e use a roda do mouse para navegar.</p>
+          <p className="muted">Clientes ativos = com pedido nos últimos 12 meses.</p>
         </div>
         <div className="period-chips">
           <button type="button" className={`period-chip ${!stateFilter ? "on" : ""}`} onClick={() => setStateFilter("")}>Todos</button>
@@ -111,7 +140,7 @@ export default function CustomersByCity() {
         <div className="kpi">
           <div className="kpi-header"><span>Faturamento 12 meses</span></div>
           <strong>{money(revenue12mo)}</strong>
-          <span>nas cidades exibidas</span>
+          <span>{stateFilter ? "nas cidades exibidas" : "todas as cidades"}</span>
         </div>
         <div className="kpi">
           <div className="kpi-header"><span>Concentração</span></div>
@@ -124,14 +153,18 @@ export default function CustomersByCity() {
         <section className="panel city-map-panel">
           <div className="panel-header">
             <h3>Mapa</h3>
-            <div className="city-map-zoom">
-              <button type="button" className="btn-x" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 1))} aria-label="Diminuir zoom">−</button>
-              <span className="muted">{zoom.toFixed(1)}×</span>
-              <button type="button" className="btn-x" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 1))} aria-label="Aumentar zoom">+</button>
-              <button type="button" className="btn-light btn" onClick={() => setZoom(1)}>Redefinir</button>
+            <div className="period-chips">
+              <button type="button" className={`period-chip ${viewMode === "both" ? "on" : ""}`} onClick={() => setViewMode("both")}>Estados + cidades</button>
+              <button type="button" className={`period-chip ${viewMode === "cities" ? "on" : ""}`} onClick={() => setViewMode("cities")}>Só cidades</button>
+              <button type="button" className={`period-chip ${viewMode === "states" ? "on" : ""}`} onClick={() => setViewMode("states")}>Só estados</button>
             </div>
           </div>
           <div className="city-map-canvas" ref={mapWrapRef}>
+            <div className="city-map-zoom">
+              <button type="button" className="btn-x" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 1))} aria-label="Aumentar zoom">+</button>
+              <button type="button" className="btn-x" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 1))} aria-label="Diminuir zoom">−</button>
+              <button type="button" className="btn-x" onClick={() => setZoom(1)} aria-label="Redefinir zoom" title="Redefinir">⤢</button>
+            </div>
             <ComposableMap width={MAP_W} height={MAP_H} projection={projection} style={{ width: "100%", height: "auto" }}>
               <defs>
                 <radialGradient id="bubbleGrad" cx="35%" cy="30%" r="70%">
@@ -145,18 +178,21 @@ export default function CustomersByCity() {
               </defs>
               <ZoomableGroup zoom={zoom} minZoom={MIN_ZOOM} maxZoom={MAX_ZOOM} onMoveEnd={({ zoom: z }) => setZoom(z)}>
                 <Geographies geography={statesGeo}>
-                  {({ geographies }) => geographies.map((geo) => (
-                    <Geography key={geo.rsmKey} geography={geo}
-                      fill={stateFilter && geo.properties.uf !== stateFilter ? "#eef2f9" : "#e6ecf9"}
-                      stroke="#c7d3e8" strokeWidth={0.75}
-                      style={{
-                        default: { outline: "none", transition: "fill .15s ease" },
-                        hover: { outline: "none", fill: "#dbe4f5" },
-                        pressed: { outline: "none" },
-                      }} />
-                  ))}
+                  {({ geographies }) => geographies.map((geo) => {
+                    const uf = geo.properties.uf;
+                    const muted = stateFilter && uf !== stateFilter;
+                    const fill = !showStates || muted ? "#eef2f9" : stateColor(stateActive.get(uf) || 0, maxStateActive);
+                    return (
+                      <Geography key={geo.rsmKey} geography={geo} fill={fill} stroke="#c7d3e8" strokeWidth={0.75}
+                        style={{
+                          default: { outline: "none", transition: "fill .15s ease" },
+                          hover: { outline: "none", fill: muted ? "#eef2f9" : "#9db8ee" },
+                          pressed: { outline: "none" },
+                        }} />
+                    );
+                  })}
                 </Geographies>
-                {cities.map((c) => {
+                {showCities && cities.map((c) => {
                   if (c.lat == null || c.lng == null) return null;
                   const r = radius(c.active) / Math.sqrt(zoom);
                   const isSelected = selected === c.name;
@@ -182,20 +218,31 @@ export default function CustomersByCity() {
             )}
           </div>
           <div className="city-map-legend">
-            {[2, 8, 20].map((n) => (
-              <span key={n} className="city-map-legend-item">
-                <span className="city-map-legend-dot" style={{ width: radius(n) * 2, height: radius(n) * 2 }} />
-                <small>{n}</small>
+            {showStates && (
+              <span className="city-map-legend-item">
+                <span className="city-map-legend-gradient" />
+                <small>Ativos por estado · até {maxStateActive}</small>
               </span>
-            ))}
-            <span className="muted">clientes ativos por cidade</span>
+            )}
+            {showCities && (
+              <>
+                {[2, 8, 20].map((n) => (
+                  <span key={n} className="city-map-legend-item">
+                    <span className="city-map-legend-dot" style={{ width: radius(n) * 2, height: radius(n) * 2 }} />
+                    <small>{n}</small>
+                  </span>
+                ))}
+                <span className="muted">clientes ativos por cidade</span>
+              </>
+            )}
+            <span className="muted city-map-hint">Arraste para mover · role para aproximar</span>
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel city-map-ranking">
           <div className="panel-header"><h3>Ranking</h3><span className="muted">{cities.length} cidades</span></div>
           {cities.length ? (
-            <ol className="ranking">
+            <ol className="ranking ranking-scroll">
               {cities.map((c, k) => (
                 <li key={c.name} className={selected === c.name ? "ranking-selected" : ""}
                   onClick={() => setSelected(selected === c.name ? null : c.name)}>
