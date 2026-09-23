@@ -4,7 +4,6 @@ import { geoMercator } from "d3-geo";
 import { api, errorMessage } from "../api";
 import { money } from "../format";
 import { ErrorBox } from "../components/ui";
-import { cityCoords } from "../cityCoords";
 import statesGeo from "../assets/br-states.geo.json";
 
 const STATES = ["PR", "RS", "SC", "SP"];
@@ -49,8 +48,9 @@ export default function CustomersByCity() {
       if (!c.city) continue;
       const state = (c.state || "").trim().toUpperCase();
       const key = `${c.city.trim()}/${state}`;
-      const g = groups.get(key) || { name: key, city: c.city.trim(), state, total: 0, active: 0 };
+      const g = groups.get(key) || { name: key, city: c.city.trim(), state, total: 0, active: 0, lat: null, lng: null };
       g.total += 1;
+      if (g.lat == null && c.lat != null && c.lng != null) { g.lat = c.lat; g.lng = c.lng; }
       const last = lastOrderByCustomer.get(c.id);
       if (last && last >= cutoff) g.active += 1;
       groups.set(key, g);
@@ -157,12 +157,11 @@ export default function CustomersByCity() {
                   ))}
                 </Geographies>
                 {cities.map((c) => {
-                  const coords = cityCoords(c.city, c.state);
-                  if (!coords) return null;
+                  if (c.lat == null || c.lng == null) return null;
                   const r = radius(c.active) / Math.sqrt(zoom);
                   const isSelected = selected === c.name;
                   return (
-                    <Marker key={c.name} coordinates={[coords[1], coords[0]]}
+                    <Marker key={c.name} coordinates={[c.lng, c.lat]}
                       onClick={() => setSelected(isSelected ? null : c.name)}
                       onMouseEnter={(e) => setHovered({ city: c, ...pointerPos(e) })}
                       onMouseMove={(e) => setHovered({ city: c, ...pointerPos(e) })}
@@ -208,7 +207,10 @@ export default function CustomersByCity() {
                     <span className="ranking-value">{c.active}</span>
                   </div>
                   <div className="ranking-bar"><span style={{ width: `${(c.active / maxActive) * 100}%` }} /></div>
-                  <div className="ranking-detail">{c.total} cliente{c.total > 1 ? "s" : ""} cadastrado{c.total > 1 ? "s" : ""}</div>
+                  <div className="ranking-detail">
+                    {c.total} cliente{c.total > 1 ? "s" : ""} cadastrado{c.total > 1 ? "s" : ""}
+                    {c.lat == null && " · fora do mapa (endereço não localizado)"}
+                  </div>
                 </li>
               ))}
             </ol>

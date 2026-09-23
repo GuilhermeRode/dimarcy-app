@@ -40,6 +40,8 @@ class Customer(Base):
     city: Mapped[str | None] = mapped_column(String(100))
     state: Mapped[str | None] = mapped_column(String(2))
     address: Mapped[str | None] = mapped_column(String(250))
+    lat: Mapped[float | None] = mapped_column(nullable=True)  # geocoded from city/state, best-effort
+    lng: Mapped[float | None] = mapped_column(nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)  # seller this customer belongs to
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -3,6 +3,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..geocoding import geocode_city
 from ..models import Customer, Order, User
 from ..schemas import CustomerIn, CustomerOut
 from ..security import get_current_user
@@ -40,6 +41,10 @@ def create(data: CustomerIn, db: Session = Depends(get_db), user: User = Depends
     # Sellers can only ever own the customers they register; only admins may assign a seller.
     owner_id = data.owner_id if user.role == "admin" else user.id
     c = Customer(**payload, owner_id=owner_id)
+    if c.city:
+        coords = geocode_city(c.city, c.state)
+        if coords:
+            c.lat, c.lng = coords
     db.add(c)
     db.commit()
     db.refresh(c)
@@ -49,10 +54,15 @@ def create(data: CustomerIn, db: Session = Depends(get_db), user: User = Depends
 @router.put("/{cid}", response_model=CustomerOut)
 def update(cid: int, data: CustomerIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     c = _visible(cid, db, user)
+    city_changed = data.city != c.city or data.state != c.state
     for k, v in data.model_dump(exclude={"owner_id"}).items():
         setattr(c, k, v)
     if user.role == "admin":
         c.owner_id = data.owner_id
+    if c.city and (city_changed or c.lat is None):
+        coords = geocode_city(c.city, c.state)
+        if coords:
+            c.lat, c.lng = coords
     db.commit()
     db.refresh(c)
     return c

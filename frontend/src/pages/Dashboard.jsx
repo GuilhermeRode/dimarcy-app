@@ -8,6 +8,8 @@ import { useAuth } from "../auth";
 import { money, STATUS } from "../format";
 import { ErrorBox, Swatch } from "../components/ui";
 
+const EXCLUDE_MAP = import.meta.env.VITE_EXCLUDE_MAP === "1";
+
 const today = () => new Date().toISOString().slice(0, 10);
 const addDays = (base, days) => {
   const d = new Date(`${base}T00:00:00`);
@@ -106,7 +108,7 @@ export default function Dashboard() {
   }, [start, end]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || EXCLUDE_MAP) return;
     api.get("/customers").then((r) => {
       const counts = new Map();
       for (const c of r.data) {
@@ -266,7 +268,7 @@ export default function Dashboard() {
                 detail={(i) => `${i.orders} pedidos · ${i.pieces} peças`} />
             </div>
 
-            {isAdmin && topCities.length > 0 && (
+            {!EXCLUDE_MAP && isAdmin && topCities.length > 0 && (
               <div className="panel panel-clickable" onClick={() => nav("/customers-by-city")}>
                 <div className="panel-header">
                   <h3>Clientes por cidade</h3>

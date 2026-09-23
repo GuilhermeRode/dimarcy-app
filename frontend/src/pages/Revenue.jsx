@@ -1,27 +1,39 @@
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { api, errorMessage } from "../api";
 import { money } from "../format";
-import { ErrorBox } from "../components/ui";
+import { ErrorBox, Swatch } from "../components/ui";
 
-function RankedBarChart({ data, height }) {
+const PIE_COLORS = ["#2f6fed", "#4338ca", "#b8862f", "#0d95ac", "#1c7a52", "#5c6c8a"];
+
+function topWithOthers(list, n = 6) {
+  const top = list.slice(0, n);
+  const rest = list.slice(n).reduce((s, i) => s + i.value, 0);
+  return rest > 0 ? [...top, { name: "Outros", value: rest }] : top;
+}
+
+function RevenueDonut({ data }) {
+  const items = topWithOthers(data);
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
-        <defs>
-          <linearGradient id="barColorRevenue" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#1f5296" />
-            <stop offset="100%" stopColor="#2f6fed" />
-          </linearGradient>
-        </defs>
-        <CartesianGrid horizontal={false} stroke="#e3e8f2" />
-        <XAxis type="number" tickLine={false} axisLine={false} fontSize={12}
-          tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v)} />
-        <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} fontSize={12} width={130} />
-        <Tooltip cursor={{ fill: "rgba(47, 111, 237, 0.08)" }} formatter={(v) => [money(v), "Faturamento"]} />
-        <Bar dataKey="value" fill="url(#barColorRevenue)" radius={[0, 4, 4, 0]} maxBarSize={22} />
-      </BarChart>
-    </ResponsiveContainer>
+    <div className="donut-row">
+      <ResponsiveContainer width={150} height={150}>
+        <PieChart>
+          <Pie data={items} dataKey="value" nameKey="name" innerRadius={42} outerRadius={68} paddingAngle={2}>
+            {items.map((it, i) => <Cell key={it.name} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+          </Pie>
+          <Tooltip formatter={(v) => money(v)} />
+        </PieChart>
+      </ResponsiveContainer>
+      <ul className="donut-legend">
+        {items.map((it, i) => (
+          <li key={it.name}>
+            <Swatch hex={PIE_COLORS[i % PIE_COLORS.length]} size={10} />
+            <span className="legend-name">{it.name}</span>
+            <span className="legend-qty">{money(it.value)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -119,16 +131,12 @@ export default function Revenue() {
           <div className="revenue-charts">
             <section className="panel">
               <h3>Por vendedor</h3>
-              {sellers.length ? (
-                <RankedBarChart data={sellers} height={Math.max(160, sellers.length * 40)} />
-              ) : <p className="muted">Sem vendas no período.</p>}
+              {sellers.length ? <RevenueDonut data={sellers} /> : <p className="muted">Sem vendas no período.</p>}
             </section>
 
             <section className="panel">
               <h3>Por cidade</h3>
-              {cities.length ? (
-                <RankedBarChart data={cities} height={Math.max(160, cities.length * 40)} />
-              ) : <p className="muted">Sem vendas no período.</p>}
+              {cities.length ? <RevenueDonut data={cities} /> : <p className="muted">Sem vendas no período.</p>}
             </section>
           </div>
         </>

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import Layout from "./components/Layout";
@@ -15,7 +16,13 @@ import Production from "./pages/Production";
 import ProductionPrint from "./pages/ProductionPrint";
 import ClientPrint from "./pages/ClientPrint";
 import Profile from "./pages/Profile";
-import CustomersByCity from "./pages/CustomersByCity";
+
+// The map screen (react-simple-maps + d3-geo + a bundled GeoJSON) is desktop/web-only —
+// left out of the Capacitor (Android) build entirely via VITE_EXCLUDE_MAP so it never
+// adds weight to the mobile app. Dynamic import so Vite can tree-shake the whole chunk
+// when the flag is set (see package.json's "build:capacitor" script).
+const EXCLUDE_MAP = import.meta.env.VITE_EXCLUDE_MAP === "1";
+const CustomersByCity = EXCLUDE_MAP ? null : lazy(() => import("./pages/CustomersByCity"));
 
 function Protected({ children, admin }) {
   const { user } = useAuth();
@@ -43,7 +50,11 @@ export default function App() {
             <Route path="production" element={<Protected admin><Production /></Protected>} />
             <Route path="revenue" element={<Protected admin><Revenue /></Protected>} />
             <Route path="customers" element={<Customers />} />
-            <Route path="customers-by-city" element={<Protected admin><CustomersByCity /></Protected>} />
+            {!EXCLUDE_MAP && (
+              <Route path="customers-by-city" element={
+                <Protected admin><Suspense fallback={null}><CustomersByCity /></Suspense></Protected>
+              } />
+            )}
             <Route path="products" element={<Protected admin><Products /></Protected>} />
             <Route path="colors" element={<Protected admin><Colors /></Protected>} />
             <Route path="users" element={<Protected admin><Users /></Protected>} />

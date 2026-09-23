@@ -64,6 +64,8 @@ class CustomerOut(CustomerIn):
     document: str | None = None  # older records may not have one; new ones always do (see CustomerIn)
     owner_name: str | None = None
     created_at: datetime | None = None
+    lat: float | None = None
+    lng: float | None = None
 
 
 # ---------- Colors / products ----------

@@ -9,7 +9,8 @@
     "app:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && cross-env ELECTRON_DEV=1 electron .\"",
     "app:dist": "vite build && electron-builder --win",
     "cap:sync:dev": "cp capacitor.config.dev.ts capacitor.config.ts && npx cap sync android",
-    "cap:sync:prod": "git checkout capacitor.config.ts && npm run build && npx cap sync android"
+    "build:capacitor": "cross-env VITE_EXCLUDE_MAP=1 vite build",
+    "cap:sync:prod": "git checkout capacitor.config.ts && npm run build:capacitor && npx cap sync android"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
