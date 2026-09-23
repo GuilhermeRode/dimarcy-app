@@ -305,10 +305,10 @@ export default function OrderForm() {
 
       <section className="panel form-grid form-order">
         <Field label="Cliente" span={2}>
-          <div className="customer-row">
+          <div className="customer-picker">
             <CustomerSearch key={customerKey} customers={customers} value={header.customer_id}
               onSelect={(c) => setHeader((h) => ({ ...h, customer_id: c ? c.id : "" }))} />
-            <button type="button" className="btn icon-btn" title="Cadastrar novo cliente" onClick={() => setCustomerModal("new")}>
+            <button type="button" className="btn btn-primary icon-btn" title="Cadastrar novo cliente" onClick={() => setCustomerModal("new")}>
               <PlusIcon />
             </button>
             {selectedCustomer && (

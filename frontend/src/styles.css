@@ -330,7 +330,8 @@ input[type="checkbox"] { width: auto; }
 .legend-qty { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 /* ---------- order form ---------- */
-.customer-row { display: flex; gap: 8px; align-items: stretch; }
+.customer-picker { display: flex; gap: 8px; align-items: stretch; }
+.customer-picker .icon-btn { width: 42px; }
 .city-row { display: flex; gap: 8px; }
 .city-row input:first-child { flex: 1; min-width: 0; }
 .uf-input { width: 70px; flex-shrink: 0; text-transform: uppercase; }
@@ -510,10 +511,11 @@ section.item-group { margin-top: 0; }
 @media (max-width: 860px) {
   .shell { grid-template-columns: 1fr; }
   .mobile-topbar {
-    display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 6;
-    background: var(--navy); color: #fff; padding: 12px 16px; margin: -16px -16px 16px;
+    /* menu | centered logo | empty column of equal width keeps the logo truly centered */
+    display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; position: sticky; top: 0; z-index: 6;
+    background: var(--navy); color: #fff; padding: 10px 16px; margin: -16px -16px 16px;
   }
-  .mobile-topbar-logo { height: 22px; width: auto; object-fit: contain; }
+  .mobile-topbar-logo { height: 32px; width: auto; object-fit: contain; justify-self: center; }
   .mobile-menu-btn { display: grid; place-items: center; background: none; border: 0; color: #fff; cursor: pointer; padding: 2px; }
   .sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgba(9,20,41,.5); z-index: 19; }
   .sidebar {
@@ -536,7 +538,7 @@ section.item-group { margin-top: 0; }
   .filter-bar input, .filter-bar select { max-width: none; }
   .period-block { align-items: stretch; }
   .period-chips { justify-content: flex-start; }
-  .period-filter { flex-wrap: wrap; }
+  .period-filter input { flex: 1; min-width: 0; }
   table.table { display: block; overflow-x: auto; white-space: nowrap; }
   /* shrink the color × size grid so it fits without relying on horizontal scroll */
   .qty-grid { padding: 10px; }
