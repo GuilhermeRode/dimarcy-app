@@ -231,29 +231,31 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="panel">
+            <div className="panel panel-fill">
               <h3>Cores mais vendidas</h3>
-              {d.by_color.length ? (
-                <div className="donut-row">
-                  <ResponsiveContainer width={110} height={110}>
-                    <PieChart>
-                      <Pie data={d.by_color} dataKey="pieces" nameKey="name" innerRadius={32} outerRadius={50} paddingAngle={2}>
-                        {d.by_color.map((c) => <Cell key={c.name} fill={c.hex} stroke="rgba(0,0,0,.1)" />)}
-                      </Pie>
-                      <Tooltip formatter={(v, n, p) => [`${v} peças`, p.payload.name]} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <ul className="donut-legend">
-                    {d.by_color.slice(0, 6).map((c) => (
-                      <li key={c.name}>
-                        <Swatch hex={c.hex} size={10} />
-                        <span className="legend-name">{c.name}</span>
-                        <span className="legend-qty">{c.pieces}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : <p className="muted">Sem vendas no período.</p>}
+              <div className="panel-fill-body">
+                {d.by_color.length ? (
+                  <div className="donut-row">
+                    <ResponsiveContainer width={168} height={168}>
+                      <PieChart>
+                        <Pie data={d.by_color} dataKey="pieces" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                          {d.by_color.map((c) => <Cell key={c.name} fill={c.hex} stroke="rgba(0,0,0,.1)" />)}
+                        </Pie>
+                        <Tooltip formatter={(v, n, p) => [`${v} peças`, p.payload.name]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <ul className="donut-legend">
+                      {d.by_color.slice(0, 6).map((c) => (
+                        <li key={c.name}>
+                          <Swatch hex={c.hex} size={10} />
+                          <span className="legend-name">{c.name}</span>
+                          <span className="legend-qty">{c.pieces}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : <p className="muted">Sem vendas no período.</p>}
+              </div>
             </div>
 
             <div className="panel">

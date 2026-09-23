@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, errorMessage } from "../api";
 import { money } from "../format";
-import { ErrorBox, Swatch } from "../components/ui";
-
-const PIE_COLORS = ["#2f6fed", "#4338ca", "#b8862f", "#0d95ac", "#1c7a52", "#5c6c8a"];
+import { ErrorBox } from "../components/ui";
 
 function topWithOthers(list, n = 6) {
   const top = list.slice(0, n);
@@ -12,28 +10,20 @@ function topWithOthers(list, n = 6) {
   return rest > 0 ? [...top, { name: "Outros", value: rest }] : top;
 }
 
-function RevenueDonut({ data }) {
+function RevenueBarChart({ data }) {
   const items = topWithOthers(data);
   return (
-    <div className="donut-row">
-      <ResponsiveContainer width={150} height={150}>
-        <PieChart>
-          <Pie data={items} dataKey="value" nameKey="name" innerRadius={42} outerRadius={68} paddingAngle={2}>
-            {items.map((it, i) => <Cell key={it.name} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-          </Pie>
-          <Tooltip formatter={(v) => money(v)} />
-        </PieChart>
-      </ResponsiveContainer>
-      <ul className="donut-legend">
-        {items.map((it, i) => (
-          <li key={it.name}>
-            <Swatch hex={PIE_COLORS[i % PIE_COLORS.length]} size={10} />
-            <span className="legend-name">{it.name}</span>
-            <span className="legend-qty">{money(it.value)}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ResponsiveContainer width="100%" height={240}>
+      <BarChart data={items} margin={{ left: 10 }}>
+        <CartesianGrid vertical={false} stroke="#e3e8f2" />
+        <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12}
+          angle={-20} textAnchor="end" height={54} interval={0} />
+        <YAxis tickLine={false} axisLine={false} fontSize={12}
+          tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v)} />
+        <Tooltip cursor={{ fill: "rgba(47, 111, 237, 0.08)", radius: 6 }} formatter={(v) => money(v)} />
+        <Bar dataKey="value" fill="#2f6fed" radius={[4, 4, 0, 0]} maxBarSize={40} />
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 
@@ -131,12 +121,12 @@ export default function Revenue() {
           <div className="revenue-charts">
             <section className="panel">
               <h3>Por vendedor</h3>
-              {sellers.length ? <RevenueDonut data={sellers} /> : <p className="muted">Sem vendas no período.</p>}
+              {sellers.length ? <RevenueBarChart data={sellers} /> : <p className="muted">Sem vendas no período.</p>}
             </section>
 
             <section className="panel">
               <h3>Por cidade</h3>
-              {cities.length ? <RevenueDonut data={cities} /> : <p className="muted">Sem vendas no período.</p>}
+              {cities.length ? <RevenueBarChart data={cities} /> : <p className="muted">Sem vendas no período.</p>}
             </section>
           </div>
         </>

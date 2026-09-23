@@ -17,7 +17,7 @@ import ProductionPrint from "./pages/ProductionPrint";
 import ClientPrint from "./pages/ClientPrint";
 import Profile from "./pages/Profile";
 
-// The map screen (react-simple-maps + d3-geo + a bundled GeoJSON) is desktop/web-only —
+// The map screen (react-leaflet + a bundled GeoJSON) is desktop/web-only —
 // left out of the Capacitor (Android) build entirely via VITE_EXCLUDE_MAP so it never
 // adds weight to the mobile app. Dynamic import so Vite can tree-shake the whole chunk
 // when the flag is set (see package.json's "build:capacitor" script).

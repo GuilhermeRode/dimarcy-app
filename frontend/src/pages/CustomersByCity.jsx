@@ -1,20 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
-import { geoMercator } from "d3-geo";
+import { useEffect, useMemo, useState } from "react";
+import { MapContainer, TileLayer, GeoJSON, CircleMarker, Tooltip, ZoomControl, Pane, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { api, errorMessage } from "../api";
 import { money } from "../format";
 import { ErrorBox } from "../components/ui";
 import statesGeo from "../assets/br-states.geo.json";
 
 const STATES = ["GO", "MG", "PR", "RJ", "RS", "SC", "SP"];
-const MAP_W = 620;
-const MAP_H = 600;
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 8;
-const projection = geoMercator().fitSize([MAP_W, MAP_H], statesGeo);
+const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 const STATE_COLOR_LOW = [232, 240, 254]; // --accent-light
 const STATE_COLOR_HIGH = [29, 84, 201]; // --accent-strong
+const STATE_MUTED = "#eef2f9";
 
 function stateColor(count, max) {
   const t = max > 0 ? Math.min(1, count / max) : 0;
@@ -28,16 +27,25 @@ function monthsAgo(n) {
   return d.toISOString().slice(0, 10);
 }
 
+const brazilBounds = L.geoJSON(statesGeo).getBounds();
+
+function FlyToState({ uf }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!uf) { map.flyToBounds(brazilBounds, { padding: [20, 20] }); return; }
+    const feature = statesGeo.features.find((f) => f.properties.uf === uf);
+    if (feature) map.flyToBounds(L.geoJSON(feature).getBounds(), { padding: [20, 20] });
+  }, [uf, map]);
+  return null;
+}
+
 export default function CustomersByCity() {
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [stateFilter, setStateFilter] = useState("");
   const [viewMode, setViewMode] = useState("both"); // "both" | "cities" | "states"
   const [error, setError] = useState("");
-  const [zoom, setZoom] = useState(1);
-  const [hovered, setHovered] = useState(null); // { city, x, y }
   const [selected, setSelected] = useState(null); // city key
-  const mapWrapRef = useRef(null);
 
   useEffect(() => {
     Promise.all([api.get("/customers"), api.get("/orders")])
@@ -102,13 +110,19 @@ export default function CustomersByCity() {
   const maxActive = Math.max(1, ...cities.map((c) => c.active));
   const radius = (active) => (active === 0 ? 3 : 4 + (Math.sqrt(active) / Math.sqrt(maxActive)) * 15);
 
-  function pointerPos(e) {
-    const rect = mapWrapRef.current.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  }
-
   const showCities = viewMode !== "states";
   const showStates = viewMode !== "cities";
+
+  function stateStyle(feature) {
+    const uf = feature.properties.uf;
+    const muted = stateFilter && uf !== stateFilter;
+    return {
+      fillColor: muted ? STATE_MUTED : stateColor(stateActive.get(uf) || 0, maxStateActive),
+      fillOpacity: 0.55,
+      color: "#c7d3e8",
+      weight: 1,
+    };
+  }
 
   return (
     <div className="page page-wide">
@@ -159,63 +173,38 @@ export default function CustomersByCity() {
               <button type="button" className={`period-chip ${viewMode === "states" ? "on" : ""}`} onClick={() => setViewMode("states")}>Só estados</button>
             </div>
           </div>
-          <div className="city-map-canvas" ref={mapWrapRef}>
-            <div className="city-map-zoom">
-              <button type="button" className="btn-x" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 1))} aria-label="Aumentar zoom">+</button>
-              <button type="button" className="btn-x" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 1))} aria-label="Diminuir zoom">−</button>
-              <button type="button" className="btn-x" onClick={() => setZoom(1)} aria-label="Redefinir zoom" title="Redefinir">⤢</button>
-            </div>
-            <ComposableMap width={MAP_W} height={MAP_H} projection={projection} style={{ width: "100%", height: "auto" }}>
-              <defs>
-                <radialGradient id="bubbleGrad" cx="35%" cy="30%" r="70%">
-                  <stop offset="0%" stopColor="#6fa0f7" stopOpacity="0.95" />
-                  <stop offset="100%" stopColor="#1d54c9" stopOpacity="0.6" />
-                </radialGradient>
-                <radialGradient id="bubbleGradSelected" cx="35%" cy="30%" r="70%">
-                  <stop offset="0%" stopColor="#ffcf7a" stopOpacity="0.95" />
-                  <stop offset="100%" stopColor="#b8862f" stopOpacity="0.65" />
-                </radialGradient>
-              </defs>
-              <ZoomableGroup zoom={zoom} minZoom={MIN_ZOOM} maxZoom={MAX_ZOOM} onMoveEnd={({ zoom: z }) => setZoom(z)}>
-                <Geographies geography={statesGeo}>
-                  {({ geographies }) => geographies.map((geo) => {
-                    const uf = geo.properties.uf;
-                    const muted = stateFilter && uf !== stateFilter;
-                    const fill = !showStates || muted ? "#eef2f9" : stateColor(stateActive.get(uf) || 0, maxStateActive);
+          <div className="city-map-canvas">
+            <MapContainer bounds={brazilBounds} boundsOptions={{ padding: [20, 20] }} zoomControl={false} scrollWheelZoom style={{ width: "100%", height: "100%" }}>
+              <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} />
+              <ZoomControl position="topleft" />
+              <FlyToState uf={stateFilter} />
+              {showStates && (
+                <GeoJSON key={`states-${stateFilter}-${maxStateActive}`} data={statesGeo} style={stateStyle} />
+              )}
+              {showCities && (
+                <Pane name="city-bubbles" style={{ zIndex: 450 }}>
+                  {cities.map((c) => {
+                    if (c.lat == null || c.lng == null) return null;
+                    const isSelected = selected === c.name;
                     return (
-                      <Geography key={geo.rsmKey} geography={geo} fill={fill} stroke="#c7d3e8" strokeWidth={0.75}
-                        style={{
-                          default: { outline: "none", transition: "fill .15s ease" },
-                          hover: { outline: "none", fill: muted ? "#eef2f9" : "#9db8ee" },
-                          pressed: { outline: "none" },
-                        }} />
+                      <CircleMarker key={c.name} center={[c.lat, c.lng]} radius={radius(c.active)}
+                        className="city-bubble"
+                        fillColor={isSelected ? "#ffcf7a" : "#3f7fee"}
+                        color={isSelected ? "#9a5b12" : "#1d54c9"}
+                        weight={1.25}
+                        fillOpacity={0.85}
+                        eventHandlers={{ click: () => setSelected(isSelected ? null : c.name) }}>
+                        <Tooltip direction="top" offset={[0, -4]} sticky>
+                          <strong>{c.city}/{c.state}</strong><br />
+                          {c.active} ativo{c.active === 1 ? "" : "s"} · {c.total} cadastrado{c.total === 1 ? "" : "s"}
+                        </Tooltip>
+                      </CircleMarker>
                     );
                   })}
-                </Geographies>
-                {showCities && cities.map((c) => {
-                  if (c.lat == null || c.lng == null) return null;
-                  const r = radius(c.active) / Math.sqrt(zoom);
-                  const isSelected = selected === c.name;
-                  return (
-                    <Marker key={c.name} coordinates={[c.lng, c.lat]}
-                      onClick={() => setSelected(isSelected ? null : c.name)}
-                      onMouseEnter={(e) => setHovered({ city: c, ...pointerPos(e) })}
-                      onMouseMove={(e) => setHovered({ city: c, ...pointerPos(e) })}
-                      onMouseLeave={() => setHovered(null)}>
-                      <circle className="city-bubble" r={r}
-                        fill={isSelected ? "url(#bubbleGradSelected)" : "url(#bubbleGrad)"}
-                        stroke={isSelected ? "#9a5b12" : "#1d54c9"} strokeWidth={1.25} />
-                    </Marker>
-                  );
-                })}
-              </ZoomableGroup>
-            </ComposableMap>
-            {hovered && (
-              <div className="city-map-tooltip" style={{ left: hovered.x + 14, top: hovered.y + 10 }}>
-                <strong>{hovered.city.city}/{hovered.city.state}</strong>
-                <span>{hovered.city.active} ativo{hovered.city.active === 1 ? "" : "s"} · {hovered.city.total} cadastrado{hovered.city.total === 1 ? "" : "s"}</span>
-              </div>
-            )}
+                </Pane>
+              )}
+            </MapContainer>
+            <button type="button" className="btn-x city-map-reset" onClick={() => setStateFilter("")} title="Ver o Brasil todo" aria-label="Redefinir visão">⤢</button>
           </div>
           <div className="city-map-legend">
             {showStates && (
