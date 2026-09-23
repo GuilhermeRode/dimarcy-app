@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api";
-import { dateBR, money, orderNumber } from "../format";
+import { dateBR } from "../format";
 import { ErrorBox, Avatar } from "../components/ui";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -22,15 +22,6 @@ function urgency(deliveryDate, status) {
   if (days < 7) return "red";
   if (days < 14) return "amber";
   return "none";
-}
-
-function urgencyBadge(deliveryDate, status) {
-  if (!deliveryDate || status === "delivered") return null;
-  const days = diffDays(deliveryDate, today());
-  if (days < 0) return "Atrasado";
-  if (days === 0) return "Entrega hoje";
-  if (days < 14) return `Faltam ${days} dia${days > 1 ? "s" : ""}`;
-  return null;
 }
 
 // Buckets tickets within a column by how close the delivery date is, for extra organization.
@@ -115,25 +106,24 @@ export default function Production() {
                     <div className={`board-group-label ${g.key === "overdue" ? "overdue" : ""}`}>{g.label}</div>
                     {g.items.map((o) => {
                       const u = urgency(o.delivery_date, o.status);
-                      const badge = urgencyBadge(o.delivery_date, o.status);
                       return (
                         <div key={o.id} className={`ticket ticket-${u}`} draggable
                           onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(o.id)); e.dataTransfer.effectAllowed = "move"; }}
                           onClick={() => nav(`/orders/${o.id}`)}>
                           <div className="ticket-top">
-                            <span className="ticket-ref">{orderNumber(o.id)}</span>
+                            <div className="ticket-customer-block">
+                              <span className="ticket-customer">{o.customer_name}</span>
+                              {o.customer_city && (
+                                <span className="ticket-city">{o.customer_city}{o.customer_state ? `/${o.customer_state}` : ""}</span>
+                              )}
+                            </div>
                             <Avatar url={o.seller_avatar_url} name={o.seller_name} size="sm" />
-                          </div>
-                          <div className="ticket-customer">{o.customer_name}</div>
-                          <div className="ticket-meta">
-                            <span>{o.pieces} peças</span>
-                            <span>{money(o.total)}</span>
                           </div>
                           <div className="ticket-delivery-row">
                             <span className="ticket-delivery">
                               {o.delivery_date ? dateBR(o.delivery_date) : "Sem data de entrega"}
                             </span>
-                            {badge && <span className={`ticket-badge ticket-badge-${u}`}>{badge}</span>}
+                            <span className="ticket-pieces">{o.pieces} peças</span>
                           </div>
                         </div>
                       );

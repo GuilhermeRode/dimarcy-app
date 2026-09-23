@@ -141,7 +141,7 @@ input[type="checkbox"] { width: auto; }
 .tag { margin-left: 8px; font-size: 0.75rem; background: var(--accent-light); color: var(--accent-strong); padding: 1px 7px; border-radius: 4px; font-weight: 600; }
 .tag-warning { background: var(--amber-light); color: var(--amber); }
 .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
-.filter-bar input { max-width: 640px; flex: 1; min-width: 200px; }
+.filter-bar input { max-width: 640px; flex: 1; min-width: 350px; }
 .filter-bar select { max-width: 220px; }
 .empty-state { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); padding: 40px; text-align: center; color: var(--muted); }
 
@@ -167,6 +167,8 @@ input[type="checkbox"] { width: auto; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-order { grid-template-columns: 2fr 1fr 1fr; }
 .form-order .span-2 { grid-column: span 1; }
+/* payment terms fills the empty last column so its long label doesn't wrap on narrow laptops */
+.form-order .field:last-child { grid-column: span 2; }
 .span-2 { grid-column: span 2; }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field > span { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
@@ -397,7 +399,7 @@ section.item-group { margin-top: 0; }
 
 /* ---------- customers ---------- */
 .header-search-group { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
-.header-search { flex: 1; min-width: 200px; max-width: 600px; }
+.header-search { flex: 1; min-width: 350px; max-width: 600px; }
 .order-status-chips .period-chip { padding: 8px 16px; font-size: 0.9rem; }
 .customer-group { display: flex; flex-direction: column; gap: 8px; }
 .customer-group-header {
@@ -472,19 +474,17 @@ section.item-group { margin-top: 0; }
 }
 .ticket:active { cursor: grabbing; }
 .ticket:hover { box-shadow: 0 4px 14px -6px rgba(13,42,82,.3); }
-.ticket-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.ticket-ref { font-size: 0.7rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
-.ticket-customer { font-weight: 700; font-size: 1.05rem; color: var(--ink); line-height: 1.2; }
-.ticket-meta { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); }
-.ticket-delivery-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 2px; }
+.ticket-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.ticket-customer-block { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ticket-customer { font-weight: 700; font-size: 1.05rem; color: var(--ink); line-height: 1.2; overflow-wrap: anywhere; }
+.ticket-city { font-size: 0.78rem; color: var(--muted); }
+.ticket-delivery-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 4px; }
+.ticket-pieces { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
 .ticket-delivery {
   font-size: 0.82rem; font-weight: 700; color: var(--accent-strong); font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em; border: 1px solid var(--accent-light); background: var(--accent-light);
   border-radius: 6px; padding: 2px 8px;
 }
-.ticket-badge { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
-.ticket-badge-amber { background: var(--amber-light); color: var(--amber); }
-.ticket-badge-red { background: var(--danger-light); color: var(--danger); }
 .ticket-amber { border-left-color: var(--amber); background: var(--amber-light); }
 .ticket-red { border-left-color: var(--danger); background: var(--danger-light); }
 .ticket-red .ticket-delivery { color: var(--danger); background: var(--danger-light); border-color: var(--danger-light); }
@@ -531,11 +531,13 @@ section.item-group { margin-top: 0; }
 
 @media (max-width: 600px) {
   .form-grid, .form-order { grid-template-columns: 1fr; }
+  .form-order .field:last-child { grid-column: auto; }
   .kpis, .kpis-secondary, .orders-kpis { grid-template-columns: 1fr; }
   .order-summary { grid-template-columns: 1fr; }
   .page-header, .dashboard-header { flex-direction: column; align-items: stretch; }
   .filter-bar { flex-direction: column; }
   .filter-bar input, .filter-bar select { max-width: none; }
+  .filter-bar input, .header-search { min-width: 0; }
   .period-block { align-items: stretch; }
   .period-chips { justify-content: flex-start; }
   .period-filter input { flex: 1; min-width: 0; }
