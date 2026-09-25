@@ -1,7 +1,7 @@
 import datetime as _dt
 from datetime import date, datetime
 
-from sqlalchemy import (Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric,
+from sqlalchemy import (Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric,
                         String, Table, Text, func)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -75,6 +75,7 @@ class Product(Base):
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (Index("ix_orders_date_status", "date", "status"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
     seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
@@ -110,7 +111,7 @@ class OrderItem(Base):
     __tablename__ = "order_items"
     id: Mapped[int] = mapped_column(primary_key=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     color_id: Mapped[int] = mapped_column(ForeignKey("colors.id"))
     size: Mapped[str] = mapped_column(String(5))
     quantity: Mapped[int] = mapped_column(Integer)
@@ -123,6 +124,16 @@ class OrderItem(Base):
     @property
     def subtotal(self) -> float:
         return round(float(self.unit_price) * self.quantity, 2)
+
+
+class City(Base):
+    """Geocoding cache keyed by (name, state) — see geocoding.lookup_cached_city."""
+    __tablename__ = "cities"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), index=True)
+    state: Mapped[str] = mapped_column(String(2))
+    lat: Mapped[float] = mapped_column()
+    lng: Mapped[float] = mapped_column()
 
 
 class AppSettings(Base):
