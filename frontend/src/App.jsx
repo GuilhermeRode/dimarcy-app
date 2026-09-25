@@ -16,6 +16,7 @@ import Production from "./pages/Production";
 import ProductionPrint from "./pages/ProductionPrint";
 import ClientPrint from "./pages/ClientPrint";
 import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
 
 // The map screen (react-leaflet + a bundled GeoJSON) is desktop/web-only —
 // left out of the Capacitor (Android) build entirely via VITE_EXCLUDE_MAP so it never
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="products" element={<Protected admin><Products /></Protected>} />
             <Route path="colors" element={<Protected admin><Colors /></Protected>} />
             <Route path="users" element={<Protected admin><Users /></Protected>} />
+            <Route path="settings" element={<Protected admin><Settings /></Protected>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import {
   ColorsIcon, CustomersIcon, DashboardIcon, MenuIcon, OrdersIcon, ProductionIcon,
-  ProductsIcon, RevenueIcon, UsersAdminIcon,
+  ProductsIcon, RevenueIcon, SettingsIcon, UsersAdminIcon,
 } from "./icons";
 import { Avatar } from "./ui";
 import logoFull from "../assets/logo-full.png";
@@ -19,6 +19,7 @@ const ADMIN_LINKS = [
   { to: "/products", label: "Produtos", Icon: ProductsIcon },
   { to: "/colors", label: "Cores", Icon: ColorsIcon },
   { to: "/users", label: "Usuários", Icon: UsersAdminIcon },
+  { to: "/settings", label: "Configurações", Icon: SettingsIcon },
 ];
 
 export default function Layout() {

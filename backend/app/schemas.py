@@ -128,3 +128,13 @@ class OrderIn(BaseModel):
 
 class StatusIn(BaseModel):
     status: str
+
+
+# ---------- App settings ----------
+class AppSettingsIn(BaseModel):
+    allow_price_override: bool
+    max_discount_percent: float = Field(ge=0, le=100)
+
+
+class AppSettingsOut(ORM, AppSettingsIn):
+    pass

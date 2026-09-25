@@ -5,11 +5,16 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..mailer import send_order_delivered_email
-from ..models import ORDER_STATUSES, Customer, Order, OrderItem, Product, User
+from ..models import ORDER_STATUSES, AppSettings, Customer, Order, OrderItem, Product, User
 from ..schemas import OrderIn, StatusIn
 from ..security import get_current_user, require_admin
+from ..settings_store import get_app_settings
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+def _format_brl(v: float) -> str:
+    return f"R$ {v:,.2f}".translate(str.maketrans(",.", ".,"))
 
 
 def summary(o: Order) -> dict:
@@ -36,11 +41,15 @@ def full(o: Order) -> dict:
     return d
 
 
-def _build_items(data: OrderIn, db: Session, user: User) -> list[OrderItem]:
+def _build_items(data: OrderIn, db: Session, user: User, app_settings: AppSettings,
+                  existing_order: Order | None) -> list[OrderItem]:
     if data.status not in ORDER_STATUSES:
         raise HTTPException(400, "Invalid status.")
     if not db.get(Customer, data.customer_id):
         raise HTTPException(400, "Customer not found.")
+    # Editing an order keeps each existing line's recorded price — only a brand-new
+    # product line falls back to the product's current price (see also the override case).
+    price_on_record = {i.product_id: float(i.unit_price) for i in existing_order.items} if existing_order else {}
     items = []
     for it in data.items:
         prod = db.get(Product, it.product_id)
@@ -50,14 +59,25 @@ def _build_items(data: OrderIn, db: Session, user: User) -> list[OrderItem]:
             raise HTTPException(400, f"The chosen color is not registered for {prod.reference}.")
         if it.size not in prod.sizes.split(","):
             raise HTTPException(400, f"Size {it.size} does not exist for {prod.reference}.")
-        # Sellers cannot override the product's price — only admins can.
-        if user.role == "admin" and it.unit_price is not None:
+        if app_settings.allow_price_override and user.role == "admin" and it.unit_price is not None:
             price = it.unit_price
+        elif prod.id in price_on_record:
+            price = price_on_record[prod.id]
         else:
             price = float(prod.price)
         items.append(OrderItem(product_id=prod.id, color_id=it.color_id, size=it.size,
                                 quantity=it.quantity, unit_price=price))
     return items
+
+
+def _check_discount(discount: float, items: list[OrderItem], app_settings: AppSettings) -> None:
+    gross = sum(i.subtotal for i in items)
+    max_discount = round(gross * float(app_settings.max_discount_percent) / 100, 2)
+    if discount > max_discount + 0.005:
+        pct = app_settings.max_discount_percent
+        pct_text = f"{pct:.2f}".rstrip("0").rstrip(".") if pct % 1 else f"{pct:.0f}"
+        raise HTTPException(400, f"O desconto máximo é de {pct_text}% ({_format_brl(max_discount)}). "
+                                  f"Peça ao administrador para alterar o limite.")
 
 
 def _find(oid: int, db: Session) -> Order:
@@ -98,11 +118,13 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
         customer = db.get(Customer, data.customer_id)
         if not customer or customer.owner_id != u.id:
             raise HTTPException(400, "Customer not found.")
+    app_settings = get_app_settings(db)
+    items = _build_items(data, db, u, app_settings, existing_order=None)
+    _check_discount(data.discount, items, app_settings)
     o = Order(customer_id=data.customer_id, seller_id=u.id, date=data.date or date.today(),
               delivery_date=data.delivery_date, status=data.status,
               payment_method=data.payment_method, payment_terms=data.payment_terms,
-              discount=data.discount, notes=data.notes,
-              items=_build_items(data, db, u))
+              discount=data.discount, notes=data.notes, items=items)
     db.add(o)
     db.commit()
     db.refresh(o)
@@ -112,7 +134,10 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
 @router.put("/{oid}", dependencies=[Depends(require_admin)])
 def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o = _find(oid, db)
-    o.items = _build_items(data, db, user)
+    app_settings = get_app_settings(db)
+    items = _build_items(data, db, user, app_settings, existing_order=o)
+    _check_discount(data.discount, items, app_settings)
+    o.items = items
     became_delivered = data.status == "delivered" and o.status != "delivered"
     o.customer_id, o.status, o.discount, o.notes = data.customer_id, data.status, data.discount, data.notes
     o.payment_method, o.payment_terms = data.payment_method, data.payment_terms
@@ -142,5 +167,7 @@ def change_status(oid: int, data: StatusIn, db: Session = Depends(get_db)):
 @router.delete("/{oid}", status_code=204, dependencies=[Depends(require_admin)])
 def delete(oid: int, db: Session = Depends(get_db)):
     o = _find(oid, db)
+    if o.status != "quote":
+        raise HTTPException(400, "Só orçamentos podem ser excluídos. Para os demais, use Cancelar.")
     db.delete(o)
     db.commit()

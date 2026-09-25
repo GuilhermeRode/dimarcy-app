@@ -191,6 +191,7 @@ export default function OrderForm() {
   const [customers, setCustomers] = useState([]);
   const [sellers, setSellers] = useState([]);
   const [products, setProducts] = useState([]);
+  const [settings, setSettings] = useState({ allow_price_override: false, max_discount_percent: 10 });
   const [header, setHeader] = useState({
     customer_id: "", date: new Date().toISOString().slice(0, 10), delivery_date: "",
     status: "confirmed", payment_method: "", payment_terms: "", discount: 0, notes: "",
@@ -226,6 +227,7 @@ export default function OrderForm() {
   useEffect(() => {
     api.get("/customers").then((r) => setCustomers(r.data));
     api.get("/products", { params: { active_only: true } }).then((r) => setProducts(r.data));
+    api.get("/settings").then((r) => setSettings(r.data));
     if (isAdmin) api.get("/users").then((r) => setSellers(r.data));
     if (id) api.get(`/orders/${id}`).then(({ data }) => {
       setHeader({
@@ -246,6 +248,8 @@ export default function OrderForm() {
   const gross = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
   const pieces = items.reduce((s, i) => s + i.quantity, 0);
   const total = gross - (Number(header.discount) || 0);
+  const maxDiscount = Math.round(gross * settings.max_discount_percent) / 100;
+  const discountTooHigh = (Number(header.discount) || 0) > maxDiscount + 0.005;
 
   const selectedCustomer = customers.find((c) => c.id === Number(header.customer_id));
 
@@ -283,6 +287,8 @@ export default function OrderForm() {
     if (!header.payment_method) return setError("Selecione a forma de pagamento.");
     if (!header.payment_terms) return setError("Selecione o prazo de pagamento.");
     if (!items.length) return setError("Adicione ao menos um produto.");
+    if (discountTooHigh) return setError(
+      `O desconto máximo é de ${settings.max_discount_percent}% (${money(maxDiscount)}). Peça ao administrador para alterar o limite.`);
     setSaving(true);
     const body = {
       ...header, customer_id: Number(header.customer_id), discount: Number(header.discount) || 0,
@@ -388,7 +394,11 @@ export default function OrderForm() {
           <div><span>Subtotal</span><strong>{money(gross)}</strong></div>
           <div>
             <span>Desconto (R$)</span>
-            <input type="number" min="0" step="0.01" value={header.discount} onChange={(e) => setHeader({ ...header, discount: e.target.value })} />
+            <input type="number" min="0" step="0.01" value={header.discount}
+              onChange={(e) => setHeader({ ...header, discount: e.target.value })} />
+            <small className={discountTooHigh ? "danger" : "muted"}>
+              Máximo {settings.max_discount_percent}% · até {money(maxDiscount)}
+            </small>
           </div>
           <div className="grand-total"><span>Total</span><strong>{money(total)}</strong></div>
         </div>
@@ -435,7 +445,7 @@ export default function OrderForm() {
             <>
               <button type="button" className="modal-back" onClick={() => setEditing(null)}>← Escolher outro produto</button>
               <QuantityGrid product={editing} initial={groups[editing.id] || []}
-                initialPrice={groups[editing.id]?.[0]?.unit_price} canEditPrice={isAdmin}
+                initialPrice={groups[editing.id]?.[0]?.unit_price} canEditPrice={isAdmin && settings.allow_price_override}
                 onSave={saveGrid} onCancel={closeProductModal} />
             </>
           )}

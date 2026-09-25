@@ -9,12 +9,12 @@ from ..database import get_db
 from ..models import Color, OrderItem, Product
 from ..schemas import ProductIn, ProductOut
 from ..security import get_current_user
+from ..uploads import read_validated_image
 
 router = APIRouter(prefix="/products", tags=["products"], dependencies=[Depends(get_current_user)])
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads" / "products"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 
 def _apply(p: Product, data: ProductIn, db: Session):
@@ -74,8 +74,7 @@ def upload_image(pid: int, file: UploadFile = File(...), db: Session = Depends(g
     p = db.get(Product, pid)
     if not p:
         raise HTTPException(404, "Product not found.")
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(400, "Send an image file (JPEG, PNG, WEBP or GIF).")
+    content = read_validated_image(file)
 
     old_path = None
     if p.image_url:
@@ -84,7 +83,7 @@ def upload_image(pid: int, file: UploadFile = File(...), db: Session = Depends(g
     ext = Path(file.filename or "").suffix.lower() or ".jpg"
     filename = f"{pid}_{uuid.uuid4().hex}{ext}"
     with open(UPLOAD_DIR / filename, "wb") as out:
-        out.write(file.file.read())
+        out.write(content)
 
     p.image_url = f"/uploads/products/{filename}"
     db.commit()
