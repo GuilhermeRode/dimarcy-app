@@ -1,19 +1,21 @@
 """Sends the admin an e-mail notification when an order is completed (marked as delivered).
 
-Uses plain smtplib (no extra dependency). If SMTP isn't configured (smtp_host empty),
-sending is skipped and a message is printed instead — this never blocks the request
-that triggered it.
+Uses Resend's HTTP API (no extra dependency, same style as geocoding.py). If it isn't
+configured (resend_api_key empty), sending is skipped and a message is printed instead —
+this never blocks the request that triggered it.
 """
-import smtplib
-from email.mime.text import MIMEText
+import json
+import urllib.request
 
 from .config import settings
+
+RESEND_URL = "https://api.resend.com/emails"
 
 
 def send_order_delivered_email(order) -> None:
     to_addr = settings.notify_email or settings.admin_email
-    if not settings.smtp_host or not to_addr:
-        print(f"[mailer] SMTP not configured — skipped delivery notification for order #{order.id}.")
+    if not settings.resend_api_key or not settings.mail_from or not to_addr:
+        print(f"[mailer] Resend not configured — skipped delivery notification for order #{order.id}.")
         return
 
     subject = f"Pedido #{order.id:05d} entregue — {order.customer.name}"
@@ -25,17 +27,19 @@ def send_order_delivered_email(order) -> None:
         f"Peças: {order.pieces}\n"
         f"Total: R$ {order.total:.2f}\n"
     )
-    msg = MIMEText(body, "plain", "utf-8")
-    msg["Subject"] = subject
-    msg["From"] = settings.smtp_from or settings.smtp_user or to_addr
-    msg["To"] = to_addr
-
+    payload = json.dumps({
+        "from": settings.mail_from,
+        "to": [to_addr],
+        "subject": subject,
+        "text": body,
+    }).encode()
+    req = urllib.request.Request(RESEND_URL, data=payload, method="POST", headers={
+        "Authorization": f"Bearer {settings.resend_api_key}",
+        "Content-Type": "application/json",
+    })
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
-            server.starttls()
-            if settings.smtp_user:
-                server.login(settings.smtp_user, settings.smtp_password)
-            server.sendmail(msg["From"], [to_addr], msg.as_string())
+        with urllib.request.urlopen(req, timeout=10) as r:
+            r.read()
         print(f"[mailer] Delivery notification sent to {to_addr} for order #{order.id}.")
     except Exception as e:  # never let a mail failure break the order update
         print(f"[mailer] Failed to send delivery notification for order #{order.id}: {e}")

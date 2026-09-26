@@ -11,13 +11,11 @@ class Settings(BaseSettings):
     admin_email: str = "admin@dimarcy.com.br"
     admin_password: str = "admin123"
 
-    # E-mail notifications (order delivered). Leave smtp_host empty to disable sending.
-    smtp_host: str = ""
-    smtp_port: int = 587
-    smtp_user: str = ""
-    smtp_password: str = ""
-    smtp_from: str = ""
-    notify_email: str = ""  # defaults to admin_email when empty
+    # E-mail notifications (order delivered), sent via Resend's HTTP API.
+    # Leave resend_api_key empty to disable sending.
+    resend_api_key: str = ""
+    mail_from: str = ""  # must be on a domain verified in Resend, e.g. "Di Marcy <pedidos@dimarcy.com.br>"
+    notify_email: str = ""  # who receives it; defaults to admin_email when empty
 
 
 settings = Settings()
