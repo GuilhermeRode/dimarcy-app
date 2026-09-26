@@ -191,7 +191,7 @@ export default function OrderForm() {
   const [customers, setCustomers] = useState([]);
   const [sellers, setSellers] = useState([]);
   const [products, setProducts] = useState([]);
-  const [settings, setSettings] = useState({ allow_price_override: false, max_discount_percent: 10 });
+  const [settings, setSettings] = useState({ allow_price_override: false, max_discount_percent: 0 });
   const [header, setHeader] = useState({
     customer_id: "", date: new Date().toISOString().slice(0, 10), delivery_date: "",
     status: "confirmed", payment_method: "", payment_terms: "", discount: 0, notes: "",
