@@ -45,21 +45,23 @@ export default function ProductionPrint() {
     <div className="page production-print">
       <div className="actions no-print">
         <button className="btn" onClick={() => nav(-1)}>Voltar</button>
-        <button className="btn btn-primary" onClick={() => window.print()}>Imprimir</button>
+        <button className="btn btn-primary" onClick={() => window.print()}>Enviar ambos</button>
       </div>
       <ErrorBox msg={error} />
 
       <div className="pp-header">
-        <div className="pp-header-left">
-          <img src={logoFull} alt="Di Marcy" className="pp-logo" />
-          <span className="pp-order-num">Pedido Nº {orderNumber(o.id)}</span>
-          <strong className="pp-customer">{o.customer_name}</strong>
+        <div className="pp-header-id">
+          <span className="pp-doctype">Ordem de produção</span>
+          <strong className="pp-order-num">{orderNumber(o.id)}</strong>
         </div>
-        <div className="pp-header-right">
-          <span>Pedido: {dateBR(o.date)}</span>
-          <strong className="pp-delivery">
-            Entrega: {o.delivery_date ? dateBR(o.delivery_date) : "—"}
-          </strong>
+        <div className="pp-header-main">
+          <img src={logoFull} alt="Di Marcy" className="pp-logo" />
+          <strong className="pp-customer">{o.customer_name}</strong>
+          <span className="pp-order-date">Pedido em {dateBR(o.date)}</span>
+        </div>
+        <div className={`pp-header-delivery${o.delivery_date ? "" : " pp-header-delivery-empty"}`}>
+          <span>Entrega</span>
+          <strong>{o.delivery_date ? dateBR(o.delivery_date) : "A definir"}</strong>
         </div>
       </div>
 

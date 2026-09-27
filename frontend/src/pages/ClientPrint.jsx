@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
-import { dateBR, money } from "../format";
+import { dateBR, money, orderNumber } from "../format";
 import { ErrorBox, Swatch } from "../components/ui";
 import logoFull from "../assets/logo-full.png";
 
@@ -26,14 +26,19 @@ export default function ClientPrint() {
     <div className="page">
       <div className="actions no-print">
         <button className="btn" onClick={() => nav(-1)}>Voltar</button>
-        <button className="btn btn-primary" onClick={() => window.print()}>Imprimir</button>
+        <button className="btn btn-primary" onClick={() => window.print()}>Enviar ambos</button>
       </div>
       <ErrorBox msg={error} />
 
       <div className="print-letterhead">
         <img src={logoFull} alt="Di Marcy" className="print-logo" />
+        <div className="print-letterhead-id">
+          <span className="print-doctype">Pedido</span>
+          <strong className="print-order-num">{orderNumber(o.id)}</strong>
+        </div>
         <div className="print-letterhead-info">
           <strong>{o.customer_name}</strong>
+          <span>{dateBR(o.date)}</span>
         </div>
       </div>
 

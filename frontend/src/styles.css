@@ -551,6 +551,9 @@ section.item-group { margin-top: 0; }
   padding-bottom: 10px; margin-bottom: 12px; border-bottom: 2px solid #000;
 }
 .print-logo { height: 56px; width: auto; object-fit: contain; }
+.print-letterhead-id { text-align: center; }
+.print-doctype { display: block; font-size: 0.7rem; color: #555; text-transform: uppercase; letter-spacing: 0.05em; }
+.print-order-num { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .print-letterhead-info { text-align: right; font-size: 0.8rem; color: #333; line-height: 1.4; }
 .print-letterhead-info strong { display: block; font-size: 1.15rem; color: #000; }
 .print-thanks { margin-top: 16px; padding-top: 10px; border-top: 1px solid #ccc; text-align: center; }
@@ -561,17 +564,31 @@ section.item-group { margin-top: 0; }
 /* ---------- production print (admin only, compact, black & white) ---------- */
 .production-print { color: #000; background: #fff; }
 .pp-header {
-  display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
-  border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px;
+  display: flex; align-items: stretch; border: 2px solid #000; border-radius: 6px;
+  overflow: hidden; margin-bottom: 16px;
 }
-.pp-header-left { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
-.pp-logo { height: 42px; width: auto; object-fit: contain; margin-bottom: 4px; }
-.pp-order-num { display: block; font-size: 0.85rem; color: #333; }
-.pp-customer { display: block; font-size: 1.3rem; margin-top: 2px; }
-.pp-header-right { text-align: right; font-size: 0.82rem; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-.pp-delivery {
-  font-size: 1rem; border: 2px solid #000; padding: 3px 10px; border-radius: 4px; margin-top: 2px;
+.pp-header-id {
+  display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  padding: 10px 18px; border-right: 1.5px solid #000; min-width: 130px;
 }
+.pp-doctype { font-size: 0.72rem; color: #555; }
+.pp-order-num { font-size: 2.1rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.pp-header-main {
+  flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 3px;
+  padding: 10px 18px; border-right: 1.5px solid #000; min-width: 0;
+}
+.pp-logo { height: 26px; width: auto; object-fit: contain; }
+.pp-customer { font-size: 1.3rem; line-height: 1.15; overflow-wrap: anywhere; }
+.pp-order-date { font-size: 0.78rem; color: #555; }
+.pp-header-delivery {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 10px 22px; min-width: 148px; background: #000; color: #fff;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.pp-header-delivery span { font-size: 0.72rem; opacity: 0.75; }
+.pp-header-delivery strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.pp-header-delivery-empty { background: #fff; color: #555; }
+.pp-header-delivery-empty strong { font-size: 1.05rem; font-weight: 600; }
 .pp-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 .pp-table th, .pp-table td { border: 1px solid #000; padding: 4px 7px; text-align: left; vertical-align: top; }
 .pp-table th { background: #eee; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; }
