@@ -29,6 +29,9 @@ jobs:
           printf '%s\n' "${{ secrets.DIMARCY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/dimarcy_vm
           chmod 600 ~/.ssh/dimarcy_vm
           ssh-keyscan -H 163.176.158.45 >> ~/.ssh/known_hosts
+          # diagnostic only — prints the key's fingerprint, never the key itself.
+          # expected: 256 SHA256:yEbSchwrg0zuTwNKgucTTeGfjAWG6teafbJNUXTUkIc claude-code-dimarcy-access (ED25519)
+          ssh-keygen -l -f ~/.ssh/dimarcy_vm || echo "FINGERPRINT CHECK FAILED — key content is not a valid private key"
 
       # frontend dir on the VM only ever holds the vite build output, so --delete is safe
       - name: Deploy frontend (static build)
