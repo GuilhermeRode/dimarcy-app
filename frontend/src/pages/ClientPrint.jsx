@@ -26,7 +26,7 @@ export default function ClientPrint() {
     <div className="page">
       <div className="actions no-print">
         <button className="btn" onClick={() => nav(-1)}>Voltar</button>
-        <button className="btn btn-primary" onClick={() => window.print()}>Enviar ambos</button>
+        <button className="btn btn-primary" onClick={() => window.print()}>Imprimir</button>
       </div>
       <ErrorBox msg={error} />
 
