@@ -1,0 +1,52 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_URL: /api
+        run: |
+          npm ci
+          npm run build
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DIMARCY_SSH_KEY }}" > ~/.ssh/dimarcy_vm
+          chmod 600 ~/.ssh/dimarcy_vm
+          ssh-keyscan -H 163.176.158.45 >> ~/.ssh/known_hosts
+
+      # frontend dir on the VM only ever holds the vite build output, so --delete is safe
+      - name: Deploy frontend (static build)
+        run: |
+          rsync -az --delete -e "ssh -i ~/.ssh/dimarcy_vm" frontend/dist/ opc@163.176.158.45:/opt/dimarcy/frontend/
+
+      # only sync app/ + requirements.txt — never touch .env, dimarcy.db, uploads/, .venv on the server
+      - name: Deploy backend (app code)
+        run: |
+          rsync -az --delete -e "ssh -i ~/.ssh/dimarcy_vm" backend/app/ opc@163.176.158.45:/opt/dimarcy/backend/app/
+          rsync -az -e "ssh -i ~/.ssh/dimarcy_vm" backend/requirements.txt opc@163.176.158.45:/opt/dimarcy/backend/requirements.txt
+
+      - name: Install deps and restart backend
+        run: |
+          ssh -i ~/.ssh/dimarcy_vm opc@163.176.158.45 '
+            set -e
+            cd /opt/dimarcy/backend
+            uv pip install -r requirements.txt
+            sudo restorecon -Rv /opt/dimarcy/backend/app /opt/dimarcy/frontend >/dev/null 2>&1 || true
+            sudo systemctl restart dimarcy-backend
+          '
