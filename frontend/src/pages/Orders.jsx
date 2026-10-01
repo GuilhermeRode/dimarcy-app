@@ -121,7 +121,7 @@ export default function Orders() {
             </thead>
             <tbody>
               {pageItems.map((o) => (
-                <tr key={o.id}>
+                <tr key={o.id} className="clickable" onClick={() => nav(`/orders/${o.id}`)}>
                   <td>
                     {isAdmin ? (
                       <span className="cell-stack">

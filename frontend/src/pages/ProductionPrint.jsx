@@ -50,18 +50,30 @@ export default function ProductionPrint() {
       <ErrorBox msg={error} />
 
       <div className="pp-header">
-        <div className="pp-header-id">
-          <span className="pp-doctype">Ordem de produção</span>
-          <strong className="pp-order-num">{orderNumber(o.id)}</strong>
-        </div>
-        <div className="pp-header-main">
+        <div className="pp-header-logo">
           <img src={logoFull} alt="Di Marcy" className="pp-logo" />
-          <strong className="pp-customer">{o.customer_name}</strong>
-          <span className="pp-order-date">Pedido em {dateBR(o.date)}</span>
         </div>
-        <div className={`pp-header-delivery${o.delivery_date ? "" : " pp-header-delivery-empty"}`}>
-          <span>Entrega</span>
-          <strong>{o.delivery_date ? dateBR(o.delivery_date) : "A definir"}</strong>
+        <div className="pp-header-grid">
+          <div className="pp-field pp-field-cliente">
+            <span className="pp-field-label">Cliente</span>
+            <strong className="pp-field-value">{o.customer_name}</strong>
+          </div>
+          <div className="pp-field pp-field-ordem">
+            <span className="pp-field-label">Ordem de produção</span>
+            <strong className="pp-field-value">{orderNumber(o.id)}</strong>
+          </div>
+          <div className="pp-field pp-field-vendedor">
+            <span className="pp-field-label">Vendedor</span>
+            <strong className="pp-field-value">{o.seller_name}</strong>
+          </div>
+          <div className="pp-field pp-field-pedido-em">
+            <span className="pp-field-label">Pedido em</span>
+            <strong className="pp-field-value">{dateBR(o.date)}</strong>
+          </div>
+          <div className="pp-field pp-field-entrega">
+            <span className="pp-field-label">Entrega</span>
+            <strong className="pp-field-value">{o.delivery_date ? dateBR(o.delivery_date) : "A definir"}</strong>
+          </div>
         </div>
       </div>
 
@@ -84,9 +96,15 @@ export default function ProductionPrint() {
         </tfoot>
       </table>
 
-      {o.notes && (
-        <div className="pp-notes"><strong>Observações:</strong> {o.notes}</div>
-      )}
+      <div className="pp-notes-box">
+        <span className="pp-field-label">Observações</span>
+        {o.notes ? <p className="pp-notes-text">{o.notes}</p> : (
+          <>
+            <div className="pp-notes-line" />
+            <div className="pp-notes-line" />
+          </>
+        )}
+      </div>
     </div>
     </div>
   );
