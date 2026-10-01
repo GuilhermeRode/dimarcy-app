@@ -26,7 +26,7 @@ jobs:
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.DIMARCY_SSH_KEY }}" > ~/.ssh/dimarcy_vm
+          printf '%s\n' "${{ secrets.DIMARCY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/dimarcy_vm
           chmod 600 ~/.ssh/dimarcy_vm
           ssh-keyscan -H 163.176.158.45 >> ~/.ssh/known_hosts
 
