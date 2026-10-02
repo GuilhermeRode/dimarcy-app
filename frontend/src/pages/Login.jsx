@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { errorMessage } from "../api";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
@@ -72,6 +72,7 @@ export default function Login() {
           <button className="btn btn-primary btn-block" disabled={loading}>
             {loading ? "Entrando..." : "Entrar"}
           </button>
+          <Link className="login-forgot" to="/forgot-password">Esqueci minha senha</Link>
         </form>
       </div>
     </div>

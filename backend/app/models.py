@@ -28,6 +28,8 @@ class User(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     avatar_url: Mapped[str | None] = mapped_column(String(300))
     theme: Mapped[str] = mapped_column(String(10), default="light")  # light | dark — personal UI preference
+    reset_token_hash: Mapped[str | None] = mapped_column(String(64))  # sha256 hex of the forgot-password token
+    reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class Customer(Base):

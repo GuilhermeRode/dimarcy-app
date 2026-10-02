@@ -116,6 +116,7 @@ input[type="checkbox"] { width: auto; }
 .btn-new { background: var(--accent); border-color: var(--accent); color: #fff; padding: 8px 12px; font-size: 0.9rem; }
 .btn-light { padding: 4px 10px; font-weight: 500; }
 .btn-block { width: 100%; padding: 11px; }
+a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .danger { color: var(--amber); }
 .actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 .actions-end { justify-content: flex-end; }
@@ -218,6 +219,8 @@ input[type="checkbox"] { width: auto; }
 .login-card .btn-block { margin-top: 4px; padding: 11px; font-size: 0.98rem; box-shadow: 0 10px 24px -10px rgba(47,111,237,.55); transition: transform .12s ease, box-shadow .12s ease; }
 .login-card .btn-block:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 14px 28px -10px rgba(47,111,237,.6); }
 .login-card .check { color: var(--muted); font-size: 0.9rem; }
+.login-forgot { text-align: center; font-size: 0.88rem; color: var(--muted); text-decoration: none; }
+.login-forgot:hover { color: var(--accent-strong); text-decoration: underline; }
 .password-field { position: relative; }
 .password-field input { padding-right: 40px; }
 .password-toggle {

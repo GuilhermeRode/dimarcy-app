@@ -37,6 +37,15 @@ class TokenOut(BaseModel):
     user: UserOut
 
 
+class ForgotPasswordIn(BaseModel):
+    email: str
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str
+
+
 class ProfileIn(BaseModel):
     """Self-service profile update — changing the email or setting a new password requires the current password."""
     name: str = Field(min_length=2)

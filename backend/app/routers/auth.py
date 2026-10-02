@@ -1,13 +1,18 @@
+import hashlib
+import secrets
 import time
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..database import get_db
+from ..mailer import send_password_reset_email
 from ..models import User
-from ..schemas import LoginIn, ProfileIn, TokenOut, UserOut
+from ..schemas import ForgotPasswordIn, LoginIn, ProfileIn, ResetPasswordIn, TokenOut, UserOut
 from ..security import create_token, get_current_user, hash_password, verify_password
 from ..uploads import read_validated_image
 
@@ -57,6 +62,59 @@ def login(data: LoginIn, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(401, "Incorrect email or password.")
     _clear_login_failures(email, ip)
     return TokenOut(access_token=create_token(u.id), user=UserOut.model_validate(u))
+
+
+# "Forgot password" throttling — same shape as the login one above, kept separate
+# so a burst of reset requests can't also lock someone out of logging in.
+RESET_TOKEN_MINUTES = 30
+MAX_RESET_REQUESTS = 3
+RESET_BLOCK_SECONDS = 15 * 60
+_reset_requests: dict[str, list[float]] = {}
+
+
+def _recent_resets(key: str) -> list[float]:
+    now = time.time()
+    hits = [t for t in _reset_requests.get(key, []) if now - t < RESET_BLOCK_SECONDS]
+    _reset_requests[key] = hits
+    return hits
+
+
+@router.post("/forgot-password")
+def forgot_password(data: ForgotPasswordIn, request: Request, db: Session = Depends(get_db)):
+    email = data.email.strip().lower()
+    ip = request.client.host if request.client else "unknown"
+    # Always the same response, whether the e-mail exists, is inactive, or we're throttling —
+    # never let an attacker learn which accounts exist.
+    generic = {"detail": "Se esse e-mail existir, enviamos um link para redefinir a senha."}
+    if len(_recent_resets(f"email:{email}")) >= MAX_RESET_REQUESTS or \
+            len(_recent_resets(f"ip:{ip}")) >= MAX_RESET_REQUESTS:
+        return generic
+    _reset_requests.setdefault(f"email:{email}", []).append(time.time())
+    _reset_requests.setdefault(f"ip:{ip}", []).append(time.time())
+    user = db.query(User).filter(User.email == email).first()
+    if user and user.active:
+        token = secrets.token_urlsafe(32)
+        user.reset_token_hash = hashlib.sha256(token.encode()).hexdigest()
+        user.reset_token_expires_at = datetime.utcnow() + timedelta(minutes=RESET_TOKEN_MINUTES)
+        db.commit()
+        reset_url = f"{settings.frontend_url.rstrip('/')}/#/reset-password?token={token}"
+        send_password_reset_email(user.email, reset_url)
+    return generic
+
+
+@router.post("/reset-password")
+def reset_password(data: ResetPasswordIn, db: Session = Depends(get_db)):
+    if len(data.new_password) < 6:
+        raise HTTPException(400, "The password must be at least 6 characters long.")
+    token_hash = hashlib.sha256(data.token.encode()).hexdigest()
+    user = db.query(User).filter(User.reset_token_hash == token_hash).first()
+    if not user or not user.reset_token_expires_at or user.reset_token_expires_at < datetime.utcnow():
+        raise HTTPException(400, "Link inválido ou expirado.")
+    user.password_hash = hash_password(data.new_password)
+    user.reset_token_hash = None
+    user.reset_token_expires_at = None
+    db.commit()
+    return {"detail": "Senha redefinida com sucesso."}
 
 
 @router.get("/me", response_model=UserOut)

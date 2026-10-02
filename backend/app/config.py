@@ -8,10 +8,11 @@ class Settings(BaseSettings):
     secret_key: str = "change-this-key"
     token_expire_minutes: int = 720
     cors_origins: str = "*"
+    frontend_url: str = "https://app.dimarcy.com.br"  # used to build the password-reset link
     admin_email: str = "admin@dimarcy.com.br"
     admin_password: str = "admin123"
 
-    # E-mail notifications (order delivered), sent via Resend's HTTP API.
+    # E-mail notifications (order created, order delivered), sent via Resend's HTTP API.
     # Leave resend_api_key empty to disable sending.
     resend_api_key: str = ""
     mail_from: str = ""  # must be on a domain verified in Resend, e.g. "Di Marcy <pedidos@dimarcy.com.br>"

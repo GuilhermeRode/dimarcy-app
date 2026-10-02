@@ -3,6 +3,8 @@ import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Orders from "./pages/Orders";
 import OrderForm from "./pages/OrderForm";
@@ -38,6 +40,8 @@ export default function App() {
       <HashRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           {/* Print previews render standalone (no sidebar) so the preview matches what actually prints */}
           <Route path="/orders/:id/production-print" element={<Protected admin><ProductionPrint /></Protected>} />
           <Route path="/orders/:id/client-print" element={<Protected><ClientPrint /></Protected>} />
