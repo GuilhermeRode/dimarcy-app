@@ -143,11 +143,7 @@ def send_password_reset_email(to_email: str, reset_url: str) -> bool:
 </div>"""
     try:
         sent = _send(subject, text, body_html, [to_email])
-        if sent:
-            print(f"[mailer] Password reset email sent to {to_email}.")
-        else:
-            # Resend not configured (e.g. local dev) — print the link so it's still usable.
-            print(f"[mailer] Resend not configured — reset link for {to_email}: {reset_url}")
+        print(f"[mailer] Password reset email {'sent to' if sent else 'skipped (Resend not configured) for'} {to_email}.")
         return sent
     except Exception as e:  # never let a mail failure leak whether the account exists
         print(f"[mailer] Failed to send password reset email to {to_email}: {e}")

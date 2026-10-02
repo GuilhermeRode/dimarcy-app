@@ -13,7 +13,7 @@ from ..database import get_db
 from ..mailer import send_password_reset_email
 from ..models import User
 from ..schemas import ForgotPasswordIn, LoginIn, ProfileIn, ResetPasswordIn, TokenOut, UserOut
-from ..security import create_token, get_current_user, hash_password, verify_password
+from ..security import MIN_PASSWORD_LENGTH, create_token, get_current_user, hash_password, needs_rehash, verify_password
 from ..uploads import read_validated_image
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -61,6 +61,9 @@ def login(data: LoginIn, request: Request, db: Session = Depends(get_db)):
         print(f"[auth] Failed login attempt for {email} from {ip}")
         raise HTTPException(401, "Incorrect email or password.")
     _clear_login_failures(email, ip)
+    if needs_rehash(u.password_hash):  # transparently upgrades legacy bcrypt hashes to Argon2
+        u.password_hash = hash_password(data.password)
+        db.commit()
     return TokenOut(access_token=create_token(u.id), user=UserOut.model_validate(u))
 
 
@@ -104,8 +107,8 @@ def forgot_password(data: ForgotPasswordIn, request: Request, db: Session = Depe
 
 @router.post("/reset-password")
 def reset_password(data: ResetPasswordIn, db: Session = Depends(get_db)):
-    if len(data.new_password) < 6:
-        raise HTTPException(400, "The password must be at least 6 characters long.")
+    if len(data.new_password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(400, f"The password must be at least {MIN_PASSWORD_LENGTH} characters long.")
     token_hash = hashlib.sha256(data.token.encode()).hexdigest()
     user = db.query(User).filter(User.reset_token_hash == token_hash).first()
     if not user or not user.reset_token_expires_at or user.reset_token_expires_at < datetime.utcnow():
@@ -136,8 +139,8 @@ def update_me(data: ProfileIn, db: Session = Depends(get_db), user: User = Depen
     user.name = data.name.strip()
     user.email = email
     if changing_password:
-        if len(data.new_password) < 6:
-            raise HTTPException(400, "The password must be at least 6 characters long.")
+        if len(data.new_password) < MIN_PASSWORD_LENGTH:
+            raise HTTPException(400, f"The password must be at least {MIN_PASSWORD_LENGTH} characters long.")
         user.password_hash = hash_password(data.new_password)
     if data.theme in THEMES:
         user.theme = data.theme

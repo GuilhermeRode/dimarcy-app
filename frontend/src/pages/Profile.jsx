@@ -75,7 +75,7 @@ export default function Profile() {
             <input type="password" placeholder="Necessária para trocar e-mail ou senha" {...f("current_password")} />
           </Field>
           <Field label="Nova senha (deixe em branco para manter)" span={2}>
-            <input type="password" minLength={6} {...f("new_password")} />
+            <input type="password" minLength={10} {...f("new_password")} />
           </Field>
           <div className="span-2"><ErrorBox msg={error} /></div>
           {ok && <div className="span-2 muted">{ok}</div>}

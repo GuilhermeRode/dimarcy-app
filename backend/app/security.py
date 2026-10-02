@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -11,14 +13,32 @@ from .database import get_db
 from .models import User
 
 bearer = HTTPBearer(auto_error=False)
+MIN_PASSWORD_LENGTH = 10
+
+_hasher = PasswordHasher()
+# Hashes created before the Argon2 switch are bcrypt ($2a$/$2b$/$2y$, 60 chars) —
+# still verified below, and transparently upgraded to Argon2 on next login (see
+# needs_rehash + its call site in routers/auth.py's login endpoint).
+_BCRYPT_PREFIXES = ("$2a$", "$2b$", "$2y$")
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return _hasher.hash(password)
 
 
 def verify_password(password: str, hash_: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hash_.encode())
+    if hash_.startswith(_BCRYPT_PREFIXES):
+        return bcrypt.checkpw(password.encode(), hash_.encode())
+    try:
+        return _hasher.verify(hash_, password)
+    except VerifyMismatchError:
+        return False
+
+
+def needs_rehash(hash_: str) -> bool:
+    if hash_.startswith(_BCRYPT_PREFIXES):
+        return True
+    return _hasher.check_needs_rehash(hash_)
 
 
 def create_token(user_id: int) -> str:

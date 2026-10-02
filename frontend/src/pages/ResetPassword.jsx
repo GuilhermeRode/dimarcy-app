@@ -49,7 +49,7 @@ export default function ResetPassword() {
               <p className="login-sub">Escolha sua nova senha.</p>
               <label className="field">
                 <span>Nova senha</span>
-                <input type="password" minLength={6} autoComplete="new-password" value={password}
+                <input type="password" minLength={10} autoComplete="new-password" value={password}
                   onChange={(e) => setPassword(e.target.value)} autoFocus required />
               </label>
               {error && <div className="error-message">{error}</div>}
