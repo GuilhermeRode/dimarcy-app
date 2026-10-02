@@ -100,7 +100,10 @@ def forgot_password(data: ForgotPasswordIn, request: Request, db: Session = Depe
         user.reset_token_hash = hashlib.sha256(token.encode()).hexdigest()
         user.reset_token_expires_at = datetime.utcnow() + timedelta(minutes=RESET_TOKEN_MINUTES)
         db.commit()
-        reset_url = f"{settings.frontend_url.rstrip('/')}/#/reset-password?token={token}"
+        # token goes in the real query string (before the #), not inside the hash route —
+        # link-scanning proxies (e.g. Outlook/Hotmail Safe Links) routinely drop URL
+        # fragments when rewriting a link, which would silently strip the token.
+        reset_url = f"{settings.frontend_url.rstrip('/')}/?token={token}#/reset-password"
         send_password_reset_email(user.email, reset_url)
     return generic
 

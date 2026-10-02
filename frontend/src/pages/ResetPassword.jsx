@@ -5,7 +5,10 @@ import logoFull from "../assets/logo-full.png";
 
 export default function ResetPassword() {
   const [params] = useSearchParams();
-  const token = params.get("token") || "";
+  // Token normally arrives in the real query string (before the #, see auth.py) so it
+  // survives link-rewriting proxies that drop URL fragments — useSearchParams only sees
+  // the hash-router's own query, so that's a fallback for any already-sent old-format link.
+  const token = new URLSearchParams(window.location.search).get("token") || params.get("token") || "";
   const [password, setPassword] = useState("");
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
