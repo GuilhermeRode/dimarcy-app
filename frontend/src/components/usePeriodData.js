@@ -9,7 +9,8 @@ export default function usePeriodData({ start, end }) {
     let current = true;
     api.get("/dashboard", { params: { start, end } })
       .then((r) => { if (current) { setData(r.data); setError(""); } })
-      .catch((e) => { if (current) setError(errorMessage(e)); });
+      // Drop the previous period's numbers: shown under the new dates they'd be wrong.
+      .catch((e) => { if (current) { setData(null); setError(errorMessage(e)); } });
     return () => { current = false; };
   }, [start, end]);
   return { data, error };
