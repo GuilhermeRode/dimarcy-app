@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Cell, Pie, PieChart } from "recharts";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { compactMoney, initials, money, plural, STATUS } from "../format";
@@ -33,6 +33,39 @@ function todayLabel() {
 
 const Empty = () => <p className="muted">Sem vendas no período.</p>;
 
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const monthLabel = (mmYY) => `${MONTHS[Number(mmYY.slice(0, 2)) - 1]}/${mmYY.slice(3)}`; // "10/26" -> "out/26"
+
+// 12 bars, current month dark; clicking a bar shows that month's numbers beside the chart.
+function MonthlyBars({ months }) {
+  const [sel, setSel] = useState(months.length - 1);
+  const max = Math.max(...months.map((m) => m.value), 1);
+  const m = months[sel];
+  const prev = months[sel - 1];
+  return (
+    <div className="month-chart">
+      <div className="month-bars" role="group" aria-label="Faturamento por mês">
+        {months.map((x, i) => (
+          <button key={x.month} type="button" title={`${monthLabel(x.month)}: ${money(x.value)}`}
+            className={`${i === months.length - 1 ? "current" : ""} ${i === sel ? "on" : ""}`}
+            aria-pressed={i === sel} onClick={() => setSel(i)}>
+            <span style={{ height: `${Math.max(2, (x.value / max) * 100)}%` }} />
+            <small>{MONTHS[Number(x.month.slice(0, 2)) - 1]}</small>
+          </button>
+        ))}
+      </div>
+      <div className="month-card">
+        <span>{monthLabel(m.month)}{sel === months.length - 1 ? " (parcial)" : ""}</span>
+        <strong>{compactMoney(m.value)}</strong>
+        <small>{plural(m.orders, "pedido", "pedidos")} · {plural(m.pieces, "peça", "peças")}</small>
+        {prev && prev.value > 0 && (
+          <span className="month-card-delta"><Delta cur={m.value} prev={prev.value} /> vs. {MONTHS[Number(prev.month.slice(0, 2)) - 1]}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StatusDonut({ items }) {
   const [active, setActive] = useState(null);
   const total = items.reduce((t, s) => t + s.count, 0);
@@ -41,16 +74,14 @@ function StatusDonut({ items }) {
   return (
     <div className="donut-row" onMouseLeave={() => setActive(null)}>
       <div className="donut">
-        <ResponsiveContainer width={184} height={184}>
-          <PieChart>
-            <Pie data={items} dataKey="count" nameKey="status" innerRadius={62} outerRadius={90} paddingAngle={2}
-              onMouseEnter={(_, i) => setActive(i)} isAnimationActive={false}>
-              {items.map((s, i) => (
-                <Cell key={s.status} fill={STATUS_COLORS[s.status] || "#8b96b3"} opacity={active == null || active === i ? 1 : 0.25} />
-              ))}
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
+        <PieChart width={184} height={184}>
+          <Pie data={items} dataKey="count" nameKey="status" innerRadius={62} outerRadius={90} paddingAngle={2}
+            onMouseEnter={(_, i) => setActive(i)} isAnimationActive={false}>
+            {items.map((s, i) => (
+              <Cell key={s.status} fill={STATUS_COLORS[s.status] || "#8b96b3"} opacity={active == null || active === i ? 1 : 0.25} />
+            ))}
+          </Pie>
+        </PieChart>
         <div className="donut-center">
           <strong>{sel ? sel.count : total}</strong>
           <span>{sel ? STATUS[sel.status] : "pedidos no período"}</span>
@@ -85,6 +116,28 @@ function Bars({ items, label, value, detail }) {
   );
 }
 
+// With dozens of colors a strip or donut turns into slivers: rank the top ones and pool the rest.
+const TOP_COLORS = 8;
+function ColorRanking({ colors, totalPieces }) {
+  if (!colors.length || !totalPieces) return <Empty />;
+  const top = [...colors].sort((a, b) => b.pieces - a.pieces).slice(0, TOP_COLORS);
+  const others = totalPieces - top.reduce((t, c) => t + c.pieces, 0);
+  const rows = others > 0 ? [...top, { name: "Outras cores", hex: null, pieces: others }] : top;
+  const max = Math.max(...rows.map((c) => c.pieces), 1);
+  return (
+    <ul className="color-ranking">
+      {rows.map((c) => (
+        <li key={c.name} className={c.hex ? "" : "others"}>
+          <span className="swatch" style={{ background: c.hex || "var(--line)", width: 12, height: 12 }} />
+          <span className="color-name">{c.name}</span>
+          <span className="hbar"><span style={{ width: `${(c.pieces / max) * 100}%`, background: c.hex || "var(--muted)" }} /></span>
+          <strong>{Math.round((c.pieces / totalPieces) * 100)}%</strong>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const nav = useNavigate();
@@ -107,7 +160,6 @@ export default function Dashboard() {
     });
   }, [isAdmin]);
 
-  const colorTotal = d ? d.by_color.reduce((t, c) => t + c.pieces, 0) : 0;
   const sizeMax = d ? Math.max(...d.by_size.map((s) => s.pieces), 1) : 1;
   const kpis = d && [
     ["Pedidos fechados", d.kpis.orders, d.previous_kpis.orders, (v) => v.toLocaleString("pt-BR")],
@@ -144,15 +196,7 @@ export default function Dashboard() {
           <section className="dash-row">
             <div className="panel dash-wide">
               <h3>Faturamento nos últimos 12 meses</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <AreaChart data={d.monthly_sales} margin={{ left: 10, right: 10 }}>
-                  <CartesianGrid vertical={false} stroke="#eef1f5" />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={12} tickFormatter={(v) => (v ? compactMoney(v) : "0")} width={84} />
-                  <Tooltip formatter={(v) => [money(v), "Faturamento"]} />
-                  <Area type="monotone" dataKey="value" stroke="#2563eb" strokeWidth={2} fill="rgba(37,99,235,.08)" dot={{ r: 4, fill: "#fff", strokeWidth: 2 }} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <MonthlyBars months={d.monthly_sales} />
             </div>
             <div className="panel">
               <div className="panel-header"><h3>Situação dos pedidos</h3></div>
@@ -165,19 +209,7 @@ export default function Dashboard() {
           <section className="dash-grid-3">
             <div className="panel">
               <h3>Cores mais vendidas</h3>
-              {d.by_color.length ? (
-                <>
-                  <div className="color-strip">
-                    {d.by_color.map((c) => <span key={c.name} title={c.name} style={{ flex: c.pieces, background: c.hex }} />)}
-                  </div>
-                  <ul className="color-legend">
-                    {d.by_color.slice(0, 6).map((c) => (
-                      <li key={c.name}><span className="swatch" style={{ background: c.hex, width: 12, height: 12 }} />
-                        <span>{c.name}</span><strong>{Math.round((c.pieces / colorTotal) * 100)}%</strong></li>
-                    ))}
-                  </ul>
-                </>
-              ) : <Empty />}
+              <ColorRanking colors={d.by_color} totalPieces={d.kpis.pieces} />
             </div>
             <div className="panel">
               <div className="panel-header"><h3>Peças por tamanho</h3><span className="muted">{plural(d.kpis.pieces, "peça", "peças")}</span></div>
@@ -195,7 +227,7 @@ export default function Dashboard() {
             </div>
             <div className="panel">
               <h3>Produtos mais vendidos</h3>
-              <Bars items={d.top_products.slice(0, 5)} label={(i) => `${i.reference} · ${i.description}`}
+              <Bars items={[...d.top_products].sort((a, b) => b.pieces - a.pieces).slice(0, 5)} label={(i) => `${i.reference} · ${i.description}`}
                 value={(i) => i.pieces} detail={(i) => `${i.pieces} pç`} />
             </div>
           </section>

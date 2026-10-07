@@ -35,7 +35,6 @@ export default function Customers() {
     return {
       states: uniqSorted(rows.map((r) => r.state)),
       sellers: [...sellers.entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-BR")),
-      colors: uniqSorted(rows.flatMap((r) => r.colors)),
     };
   }, [rows]);
 
@@ -49,7 +48,6 @@ export default function Customers() {
       state: get("state"),
       city: get("city"),
       seller: isAdmin && (seller === "none" || options.sellers.some(([id]) => id === seller)) ? seller : "",
-      color: get("color"),
       sort: Object.hasOwn(SORTS, get("sort")) ? get("sort") : "total",
       page: Math.max(1, parseInt(get("page"), 10) || 1),
     };
@@ -73,7 +71,6 @@ export default function Customers() {
       && (!f.state || r.state === f.state)
       && (!f.city || r.city === f.city)
       && (!f.seller || (f.seller === "none" ? !r.owner_id : String(r.owner_id) === f.seller))
-      && (!f.color || r.colors.includes(f.color))
       && (!text || normalize(`${r.name} ${r.city || ""}`).includes(text)
         || (digits.length >= 3 && (r.document || "").replace(/\D/g, "").includes(digits)))
     ).sort(SORTS[f.sort].fn);
@@ -90,7 +87,6 @@ export default function Customers() {
     f.state && ["state", `Estado: ${f.state}`],
     f.city && ["city", `Cidade: ${f.city}`],
     f.seller && ["seller", `Vendedor: ${f.seller === "none" ? "Sem vendedor" : options.sellers.find(([id]) => id === f.seller)[1]}`],
-    f.color && ["color", `Cor: ${f.color}`],
   ].filter(Boolean);
 
   async function openEdit(id) {
@@ -98,9 +94,10 @@ export default function Customers() {
     catch (e) { setError(errorMessage(e)); }
   }
 
-  const select = (label, key, value, opts) => (
-    <label className={`filter ${value ? "on" : ""}`}>
-      <span>{label}</span>
+  // A pill-shaped menu: "Status: Todos ▾". Highlighted while it filters something.
+  const select = (label, key, value, opts, extraClass = "") => (
+    <label className={`pill-select ${value ? "on" : ""} ${extraClass}`}>
+      <span>{label}:</span>
       <select value={value} onChange={(e) => setFilter(key, e.target.value)}>{opts}</select>
     </label>
   );
@@ -117,7 +114,7 @@ export default function Customers() {
 
       <section className="filters-bar">
         <div className="filters-row">
-          <input className="filters-search" placeholder="Buscar por nome, cidade ou CPF/CNPJ"
+          <input className="filters-search" placeholder="Nome, cidade ou CPF/CNPJ"
             value={f.q} onChange={(e) => setFilter("q", e.target.value)} />
           {select("Status", "status", f.status, <>
             <option value="">Todos</option>
@@ -133,11 +130,9 @@ export default function Customers() {
             <option value="">Todos</option><option value="none">Sem vendedor</option>
             {options.sellers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
           </>)}
-          {select("Cor comprada", "color", f.color, <>
-            <option value="">Todas</option>{options.colors.map((c) => <option key={c}>{c}</option>)}
-          </>)}
           {select("Ordenar", "sort", f.sort === "total" ? "" : f.sort,
-            Object.entries(SORTS).map(([k, s]) => <option key={k} value={k === "total" ? "" : k}>{s.label}</option>))}
+            Object.entries(SORTS).map(([k, s]) => <option key={k} value={k === "total" ? "" : k}>{s.label}</option>),
+            "pill-sort")}
         </div>
         {chips.length > 0 && (
           <div className="filters-chips">

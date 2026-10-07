@@ -154,6 +154,11 @@ with TestClient(app) as c:
     assert starts[0] == "2026-01-01" and starts[1] == "2026-01-05"  # Thu 1st, then Monday the 5th
     assert round(sum(p["value"] for p in year["sales_series"]), 2) == year["kpis"]["revenue"]
 
+    # ---- 12-month chart carries orders per month (side card of the bar chart) ----
+    first_month = date(TODAY.year - 1, TODAY.month + 1, 1) if TODAY.month < 12 else date(TODAY.year, 1, 1)
+    span = c.get("/api/dashboard", headers=admin, params={"start": first_month.isoformat(), "end": TODAY.isoformat()}).json()
+    assert sum(m["orders"] for m in span["monthly_sales"]) == span["kpis"]["orders"]
+
     # ---- previous period of the same length ----
     day60 = (TODAY - timedelta(days=60)).isoformat()
     p = c.get("/api/dashboard", headers=admin, params={"start": day60, "end": day60}).json()

@@ -117,7 +117,7 @@ Declarada antes de `GET /customers/{cid}`. Lista completa (~525 clientes; sem pa
 - Clientes: admin recebe todos (inclusive `owner_id` nulo); vendedor, só `owner_id` = ele.
 - Pedidos agregados: só `SALE_STATUSES`; para vendedor, só `seller_id` = ele (assim todo `recent_orders.id`
   abre em `/orders/<id>` para quem vê).
-- `colors`: todas as cores compradas, por peças (o catálogo tem poucas cores; o filtro "Cor comprada" precisa da lista completa e o painel mostra as 3 primeiras). `recent_orders`: até 3, mais recentes.
+- `colors`: todas as cores compradas, por peças (o painel mostra as 3 primeiras). `recent_orders`: até 3, mais recentes.
 - Desempenho: **uma** consulta de clientes (com `joinedload(Customer.owner)`) e **uma** de pedidos de venda
   já filtrados (itens vêm por `selectin`), agregadas em Python. Nada de `customer.orders` por cliente.
 
@@ -184,7 +184,7 @@ reaproveitando as existentes e respeitando o tema escuro. Textos em pt-BR, códi
 1. Cabeçalho "Clientes" + subtítulo + "+ Cadastrar cliente" (formulário atual).
 2. Filtros na URL — valores aceitos:
    `q` (texto) · `status` = `active|at_risk|inactive|never_ordered` · `state` · `city` ·
-   `seller` = id do vendedor ou `none` (sem vendedor; só admin) · `color` (nome) ·
+   `seller` = id do vendedor ou `none` (sem vendedor; só admin) ·
    `sort` = `total|orders|recent|name` (padrão `total`) · `page`.
    Busca por nome, cidade ou CPF/CNPJ, ignorando acento e maiúscula. Cidade lista só as do estado escolhido.
    Etiquetas removíveis + "Limpar tudo".
@@ -237,3 +237,11 @@ com admin e vendedor, desktop e largura de celular; WhatsApp no desktop (Electro
 5. Clientes (+ `?customer=` no `OrderForm`, Electron links).
 6. Painel.
 7. Faturamento.
+
+## Ajustes após revisão visual (2026-10-07)
+
+- Clientes: filtro "Cor comprada" removido; filtros numa linha só, como menus em pílula ("Status: Todos ▾"), Ordenar à direita.
+- Painel, "Faturamento nos últimos 12 meses": barras por mês (mês atual escuro); clicar numa barra mostra ao lado
+  valor, pedidos, peças e variação contra o mês anterior. `monthly_sales` ganha `orders`.
+- Painel, "Cores mais vendidas": ranking das 8 cores com mais peças + "Outras cores" (o catálogo pode ter ~50 cores;
+  faixa ou rosca viram fatias ilegíveis). Percentual sobre o total de peças do período.

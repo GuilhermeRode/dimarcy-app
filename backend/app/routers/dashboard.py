@@ -121,12 +121,13 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         months.append((y, m))
         y, m = (y - 1, 12) if m == 1 else (y, m - 1)
     months.reverse()
-    series = {k: {"value": 0.0, "pieces": 0} for k in months}
+    series = {k: {"value": 0.0, "pieces": 0, "orders": 0} for k in months}
     for o in _sales_between(db, user, date(*months[0], 1), today):
         k = (o.date.year, o.date.month)
         if k in series:
             series[k]["value"] += o.total
             series[k]["pieces"] += o.pieces
+            series[k]["orders"] += 1
 
     statuses = Counter(r["status"] for r in customer_overview(db, user, today))
     late = visible_orders(db, user).filter(late_filter(today)).all()
