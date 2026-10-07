@@ -44,10 +44,12 @@ export function initials(name) {
 // Lowercase without accents, for search ("Itaiópolis" matches "itaiopolis").
 export const normalize = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-// Only digits ever reach the URL. Brazilian numbers: 10-11 digits after an optional leading 55.
+// Only digits ever reach the URL. Brazilian numbers: 10-11 digits (DDD + number) after an
+// optional country code 55 and an optional trunk 0 ("047 ...", "0xx47 ...").
 export function whatsappUrl(phone) {
   let digits = (phone || "").replace(/\D/g, "");
-  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) digits = digits.slice(2);
+  if (digits.length >= 12 && digits.startsWith("55")) digits = digits.slice(2); // DDD 55 alone is 10-11 digits
+  if (digits.startsWith("0")) digits = digits.slice(1);
   return digits.length === 10 || digits.length === 11 ? `https://wa.me/55${digits}` : null;
 }
 

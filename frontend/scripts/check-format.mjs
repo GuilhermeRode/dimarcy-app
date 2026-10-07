@@ -10,6 +10,11 @@ assert.equal(addDays("2026-02-28", 1), "2026-03-01");
 assert.equal(whatsappUrl("(47) 99123-4567"), "https://wa.me/5547991234567");
 assert.equal(whatsappUrl("+55 (47) 99123-4567"), "https://wa.me/5547991234567");
 assert.equal(whatsappUrl("47 3521-1234"), "https://wa.me/554735211234");
+// trunk prefix 0 / 0xx typed by habit
+assert.equal(whatsappUrl("047 9912-3456"), "https://wa.me/554799123456");
+assert.equal(whatsappUrl("047 99123-4567"), "https://wa.me/5547991234567");
+assert.equal(whatsappUrl("+55 047 99123-4567"), "https://wa.me/5547991234567");
+assert.equal(whatsappUrl("(55) 99123-4567"), "https://wa.me/5555991234567"); // DDD 55 is not the country code
 assert.equal(whatsappUrl("abc"), null);
 assert.equal(whatsappUrl("123"), null);
 assert.equal(whatsappUrl(null), null);
