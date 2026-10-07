@@ -117,7 +117,7 @@ Declarada antes de `GET /customers/{cid}`. Lista completa (~525 clientes; sem pa
 - Clientes: admin recebe todos (inclusive `owner_id` nulo); vendedor, só `owner_id` = ele.
 - Pedidos agregados: só `SALE_STATUSES`; para vendedor, só `seller_id` = ele (assim todo `recent_orders.id`
   abre em `/orders/<id>` para quem vê).
-- `colors`: até 3, por peças. `recent_orders`: até 3, mais recentes.
+- `colors`: todas as cores compradas, por peças (o catálogo tem poucas cores; o filtro "Cor comprada" precisa da lista completa e o painel mostra as 3 primeiras). `recent_orders`: até 3, mais recentes.
 - Desempenho: **uma** consulta de clientes (com `joinedload(Customer.owner)`) e **uma** de pedidos de venda
   já filtrados (itens vêm por `selectin`), agregadas em Python. Nada de `customer.orders` por cliente.
 
@@ -139,7 +139,7 @@ Declarada antes de `GET /customers/{cid}`. Lista completa (~525 clientes; sem pa
 - Parâmetros de URL: valores fora da lista são ignorados (`status`, `sort`, `seller`); `page` limitado ao intervalo
   válido; `q` só filtra texto em memória; `?customer=` vira `Number()` e só é aceito se o cliente estiver na lista
   que o usuário já recebe (o servidor também valida dono em `POST /orders`). Nenhum valor de URL vai para `href` ou HTML cru.
-- Respostas limitadas: período ≤ 2 anos; overview traz no máximo 3 pedidos e 3 cores por cliente.
+- Respostas limitadas: período ≤ 2 anos; overview traz no máximo 3 pedidos por cliente.
 
 ## Telas
 
@@ -148,7 +148,7 @@ reaproveitando as existentes e respeitando o tema escuro. Textos em pt-BR, códi
 
 ### Componentes (em `frontend/src/components/`)
 
-- `PeriodPicker` — botões + "Personalizado" com datas locais; devolve `{start, end, preset}`. Painel e Faturamento.
+- `PeriodPicker` — botões + "Personalizado" com datas locais; devolve `{start, end}` (a meta já vem calculada do servidor). Painel e Faturamento.
 - `usePeriodData(start, end)` — busca `/dashboard` e devolve `{data, error, loading}`. Painel e Faturamento.
 - `TeamRanking` — bloco escuro "Fulano lidera em …" com abas Faturamento / Pedidos / Peças / % da meta
   (aba de meta só se algum `goal`); um card por vendedor; prop `showGoalGap` liga "meta do período e quanto falta" (Faturamento).
