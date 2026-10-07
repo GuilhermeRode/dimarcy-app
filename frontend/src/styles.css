@@ -257,11 +257,22 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
   background: var(--surface); box-shadow: var(--shadow); display: grid; place-items: center;
 }
 .city-map-reset:hover { background: var(--surface-2); }
-.city-bubble { transition: filter .15s ease; filter: drop-shadow(0 2px 5px rgba(29,84,201,.45)); cursor: pointer; }
-.city-bubble:hover { filter: drop-shadow(0 3px 8px rgba(29,84,201,.6)) brightness(1.08); }
+.city-map-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.city-map-toolbar h3 { margin: 0 auto 0 0; }
+.city-ring-icon { background: none; border: 0; }
+/* green arc = share of active customers; the number = registered customers */
+.city-ring { display: grid; place-items: center; border-radius: 50%; cursor: pointer;
+  background: conic-gradient(#1f9d63 calc(var(--pct) * 1%), #dfe6f1 0);
+  box-shadow: 0 2px 6px rgba(12,33,64,.28); transition: transform .12s ease; }
+.city-ring > span { display: grid; place-items: center; width: calc(100% - 10px); height: calc(100% - 10px); border-radius: 50%;
+  background: #fff; color: #0c2140; font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums; }
+.city-ring:hover { transform: scale(1.08); }
+.city-ring.selected { box-shadow: 0 0 0 3px #0c2140, 0 2px 8px rgba(12,33,64,.4); }
+.city-ring.legend { width: 30px; height: 30px; cursor: default; box-shadow: none; }
+.city-ring.legend:hover { transform: none; }
+.city-ring-key { color: #1f9d63; }
 .city-map-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .city-map-legend-item { display: flex; align-items: center; gap: 4px; }
-.city-map-legend-dot { display: inline-block; border-radius: 50%; background: rgba(47,111,237,.35); border: 1.5px solid #1d54c9; }
 .city-map-legend-gradient { display: inline-block; width: 60px; height: 10px; border-radius: 4px; background: linear-gradient(90deg, rgb(232,240,254), rgb(29,84,201)); border: 1px solid var(--line); }
 .city-map-hint { margin-left: auto; }
 .city-map-ranking .ranking-scroll { max-height: 520px; overflow-y: auto; padding-right: 4px; }

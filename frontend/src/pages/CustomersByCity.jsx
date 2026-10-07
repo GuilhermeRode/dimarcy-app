@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, GeoJSON, CircleMarker, Tooltip, ZoomControl, Pane, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, Marker, Tooltip, ZoomControl, Pane, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { api, errorMessage } from "../api";
-import { money } from "../format";
+import { localDate, money } from "../format";
 import { ErrorBox } from "../components/ui";
 import statesGeo from "../assets/br-states.geo.json";
 
@@ -24,7 +24,21 @@ function stateColor(count, max) {
 function monthsAgo(n) {
   const d = new Date();
   d.setMonth(d.getMonth() - n);
-  return d.toISOString().slice(0, 10);
+  return localDate(d);
+}
+
+// A city marker: the green arc is the share of active customers, the number is how many are
+// registered, and the size grows with that number. Only numbers go into the HTML.
+const ringSize = (total, maxTotal) => Math.round(28 + (Math.sqrt(total) / Math.sqrt(maxTotal)) * 28);
+function cityIcon(c, maxTotal, selected) {
+  const size = ringSize(c.total, maxTotal);
+  const pct = c.total ? Math.round((c.active / c.total) * 100) : 0;
+  return L.divIcon({
+    className: "city-ring-icon",
+    iconSize: [size, size],
+    html: `<div class="city-ring${selected ? " selected" : ""}" style="width:${size}px;height:${size}px;--pct:${pct}">`
+      + `<span>${Number(c.total)}</span></div>`,
+  });
 }
 
 const brazilBounds = L.geoJSON(statesGeo).getBounds();
@@ -108,7 +122,7 @@ export default function CustomersByCity() {
   }, [orders, customers, stateFilter, cutoff]);
 
   const maxActive = Math.max(1, ...cities.map((c) => c.active));
-  const radius = (active) => (active === 0 ? 3 : 4 + (Math.sqrt(active) / Math.sqrt(maxActive)) * 15);
+  const maxTotal = Math.max(1, ...cities.map((c) => c.total));
 
   const showCities = viewMode !== "states";
   const showStates = viewMode !== "cities";
@@ -130,12 +144,6 @@ export default function CustomersByCity() {
         <div>
           <h1>Clientes por cidade</h1>
           <p className="muted">Clientes ativos = com pedido nos últimos 12 meses.</p>
-        </div>
-        <div className="period-chips">
-          <button type="button" className={`period-chip ${!stateFilter ? "on" : ""}`} onClick={() => setStateFilter("")}>Todos</button>
-          {STATES.map((uf) => (
-            <button key={uf} type="button" className={`period-chip ${stateFilter === uf ? "on" : ""}`} onClick={() => setStateFilter(uf)}>{uf}</button>
-          ))}
         </div>
       </header>
       <ErrorBox msg={error} />
@@ -165,8 +173,15 @@ export default function CustomersByCity() {
 
       <div className="city-map-layout">
         <section className="panel city-map-panel">
-          <div className="panel-header">
+          <div className="city-map-toolbar">
             <h3>Mapa</h3>
+            <label className={`pill-select ${stateFilter ? "on" : ""}`}>
+              <span>Estado:</span>
+              <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
+                <option value="">Todos</option>
+                {STATES.map((uf) => <option key={uf}>{uf}</option>)}
+              </select>
+            </label>
             <div className="period-chips">
               <button type="button" className={`period-chip ${viewMode === "both" ? "on" : ""}`} onClick={() => setViewMode("both")}>Estados + cidades</button>
               <button type="button" className={`period-chip ${viewMode === "cities" ? "on" : ""}`} onClick={() => setViewMode("cities")}>Só cidades</button>
@@ -182,23 +197,19 @@ export default function CustomersByCity() {
                 <GeoJSON key={`states-${stateFilter}-${maxStateActive}`} data={statesGeo} style={stateStyle} />
               )}
               {showCities && (
-                <Pane name="city-bubbles" style={{ zIndex: 450 }}>
+                <Pane name="city-rings" style={{ zIndex: 450 }}>
                   {cities.map((c) => {
                     if (c.lat == null || c.lng == null) return null;
                     const isSelected = selected === c.name;
                     return (
-                      <CircleMarker key={c.name} center={[c.lat, c.lng]} radius={radius(c.active)}
-                        className="city-bubble"
-                        fillColor={isSelected ? "#ffcf7a" : "#3f7fee"}
-                        color={isSelected ? "#9a5b12" : "#1d54c9"}
-                        weight={1.25}
-                        fillOpacity={0.85}
+                      <Marker key={c.name} position={[c.lat, c.lng]} icon={cityIcon(c, maxTotal, isSelected)}
+                        zIndexOffset={isSelected ? 1000 : c.total}
                         eventHandlers={{ click: () => setSelected(isSelected ? null : c.name) }}>
-                        <Tooltip direction="top" offset={[0, -4]} sticky>
+                        <Tooltip direction="top" offset={[0, -ringSize(c.total, maxTotal) / 2]}>
                           <strong>{c.city}/{c.state}</strong><br />
-                          {c.active} ativo{c.active === 1 ? "" : "s"} · {c.total} cadastrado{c.total === 1 ? "" : "s"}
+                          {c.active} ativo{c.active === 1 ? "" : "s"} de {c.total} cadastrado{c.total === 1 ? "" : "s"}
                         </Tooltip>
-                      </CircleMarker>
+                      </Marker>
                     );
                   })}
                 </Pane>
@@ -215,13 +226,10 @@ export default function CustomersByCity() {
             )}
             {showCities && (
               <>
-                {[2, 8, 20].map((n) => (
-                  <span key={n} className="city-map-legend-item">
-                    <span className="city-map-legend-dot" style={{ width: radius(n) * 2, height: radius(n) * 2 }} />
-                    <small>{n}</small>
-                  </span>
-                ))}
-                <span className="muted">clientes ativos por cidade</span>
+                <span className="city-map-legend-item">
+                  <span className="city-ring legend" style={{ "--pct": 60 }}><span>10</span></span>
+                  <small>cadastrados na cidade · <b className="city-ring-key">verde</b> = parte ativa</small>
+                </span>
               </>
             )}
             <span className="muted city-map-hint">Arraste para mover · role para aproximar</span>
