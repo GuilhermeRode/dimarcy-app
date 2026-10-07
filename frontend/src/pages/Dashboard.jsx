@@ -1,36 +1,22 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from "recharts";
-import { api, errorMessage } from "../api";
+import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { api } from "../api";
 import { useAuth } from "../auth";
-import { money, STATUS } from "../format";
-import { ErrorBox, Swatch } from "../components/ui";
+import { compactMoney, initials, money, plural, STATUS } from "../format";
+import { ErrorBox } from "../components/ui";
+import AlertStrip from "../components/AlertStrip";
+import Delta from "../components/Delta";
+import PeriodPicker, { defaultPeriod } from "../components/PeriodPicker";
+import RevenueHero from "../components/RevenueHero";
+import TeamRanking from "../components/TeamRanking";
+import usePeriodData from "../components/usePeriodData";
 
 const EXCLUDE_MAP = import.meta.env.VITE_EXCLUDE_MAP === "1";
 
-const today = () => new Date().toISOString().slice(0, 10);
-const addDays = (base, days) => {
-  const d = new Date(`${base}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-};
-const startOfMonth = () => {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-};
-const startOfYear = () => `${new Date().getFullYear()}-01-01`;
-
-const PRESETS = [
-  { key: "7d", label: "7 dias", start: () => addDays(today(), -6) },
-  { key: "month", label: "Este mês", start: startOfMonth },
-  { key: "year", label: "Este ano", start: startOfYear },
-];
-
 const STATUS_COLORS = {
   quote: "#8b96b3", confirmed: "#2f6fed", in_production: "#b8862f",
-  shipped: "#0d95ac", delivered: "#1c7a52", canceled: "#9a5b12",
+  shipped: "#0d95ac", delivered: "#0c2140", canceled: "#c0392b",
 };
 
 function greeting(h = new Date().getHours()) {
@@ -45,48 +31,57 @@ function todayLabel() {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function previousPeriod(start, end) {
-  const s = new Date(`${start}T00:00:00`);
-  const e = new Date(`${end}T00:00:00`);
-  const days = Math.round((e - s) / 86400000) + 1;
-  const prevEnd = new Date(s);
-  prevEnd.setDate(prevEnd.getDate() - 1);
-  const prevStart = new Date(prevEnd);
-  prevStart.setDate(prevStart.getDate() - days + 1);
-  return { start: prevStart.toISOString().slice(0, 10), end: prevEnd.toISOString().slice(0, 10) };
-}
+const Empty = () => <p className="muted">Sem vendas no período.</p>;
 
-function Delta({ cur, prev }) {
-  if (!prev) return null;
-  const pct = ((cur - prev) / prev) * 100;
-  if (!isFinite(pct) || Math.abs(pct) < 0.5) return <span className="kpi-delta neutral">= período anterior</span>;
-  const pos = pct >= 0;
+function StatusDonut({ items }) {
+  const [active, setActive] = useState(null);
+  const total = items.reduce((t, s) => t + s.count, 0);
+  const sel = active == null ? null : items[active];
+  if (!total) return <p className="muted">Sem pedidos no período.</p>;
   return (
-    <span className={`kpi-delta ${pos ? "pos" : "neg"}`}>
-      {pos ? "▲" : "▼"} {Math.abs(pct).toFixed(0)}%
-    </span>
+    <div className="donut-row" onMouseLeave={() => setActive(null)}>
+      <div className="donut">
+        <ResponsiveContainer width={184} height={184}>
+          <PieChart>
+            <Pie data={items} dataKey="count" nameKey="status" innerRadius={62} outerRadius={90} paddingAngle={2}
+              onMouseEnter={(_, i) => setActive(i)} isAnimationActive={false}>
+              {items.map((s, i) => (
+                <Cell key={s.status} fill={STATUS_COLORS[s.status] || "#8b96b3"} opacity={active == null || active === i ? 1 : 0.25} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="donut-center">
+          <strong>{sel ? sel.count : total}</strong>
+          <span>{sel ? STATUS[sel.status] : "pedidos no período"}</span>
+          {sel && <small>{Math.round((sel.count / total) * 100)}% do total</small>}
+        </div>
+      </div>
+      <ul className="donut-legend">
+        {items.map((s, i) => (
+          <li key={s.status} className={active === i ? "on" : ""} onMouseEnter={() => setActive(i)}>
+            <span className="legend-dot" style={{ background: STATUS_COLORS[s.status] || "#8b96b3" }} />
+            <span className="legend-name">{STATUS[s.status] || s.status}</span>
+            <span className="legend-qty">{s.count}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
-function Ranking({ items, label, detail, value = (i) => i.value, formatValue = money }) {
+function Bars({ items, label, value, detail }) {
+  if (!items.length) return <Empty />;
   const max = Math.max(...items.map(value), 1);
-  if (!items.length) return <p className="muted">Sem vendas no período.</p>;
   return (
-    <ol className="ranking">
+    <ul className="hbars">
       {items.map((i, k) => (
         <li key={k}>
-          <div className="ranking-row">
-            <span className="ranking-left">
-              <span className={`ranking-rank ${k === 0 ? "gold" : ""}`}>{k + 1}</span>
-              <span className="ranking-name">{label(i)}</span>
-            </span>
-            <span className="ranking-value">{formatValue(value(i))}</span>
-          </div>
-          <div className="ranking-bar"><span style={{ width: `${(value(i) / max) * 100}%` }} /></div>
-          <div className="ranking-detail">{detail(i)}</div>
+          <div><span>{label(i)}</span><strong>{detail(i)}</strong></div>
+          <span className="hbar"><span style={{ width: `${(value(i) / max) * 100}%` }} /></span>
         </li>
       ))}
-    </ol>
+    </ul>
   );
 }
 
@@ -94,23 +89,9 @@ export default function Dashboard() {
   const { user } = useAuth();
   const nav = useNavigate();
   const isAdmin = user?.role === "admin";
-  const [activePreset, setActivePreset] = useState("year");
-  const [start, setStart] = useState(startOfYear());
-  const [end, setEnd] = useState(today());
-  const [d, setD] = useState(null);
-  const [dPrev, setDPrev] = useState(null);
+  const [period, setPeriod] = useState(defaultPeriod);
+  const { data: d, error } = usePeriodData(period);
   const [topCities, setTopCities] = useState([]);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const prev = previousPeriod(start, end);
-    Promise.all([
-      api.get("/dashboard", { params: { start, end } }),
-      api.get("/dashboard", { params: prev }),
-    ])
-      .then(([r1, r2]) => { setD(r1.data); setDPrev(r2.data); setError(""); })
-      .catch((e) => setError(errorMessage(e)));
-  }, [start, end]);
 
   useEffect(() => {
     if (!isAdmin || EXCLUDE_MAP) return;
@@ -126,188 +107,127 @@ export default function Dashboard() {
     });
   }, [isAdmin]);
 
-  function applyPreset(p) {
-    setActivePreset(p.key);
-    setStart(p.start());
-    setEnd(today());
-  }
+  const colorTotal = d ? d.by_color.reduce((t, c) => t + c.pieces, 0) : 0;
+  const sizeMax = d ? Math.max(...d.by_size.map((s) => s.pieces), 1) : 1;
+  const kpis = d && [
+    ["Pedidos fechados", d.kpis.orders, d.previous_kpis.orders, (v) => v.toLocaleString("pt-BR")],
+    ["Peças vendidas", d.kpis.pieces, d.previous_kpis.pieces, (v) => v.toLocaleString("pt-BR")],
+    ["Ticket médio", d.kpis.average_ticket, d.previous_kpis.average_ticket, money],
+  ];
 
   return (
     <div className="page">
       <header className="dashboard-header">
         <div>
           <p className="dashboard-date muted">{todayLabel()}</p>
-          <h1>{greeting()}, {user?.name?.split(" ")[0] || "vendedor"} 👋</h1>
-          <p className="dashboard-greeting muted">Aqui está o resumo das vendas da Di Marcy no período.</p>
+          <h1>{greeting()}, {user?.name?.split(" ")[0] || "vendedor"}</h1>
         </div>
-        <div className="period-block">
-          <div className="period-chips">
-            {PRESETS.map((p) => (
-              <button key={p.key} type="button" className={`period-chip ${activePreset === p.key ? "on" : ""}`}
-                onClick={() => applyPreset(p)}>{p.label}</button>
-            ))}
-          </div>
-          <div className="period-filter">
-            <input type="date" value={start} aria-label="Início"
-              onChange={(e) => { setActivePreset(""); setStart(e.target.value); }} />
-            <span>até</span>
-            <input type="date" value={end} aria-label="Fim"
-              onChange={(e) => { setActivePreset(""); setEnd(e.target.value); }} />
-          </div>
-        </div>
+        <PeriodPicker value={period} onChange={setPeriod} />
       </header>
       <ErrorBox msg={error} />
       {d && (
         <>
-          <section className="kpis">
-            <div className={`kpi kpi-highlight ${isAdmin ? "kpi-clickable" : ""}`}
-              onClick={isAdmin ? () => nav("/revenue") : undefined}>
-              <div className="kpi-header">
-                <span>Faturamento</span>
-                <span className="kpi-icon" aria-hidden="true">💰</span>
-              </div>
-              <strong>{money(d.kpis.revenue)}</strong>
-              <Delta cur={d.kpis.revenue} prev={dPrev?.kpis.revenue} />
-            </div>
-            <div className="kpis-secondary">
-              <div className={`kpi ${isAdmin ? "kpi-clickable" : ""}`} onClick={isAdmin ? () => nav("/orders") : undefined}>
-                <div className="kpi-header"><span>Pedidos fechados</span><span className="kpi-icon icon-teal" aria-hidden="true">🧾</span></div>
-                <strong>{d.kpis.orders}</strong>
-                <Delta cur={d.kpis.orders} prev={dPrev?.kpis.orders} />
-              </div>
-              <div className="kpi">
-                <div className="kpi-header"><span>Peças vendidas</span><span className="kpi-icon icon-indigo" aria-hidden="true">📦</span></div>
-                <strong>{d.kpis.pieces}</strong>
-                <Delta cur={d.kpis.pieces} prev={dPrev?.kpis.pieces} />
-              </div>
-              <div className="kpi">
-                <div className="kpi-header"><span>Ticket médio</span><span className="kpi-icon icon-gold" aria-hidden="true">🎫</span></div>
-                <strong>{money(d.kpis.average_ticket)}</strong>
-                <Delta cur={d.kpis.average_ticket} prev={dPrev?.kpis.average_ticket} />
-              </div>
+          <section className="hero-row">
+            <RevenueHero title="Faturamento no período" revenue={d.kpis.revenue} prevRevenue={d.previous_kpis.revenue}
+              series={d.sales_series} goal={d.goal} onClick={isAdmin ? () => nav("/revenue") : undefined} />
+            <div className="kpi-stack">
+              {kpis.map(([label, cur, prev, fmt]) => (
+                <div key={label}>
+                  <span>{label}</span><strong>{fmt(cur)}</strong><Delta cur={cur} prev={prev} />
+                </div>
+              ))}
             </div>
           </section>
 
-          <section className="dashboard-grid">
-            <div className="panel panel-wide">
+          <AlertStrip alerts={d.alerts} />
+
+          <section className="dash-row">
+            <div className="panel dash-wide">
               <h3>Faturamento nos últimos 12 meses</h3>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={d.monthly_sales} margin={{ left: 10 }}>
-                  <defs>
-                    <linearGradient id="barColor" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#2f6fed" />
-                      <stop offset="100%" stopColor="#1f5296" />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid vertical={false} stroke="#e3e8f2" />
+              <ResponsiveContainer width="100%" height={250}>
+                <AreaChart data={d.monthly_sales} margin={{ left: 10, right: 10 }}>
+                  <CartesianGrid vertical={false} stroke="#eef1f5" />
                   <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={12}
-                    tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v)} />
-                  <Tooltip cursor={{ fill: "rgba(47, 111, 237, 0.08)", radius: 6 }}
-                    formatter={(v, n) => (n === "value" ? [money(v), "Faturamento"] : [v, "Peças"])} />
-                  <Bar dataKey="value" fill="url(#barColor)" radius={[4, 4, 0, 0]} maxBarSize={34} />
-                </BarChart>
+                  <YAxis tickLine={false} axisLine={false} fontSize={12} tickFormatter={(v) => (v ? compactMoney(v) : "0")} width={84} />
+                  <Tooltip formatter={(v) => [money(v), "Faturamento"]} />
+                  <Area type="monotone" dataKey="value" stroke="#2563eb" strokeWidth={2} fill="rgba(37,99,235,.08)" dot={{ r: 4, fill: "#fff", strokeWidth: 2 }} />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
-
-            <div className="panel panel-fill">
-              <h3>Situação dos pedidos</h3>
-              <div className="panel-fill-body">
-                {d.by_status.length ? (
-                  <div className="donut-row">
-                    <ResponsiveContainer width={168} height={168}>
-                      <PieChart>
-                        <Pie data={d.by_status} dataKey="count" nameKey="status" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                          {d.by_status.map((s) => <Cell key={s.status} fill={STATUS_COLORS[s.status] || "#8b96b3"} />)}
-                        </Pie>
-                        <Tooltip formatter={(v, n, p) => [`${v} pedido(s)`, STATUS[p.payload.status]]} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <ul className="donut-legend">
-                      {d.by_status.map((s) => (
-                        <li key={s.status}>
-                          <span className="legend-dot" style={{ background: STATUS_COLORS[s.status] || "#8b96b3" }} />
-                          <span className="legend-name">{STATUS[s.status] || s.status}</span>
-                          <span className="legend-qty">{s.count}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : <p className="muted">Sem pedidos no período.</p>}
-              </div>
+            <div className="panel">
+              <div className="panel-header"><h3>Situação dos pedidos</h3></div>
+              <StatusDonut items={d.by_status} />
             </div>
+          </section>
 
-            <div className="panel panel-fill">
+          {isAdmin && <TeamRanking title="Equipe comercial no período" sellers={d.by_seller} />}
+
+          <section className="dash-grid-3">
+            <div className="panel">
               <h3>Cores mais vendidas</h3>
-              <div className="panel-fill-body">
-                {d.by_color.length ? (
-                  <div className="donut-row">
-                    <ResponsiveContainer width={168} height={168}>
-                      <PieChart>
-                        <Pie data={d.by_color} dataKey="pieces" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                          {d.by_color.map((c) => <Cell key={c.name} fill={c.hex} stroke="rgba(0,0,0,.1)" />)}
-                        </Pie>
-                        <Tooltip formatter={(v, n, p) => [`${v} peças`, p.payload.name]} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <ul className="donut-legend">
-                      {d.by_color.slice(0, 6).map((c) => (
-                        <li key={c.name}>
-                          <Swatch hex={c.hex} size={10} />
-                          <span className="legend-name">{c.name}</span>
-                          <span className="legend-qty">{c.pieces}</span>
-                        </li>
-                      ))}
-                    </ul>
+              {d.by_color.length ? (
+                <>
+                  <div className="color-strip">
+                    {d.by_color.map((c) => <span key={c.name} title={c.name} style={{ flex: c.pieces, background: c.hex }} />)}
                   </div>
-                ) : <p className="muted">Sem vendas no período.</p>}
-              </div>
+                  <ul className="color-legend">
+                    {d.by_color.slice(0, 6).map((c) => (
+                      <li key={c.name}><span className="swatch" style={{ background: c.hex, width: 12, height: 12 }} />
+                        <span>{c.name}</span><strong>{Math.round((c.pieces / colorTotal) * 100)}%</strong></li>
+                    ))}
+                  </ul>
+                </>
+              ) : <Empty />}
             </div>
-
+            <div className="panel">
+              <div className="panel-header"><h3>Peças por tamanho</h3><span className="muted">{plural(d.kpis.pieces, "peça", "peças")}</span></div>
+              {d.by_size.length ? (
+                <div className="vbars">
+                  {d.by_size.map((s) => (
+                    <div key={s.size}>
+                      <small>{Math.round((s.pieces / Math.max(d.kpis.pieces, 1)) * 100)}%</small>
+                      <span className={s.pieces === sizeMax ? "top" : ""} style={{ height: `${(s.pieces / sizeMax) * 78}%` }} />
+                      <strong>{s.size}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : <Empty />}
+            </div>
             <div className="panel">
               <h3>Produtos mais vendidos</h3>
-              <Ranking items={d.top_products} label={(i) => `${i.reference} · ${i.description}`}
-                detail={(i) => `${i.pieces} peças`} />
+              <Bars items={d.top_products.slice(0, 5)} label={(i) => `${i.reference} · ${i.description}`}
+                value={(i) => i.pieces} detail={(i) => `${i.pieces} pç`} />
             </div>
+          </section>
 
+          <section className="dash-grid-2">
             <div className="panel">
-              <h3>Melhores clientes</h3>
-              <Ranking items={d.top_customers} label={(i) => i.name}
-                detail={(i) => `${i.orders} pedidos · ${i.pieces} peças`} />
+              <div className="panel-header">
+                <h3>Melhores clientes</h3>
+                <button type="button" className="link-btn" onClick={() => nav("/customers?sort=total")}>Ver todos →</button>
+              </div>
+              {d.top_customers.length ? (
+                <ol className="top-customers">
+                  {d.top_customers.slice(0, 5).map((c, i) => (
+                    <li key={i}>
+                      <span className="rank">{i + 1}</span>
+                      <span className="customer-avatar">{initials(c.name)}</span>
+                      <span className="grow"><strong>{c.name}</strong><small>{plural(c.orders, "pedido", "pedidos")}</small></span>
+                      <strong>{compactMoney(c.value)}</strong>
+                    </li>
+                  ))}
+                </ol>
+              ) : <Empty />}
             </div>
-
             {!EXCLUDE_MAP && isAdmin && topCities.length > 0 && (
-              <div className="panel panel-clickable" onClick={() => nav("/customers-by-city")}>
+              <div className="panel">
                 <div className="panel-header">
                   <h3>Clientes por cidade</h3>
-                  <span className="tag">Ver mapa →</span>
+                  <button type="button" className="link-btn" onClick={() => nav("/customers-by-city")}>Ver mapa →</button>
                 </div>
-                <Ranking items={topCities} label={(i) => i.name} detail={() => ""}
-                  value={(i) => i.count} formatValue={(v) => `${v} cliente${v > 1 ? "s" : ""}`} />
+                <Bars items={topCities} label={(i) => i.name} value={(i) => i.count} detail={(i) => i.count} />
               </div>
             )}
-
-            <div className="panel">
-              <h3>Peças por tamanho</h3>
-              {d.by_size.length ? (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={d.by_size} margin={{ left: 10 }}>
-                    <defs>
-                      <linearGradient id="barColorSizes" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#2f6fed" />
-                        <stop offset="100%" stopColor="#1f5296" />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid vertical={false} stroke="#e3e8f2" />
-                    <XAxis dataKey="size" tickLine={false} axisLine={false} fontSize={12} />
-                    <YAxis tickLine={false} axisLine={false} fontSize={12} allowDecimals={false} />
-                    <Tooltip cursor={{ fill: "rgba(47, 111, 237, 0.08)", radius: 6 }}
-                      formatter={(v) => [`${v} peças`, ""]} labelFormatter={(l) => `Tamanho ${l}`} />
-                    <Bar dataKey="pieces" fill="url(#barColorSizes)" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : <p className="muted">Sem vendas no período.</p>}
-            </div>
           </section>
         </>
       )}
