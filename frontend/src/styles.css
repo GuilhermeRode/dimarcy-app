@@ -232,6 +232,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 /* ---------- dashboard ---------- */
 .dashboard-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
 .dashboard-greeting { margin: 4px 0 0; }
+.dashboard-date { margin: 0 0 4px; font-size: 13px; }
 .period-block { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .period-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .period-chip {

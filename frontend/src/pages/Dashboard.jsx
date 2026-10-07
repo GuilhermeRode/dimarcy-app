@@ -33,11 +33,16 @@ const STATUS_COLORS = {
   shipped: "#0d95ac", delivered: "#1c7a52", canceled: "#9a5b12",
 };
 
-function greeting() {
-  const h = new Date().getHours();
+function greeting(h = new Date().getHours()) {
+  if (h < 5) return "Boa noite"; // after midnight it's still night, not morning
   if (h < 12) return "Bom dia";
   if (h < 18) return "Boa tarde";
   return "Boa noite";
+}
+
+function todayLabel() {
+  const s = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function previousPeriod(start, end) {
@@ -131,6 +136,7 @@ export default function Dashboard() {
     <div className="page">
       <header className="dashboard-header">
         <div>
+          <p className="dashboard-date muted">{todayLabel()}</p>
           <h1>{greeting()}, {user?.name?.split(" ")[0] || "vendedor"} 👋</h1>
           <p className="dashboard-greeting muted">Aqui está o resumo das vendas da Di Marcy no período.</p>
         </div>
