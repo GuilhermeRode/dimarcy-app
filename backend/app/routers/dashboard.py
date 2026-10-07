@@ -143,7 +143,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         "top_products": _top(products),
         "top_customers": _top(customers),
         "by_seller": _top(sellers, 50),
-        "by_city": _top(cities, 50),
+        "by_city": _top(cities, len(cities)),  # all of them: Faturamento sums the tail into "Outras"
         "by_color": _top(colors, 10),
         "by_size": sorted(
             [{"size": t, "pieces": q} for t, q in sizes.items()],

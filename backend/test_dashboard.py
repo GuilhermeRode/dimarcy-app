@@ -172,4 +172,19 @@ with TestClient(app) as c:
     assert sa7["goal"] == 7000.0  # the seller gets their own goal, never the company's
     assert [s["name"] for s in sa7["by_seller"]] == ["Ana Vendas"]
 
+    # ---- every city counts toward the total (Faturamento's "Outras" needs the full list) ----
+    from app.database import SessionLocal
+    from app.models import Customer
+    with SessionLocal() as db:  # straight to the DB: the API would geocode each city over the network
+        ana_id = next(s["id"] for s in s7["by_seller"] if s["name"] == "Ana Vendas")
+        city_customers = [Customer(name=f"Loja {i}", document="1", city=f"Cidade {i}", state="SC", owner_id=ana_id)
+                          for i in range(51)]
+        db.add_all(city_customers)
+        db.commit()
+        city_ids = [x.id for x in city_customers]
+    for cid in city_ids:
+        order(seller_a, cid, 1)
+    wk = c.get("/api/dashboard", headers=admin, params=week).json()
+    assert round(sum(x["value"] for x in wk["by_city"]), 2) == wk["kpis"]["revenue"], len(wk["by_city"])
+
 print("dashboard checks OK")
