@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
-import { dateBR, money, orderNumber } from "../format";
+import { dateBR, money } from "../format";
 import { ErrorBox, Swatch } from "../components/ui";
 import logoFull from "../assets/logo-full.png";
 
@@ -33,8 +33,8 @@ export default function ClientPrint() {
       <div className="print-letterhead">
         <img src={logoFull} alt="Di Marcy" className="print-logo" />
         <div className="print-letterhead-id">
+          {/* No order number on the customer's copy — it's an internal reference. */}
           <span className="print-doctype">Pedido</span>
-          <strong className="print-order-num">{orderNumber(o.id)}</strong>
         </div>
         <div className="print-letterhead-info">
           <strong>{o.customer_name}</strong>
