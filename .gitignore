@@ -3,6 +3,9 @@
 !.env.example
 backend/uploads/
 
+# --- customer lists / business documents (personal data) ---
+pdfs/
+
 # --- backend (Python) ---
 backend/.venv/
 backend/__pycache__/

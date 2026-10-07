@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
@@ -41,7 +42,56 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Di Marcy — Pedidos", lifespan=lifespan)
+docs = {} if settings.enable_docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+app = FastAPI(title="Di Marcy — Pedidos", lifespan=lifespan, **docs)
+
+MAX_BODY_BYTES = 6 * 1024 * 1024  # largest legit request is a 5 MB image upload
+
+
+class BodySizeLimit:
+    """Rejects request bodies over MAX_BODY_BYTES with 413, counting bytes as they
+    arrive — so it also catches chunked uploads that send no Content-Length."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        received, too_large = 0, False
+
+        async def limited_receive():
+            nonlocal received, too_large
+            message = await receive()
+            received += len(message.get("body", b""))
+            if received > MAX_BODY_BYTES:
+                too_large = True
+                raise RuntimeError("request body too large")
+            return message
+
+        async def guarded_send(message):
+            if not too_large:  # drop whatever error response the app built; we answer 413 below
+                await send(message)
+
+        try:
+            await self.app(scope, limited_receive, guarded_send)
+        except RuntimeError:
+            if not too_large:
+                raise
+        if too_large:
+            await JSONResponse({"detail": "Requisição grande demais."}, 413)(scope, receive, send)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"  # browsers never run an upload as HTML/JS
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+app.add_middleware(BodySizeLimit)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.cors_origins.split(",")],

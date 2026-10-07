@@ -154,10 +154,9 @@ def update_me(data: ProfileIn, db: Session = Depends(get_db), user: User = Depen
 
 @router.post("/me/avatar", response_model=UserOut)
 def upload_avatar(file: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    content = read_validated_image(file)
+    content, ext = read_validated_image(file)
     old_path = AVATAR_DIR / Path(user.avatar_url).name if user.avatar_url else None
 
-    ext = Path(file.filename or "").suffix.lower() or ".jpg"
     filename = f"{user.id}_{uuid.uuid4().hex}{ext}"
     with open(AVATAR_DIR / filename, "wb") as out:
         out.write(content)

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Color, OrderItem
 from ..schemas import ColorIn, ColorOut
-from ..security import get_current_user
+from ..security import get_current_user, require_admin
 
 router = APIRouter(prefix="/colors", tags=["colors"], dependencies=[Depends(get_current_user)])
 
@@ -14,7 +14,7 @@ def list_all(db: Session = Depends(get_db)):
     return db.query(Color).order_by(Color.name).all()
 
 
-@router.post("", response_model=ColorOut, status_code=201)
+@router.post("", response_model=ColorOut, status_code=201, dependencies=[Depends(require_admin)])
 def create(data: ColorIn, db: Session = Depends(get_db)):
     if db.query(Color).filter(Color.name.ilike(data.name)).first():
         raise HTTPException(400, "A color with this name already exists.")
@@ -25,7 +25,7 @@ def create(data: ColorIn, db: Session = Depends(get_db)):
     return c
 
 
-@router.put("/{cid}", response_model=ColorOut)
+@router.put("/{cid}", response_model=ColorOut, dependencies=[Depends(require_admin)])
 def update(cid: int, data: ColorIn, db: Session = Depends(get_db)):
     c = db.get(Color, cid)
     if not c:
@@ -36,7 +36,7 @@ def update(cid: int, data: ColorIn, db: Session = Depends(get_db)):
     return c
 
 
-@router.delete("/{cid}", status_code=204)
+@router.delete("/{cid}", status_code=204, dependencies=[Depends(require_admin)])
 def delete(cid: int, db: Session = Depends(get_db)):
     c = db.get(Color, cid)
     if not c:

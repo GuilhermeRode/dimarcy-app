@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Color, OrderItem, Product
 from ..schemas import ProductIn, ProductOut
-from ..security import get_current_user
+from ..security import get_current_user, require_admin
 from ..uploads import read_validated_image
 
 router = APIRouter(prefix="/products", tags=["products"], dependencies=[Depends(get_current_user)])
@@ -46,7 +46,7 @@ def get(pid: int, db: Session = Depends(get_db)):
     return p
 
 
-@router.post("", response_model=ProductOut, status_code=201)
+@router.post("", response_model=ProductOut, status_code=201, dependencies=[Depends(require_admin)])
 def create(data: ProductIn, db: Session = Depends(get_db)):
     if db.query(Product).filter(Product.reference == data.reference.strip()).first():
         raise HTTPException(400, "A product with this reference already exists.")
@@ -58,7 +58,7 @@ def create(data: ProductIn, db: Session = Depends(get_db)):
     return p
 
 
-@router.put("/{pid}", response_model=ProductOut)
+@router.put("/{pid}", response_model=ProductOut, dependencies=[Depends(require_admin)])
 def update(pid: int, data: ProductIn, db: Session = Depends(get_db)):
     p = db.get(Product, pid)
     if not p:
@@ -69,18 +69,17 @@ def update(pid: int, data: ProductIn, db: Session = Depends(get_db)):
     return p
 
 
-@router.post("/{pid}/image", response_model=ProductOut)
+@router.post("/{pid}/image", response_model=ProductOut, dependencies=[Depends(require_admin)])
 def upload_image(pid: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
     p = db.get(Product, pid)
     if not p:
         raise HTTPException(404, "Product not found.")
-    content = read_validated_image(file)
+    content, ext = read_validated_image(file)
 
     old_path = None
     if p.image_url:
         old_path = UPLOAD_DIR / Path(p.image_url).name
 
-    ext = Path(file.filename or "").suffix.lower() or ".jpg"
     filename = f"{pid}_{uuid.uuid4().hex}{ext}"
     with open(UPLOAD_DIR / filename, "wb") as out:
         out.write(content)
@@ -94,7 +93,7 @@ def upload_image(pid: int, file: UploadFile = File(...), db: Session = Depends(g
     return p
 
 
-@router.delete("/{pid}/image", response_model=ProductOut)
+@router.delete("/{pid}/image", response_model=ProductOut, dependencies=[Depends(require_admin)])
 def remove_image(pid: int, db: Session = Depends(get_db)):
     p = db.get(Product, pid)
     if not p:
@@ -108,7 +107,7 @@ def remove_image(pid: int, db: Session = Depends(get_db)):
     return p
 
 
-@router.delete("/{pid}", status_code=204)
+@router.delete("/{pid}", status_code=204, dependencies=[Depends(require_admin)])
 def delete(pid: int, db: Session = Depends(get_db)):
     p = db.get(Product, pid)
     if not p:

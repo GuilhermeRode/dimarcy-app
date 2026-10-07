@@ -1,3 +1,5 @@
+import secrets
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +13,7 @@ class Settings(BaseSettings):
     frontend_url: str = "https://app.dimarcy.com.br"  # used to build the password-reset link
     admin_email: str = "admin@dimarcy.com.br"
     admin_password: str = "admin123"
+    enable_docs: bool = False  # /docs and /openapi.json map every route; keep off in production
 
     # E-mail notifications (order created, order delivered), sent via Resend's HTTP API.
     # Leave resend_api_key empty to disable sending.
@@ -20,6 +23,12 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# A known SECRET_KEY lets anyone forge login tokens. Without a real one, use a random key:
+# safe, but everyone is logged out whenever the backend restarts.
+if settings.secret_key in ("change-this-key", "troque-por-uma-chave-longa-e-aleatoria") or len(settings.secret_key) < 32:
+    print("[config] SECRET_KEY missing or weak - using a random key. Set a 32+ char SECRET_KEY in .env.")
+    settings.secret_key = secrets.token_urlsafe(48)
 
 # Render/Heroku provide "postgres://", SQLAlchemy requires "postgresql://"
 if settings.database_url.startswith("postgres://"):
