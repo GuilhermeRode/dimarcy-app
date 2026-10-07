@@ -1,11 +1,16 @@
 import datetime as _dt
 from datetime import date, datetime
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ORM(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+
+# Monthly goal in R$: optional, non-negative, finite, fits NUMERIC(12,2).
+Goal = Annotated[float | None, Field(ge=0, le=9_999_999_999, allow_inf_nan=False)]
 
 
 # ---------- Auth / users ----------
@@ -21,6 +26,7 @@ class UserBase(ORM):
     active: bool = True
     avatar_url: str | None = None
     theme: str = "light"
+    monthly_goal: Goal = None
 
 
 class UserIn(UserBase):
@@ -143,7 +149,14 @@ class StatusIn(BaseModel):
 class AppSettingsIn(BaseModel):
     allow_price_override: bool
     max_discount_percent: float = Field(ge=0, le=100)
+    monthly_goal: Goal = None
 
 
-class AppSettingsOut(ORM, AppSettingsIn):
-    pass
+class AppSettingsOut(ORM):
+    """What every logged-in user may read (the order form needs these rules)."""
+    allow_price_override: bool
+    max_discount_percent: float
+
+
+class AppSettingsAdminOut(AppSettingsOut):
+    monthly_goal: float | None = None

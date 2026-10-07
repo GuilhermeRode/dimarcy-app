@@ -22,7 +22,7 @@ def create(data: UserIn, db: Session = Depends(get_db)):
     if not data.password or len(data.password) < MIN_PASSWORD_LENGTH:
         raise HTTPException(400, f"The password must be at least {MIN_PASSWORD_LENGTH} characters long.")
     u = User(name=data.name, email=email, role=data.role, active=data.active,
-              password_hash=hash_password(data.password))
+              password_hash=hash_password(data.password), monthly_goal=data.monthly_goal)
     db.add(u)
     db.commit()
     db.refresh(u)
@@ -35,6 +35,7 @@ def update(uid: int, data: UserIn, db: Session = Depends(get_db)):
     if not u:
         raise HTTPException(404, "User not found.")
     u.name, u.email, u.role, u.active = data.name, data.email.strip().lower(), data.role, data.active
+    u.monthly_goal = data.monthly_goal
     if data.password:
         if len(data.password) < MIN_PASSWORD_LENGTH:
             raise HTTPException(400, f"The password must be at least {MIN_PASSWORD_LENGTH} characters long.")
