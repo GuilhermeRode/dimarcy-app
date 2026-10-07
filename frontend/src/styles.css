@@ -767,3 +767,14 @@ section.item-group { margin-top: 0; }
   .hero-row { grid-template-columns: minmax(0, 1fr); }
   .hero-goal { padding-left: 0; border-left: 0; }
 }
+.revenue-hero { flex-direction: column; gap: 22px; }
+.revenue-hero-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+.revenue-hero-kpis { display: flex; gap: 32px; flex-wrap: wrap; }
+.revenue-hero-kpis div { display: flex; flex-direction: column; gap: 2px; }
+.revenue-hero-kpis span { font-size: 13px; color: #9fb2d1; }
+.revenue-hero-kpis strong { font-size: 22px; }
+.share { display: flex; flex-direction: column; gap: 10px; }
+.share-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; }
+.share-legend { display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; color: #c9d4e6; }
+.share-legend span { display: flex; align-items: center; gap: 7px; }
+.share-legend i { width: 10px; height: 10px; border-radius: 3px; }
