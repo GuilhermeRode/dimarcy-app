@@ -13,7 +13,14 @@ function createWindow() {
   });
   if (process.env.ELECTRON_DEV) win.loadURL("http://localhost:5173");
   else win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: "deny" }; });
+  // Only https links leave the app (WhatsApp, maps); everything else is ignored.
+  const openExternal = (url) => { if (url.startsWith("https://")) shell.openExternal(url); };
+  win.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: "deny" }; });
+  win.webContents.on("will-navigate", (e, url) => {
+    if (new URL(url).origin === new URL(win.webContents.getURL()).origin) return;
+    e.preventDefault(); // the app window never navigates away from the app
+    openExternal(url);
+  });
 }
 
 app.whenReady().then(createWindow);

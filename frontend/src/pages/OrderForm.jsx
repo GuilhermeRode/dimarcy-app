@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
-import { money, orderNumber } from "../format";
+import { localDate, money, orderNumber } from "../format";
 import { Field, ErrorBox, Modal, Swatch } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
 
@@ -185,6 +185,9 @@ function CustomerSearch({ customers, value, onSelect }) {
 
 export default function OrderForm() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  // ?customer=<id> from the Clientes screen; only for new orders, only a number.
+  const presetCustomer = id ? null : Number(searchParams.get("customer")) || null;
   const nav = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -193,7 +196,7 @@ export default function OrderForm() {
   const [products, setProducts] = useState([]);
   const [settings, setSettings] = useState({ allow_price_override: false, max_discount_percent: 0 });
   const [header, setHeader] = useState({
-    customer_id: "", date: new Date().toISOString().slice(0, 10), delivery_date: "",
+    customer_id: "", date: localDate(), delivery_date: "",
     status: "confirmed", payment_method: "", payment_terms: "", discount: 0, notes: "",
   });
   const [customerKey, setCustomerKey] = useState(0); // forces CustomerSearch to resync its label after a save
@@ -206,7 +209,9 @@ export default function OrderForm() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const hasUnsavedChanges = !saved && (Boolean(header.customer_id) || items.length > 0);
+  // A customer preselected from the Clientes screen alone isn't "unsaved work".
+  const customerChanged = Boolean(header.customer_id) && Number(header.customer_id) !== presetCustomer;
+  const hasUnsavedChanges = !saved && (customerChanged || items.length > 0);
 
   // Warn before closing the window/app with an unsaved order in progress.
   useEffect(() => {
@@ -225,7 +230,14 @@ export default function OrderForm() {
   }
 
   useEffect(() => {
-    api.get("/customers").then((r) => setCustomers(r.data));
+    api.get("/customers").then((r) => {
+      setCustomers(r.data);
+      // Accept the preset only if it's in the list this user may see (the server checks again on save).
+      if (presetCustomer && r.data.some((c) => c.id === presetCustomer)) {
+        setHeader((h) => ({ ...h, customer_id: presetCustomer }));
+        setCustomerKey((k) => k + 1);
+      }
+    });
     api.get("/products", { params: { active_only: true } }).then((r) => setProducts(r.data));
     api.get("/settings").then((r) => setSettings(r.data));
     if (isAdmin) api.get("/users").then((r) => setSellers(r.data));

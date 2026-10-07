@@ -1,179 +1,197 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
-import { dateBR } from "../format";
-import { Field, ErrorBox, Modal, EmptyState } from "../components/ui";
+import { CUSTOMER_STATUS, compactMoney, initials, normalize } from "../format";
+import { ErrorBox } from "../components/ui";
+import CustomerPanel from "../components/CustomerPanel";
+import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
 
-const EMPTY = { name: "", document: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
-const OPEN_STATUSES = ["quote", "confirmed", "in_production", "shipped"];
-
-const AVATAR_PALETTE = [
-  { bg: "#dfe9fc", fg: "#1d54c9" },
-  { bg: "#eef0fd", fg: "#4338ca" },
-  { bg: "#fbf0e0", fg: "#9a5b12" },
-  { bg: "#dff2f5", fg: "#0d6d80" },
-  { bg: "#e0f1ea", fg: "#1c7a52" },
-  { bg: "#eceff5", fg: "#4b5875" },
-];
-
-function initials(name) {
-  const words = name.trim().split(/\s+/);
-  return words.length > 1 ? (words[0][0] + words[1][0]).toUpperCase() : words[0].slice(0, 2).toUpperCase();
-}
+const PAGE_SIZE = 20;
+const SORTS = {
+  total: { label: "Total comprado", fn: (a, b) => b.total - a.total },
+  orders: { label: "Nº de pedidos", fn: (a, b) => b.orders - a.orders },
+  recent: { label: "Compra mais recente", fn: (a, b) => (b.last_order_date || "").localeCompare(a.last_order_date || "") },
+  name: { label: "Nome A–Z", fn: (a, b) => a.name.localeCompare(b.name, "pt-BR") },
+};
+const uniqSorted = (list) => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
 
 export default function Customers() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const [list, setList] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [sellers, setSellers] = useState([]);
-  const [search, setSearch] = useState("");
-  const [form, setForm] = useState(null);
+  const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [form, setForm] = useState(null);
+  const [params, setParams] = useSearchParams();
 
-  const load = () => api.get("/customers", { params: { search } })
-    .then((r) => { setList(r.data); setError(""); })
-    .catch((err) => setError(errorMessage(err)));
-  useEffect(() => { if (isAdmin) api.get("/users").then((r) => setSellers(r.data)); }, [isAdmin]);
-  useEffect(() => { api.get("/orders").then((r) => setOrders(r.data)); }, []);
-  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);
+  const load = () => api.get("/customers/overview")
+    .then((r) => { setRows(r.data); setError(""); })
+    .catch((e) => setError(errorMessage(e)));
+  useEffect(() => { load(); }, []);
 
-  const stats = useMemo(() => {
-    const m = new Map();
-    for (const o of orders) {
-      const s = m.get(o.customer_id) || { count: 0, open: 0, last: null };
-      s.count += 1;
-      if (OPEN_STATUSES.includes(o.status)) s.open += 1;
-      if (!s.last || o.date > s.last) s.last = o.date;
-      m.set(o.customer_id, s);
-    }
-    return m;
-  }, [orders]);
+  const options = useMemo(() => {
+    const sellers = new Map(rows.filter((r) => r.owner_id).map((r) => [String(r.owner_id), r.owner_name]));
+    return {
+      states: uniqSorted(rows.map((r) => r.state)),
+      sellers: [...sellers.entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-BR")),
+      colors: uniqSorted(rows.flatMap((r) => r.colors)),
+    };
+  }, [rows]);
 
-  const { withOrders, withoutOrders, openTotal } = useMemo(() => {
-    const withO = [], withoutO = [];
-    let openTotal = 0;
-    for (const c of list) {
-      const s = stats.get(c.id);
-      if (s?.count) { withO.push(c); openTotal += s.open; } else withoutO.push(c);
-    }
-    withO.sort((a, b) => (stats.get(b.id).last || "").localeCompare(stats.get(a.id).last || ""));
-    return { withOrders: withO, withoutOrders: withoutO, openTotal };
-  }, [list, stats]);
+  // URL values are untrusted: anything outside the known lists is ignored.
+  const f = useMemo(() => {
+    const get = (k) => params.get(k) || "";
+    const seller = get("seller");
+    return {
+      q: get("q"),
+      status: Object.hasOwn(CUSTOMER_STATUS, get("status")) ? get("status") : "",
+      state: get("state"),
+      city: get("city"),
+      seller: isAdmin && (seller === "none" || options.sellers.some(([id]) => id === seller)) ? seller : "",
+      color: get("color"),
+      sort: Object.hasOwn(SORTS, get("sort")) ? get("sort") : "total",
+      page: Math.max(1, parseInt(get("page"), 10) || 1),
+    };
+  }, [params, isAdmin, options]);
 
-  async function save(e) {
-    e.preventDefault();
-    setError("");
-    const body = { ...form, state: form.state ? form.state.toUpperCase() : null, owner_id: form.owner_id ? Number(form.owner_id) : null };
-    try {
-      form.id ? await api.put(`/customers/${form.id}`, body) : await api.post("/customers", body);
-      setForm(null);
-      load();
-    } catch (err) { setError(errorMessage(err)); }
+  function setFilter(key, value) {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value); else next.delete(key);
+    if (key === "state") next.delete("city");
+    if (key !== "page") next.delete("page");
+    setParams(next, { replace: true });
   }
 
-  async function remove() {
-    if (!confirm(`Excluir ${form.name}?`)) return;
-    try { await api.delete(`/customers/${form.id}`); setForm(null); load(); }
-    catch (err) { setError(errorMessage(err)); }
+  const cities = useMemo(() => uniqSorted(rows.filter((r) => !f.state || r.state === f.state).map((r) => r.city)), [rows, f.state]);
+
+  const visible = useMemo(() => {
+    const text = normalize(f.q.trim());
+    const digits = f.q.replace(/\D/g, "");
+    return rows.filter((r) =>
+      (!f.status || r.status === f.status)
+      && (!f.state || r.state === f.state)
+      && (!f.city || r.city === f.city)
+      && (!f.seller || (f.seller === "none" ? !r.owner_id : String(r.owner_id) === f.seller))
+      && (!f.color || r.colors.includes(f.color))
+      && (!text || normalize(`${r.name} ${r.city || ""}`).includes(text)
+        || (digits.length >= 3 && (r.document || "").replace(/\D/g, "").includes(digits)))
+    ).sort(SORTS[f.sort].fn);
+  }, [rows, f]);
+
+  const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const page = Math.min(f.page, pages);
+  const pageRows = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const selected = rows.find((r) => r.id === selectedId);
+
+  const chips = [
+    f.q && ["q", `Busca: ${f.q}`],
+    f.status && ["status", `Status: ${CUSTOMER_STATUS[f.status].label}`],
+    f.state && ["state", `Estado: ${f.state}`],
+    f.city && ["city", `Cidade: ${f.city}`],
+    f.seller && ["seller", `Vendedor: ${f.seller === "none" ? "Sem vendedor" : options.sellers.find(([id]) => id === f.seller)[1]}`],
+    f.color && ["color", `Cor: ${f.color}`],
+  ].filter(Boolean);
+
+  async function openEdit(id) {
+    try { setForm((await api.get(`/customers/${id}`)).data); }
+    catch (e) { setError(errorMessage(e)); }
   }
 
-  const f = (k) => ({ value: form[k] || "", onChange: (e) => setForm({ ...form, [k]: e.target.value }) });
-
-  function openEdit(c) { setError(""); setForm({ ...c, owner_id: c.owner_id || "" }); }
-
-  function Row({ c }) {
-    const s = stats.get(c.id);
-    const pal = AVATAR_PALETTE[c.id % AVATAR_PALETTE.length];
-    return (
-      <div className="customer-row" onClick={() => openEdit(c)}>
-        <span className="customer-avatar" style={{ background: pal.bg, color: pal.fg }}>{initials(c.name)}</span>
-        <span className="customer-row-main">
-          <span className="customer-row-name">{c.name}</span>
-          <span className="cell-sub">{c.city}{c.state ? `/${c.state}` : ""}</span>
-        </span>
-        <span className="customer-row-status">
-          {!s ? (
-            <span className="muted">Nunca comprou</span>
-          ) : s.open ? (
-            <span className="customer-status-open">{s.open} em aberto · último {dateBR(s.last)}</span>
-          ) : (
-            <span className="muted">Última compra {dateBR(s.last)}</span>
-          )}
-        </span>
-      </div>
-    );
-  }
+  const select = (label, key, value, opts) => (
+    <label className={`filter ${value ? "on" : ""}`}>
+      <span>{label}</span>
+      <select value={value} onChange={(e) => setFilter(key, e.target.value)}>{opts}</select>
+    </label>
+  );
 
   return (
     <div className="page">
       <header className="page-header">
-        <h1>Clientes</h1>
-        <div className="header-search-group">
-          <input className="header-search" placeholder="Buscar cliente" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <button className="btn btn-primary" onClick={() => { setError(""); setForm(EMPTY); }}>Cadastrar cliente</button>
+        <div>
+          <h1>Clientes</h1>
+          <p className="muted">Acompanhe a carteira e encontre oportunidades de venda.</p>
         </div>
+        <button className="btn btn-primary" onClick={() => setForm(EMPTY_CUSTOMER)}>+ Cadastrar cliente</button>
       </header>
 
-      <ErrorBox msg={error} />
-      {!list.length ? <EmptyState text="Nenhum cliente encontrado." /> : (
-        <>
-          {withOrders.length > 0 && (
-            <section className="customer-group">
-              <div className="customer-group-header">
-                <span><span className="customer-group-dot dot-accent" />COM PEDIDOS <span className="tag">{withOrders.length}</span></span>
-                <span className="muted">{openTotal} em aberto</span>
-              </div>
-              <div className="customer-list">
-                {withOrders.map((c) => <Row key={c.id} c={c} />)}
-              </div>
-            </section>
-          )}
+      <section className="filters-bar">
+        <div className="filters-row">
+          <input className="filters-search" placeholder="Buscar por nome, cidade ou CPF/CNPJ"
+            value={f.q} onChange={(e) => setFilter("q", e.target.value)} />
+          {select("Status", "status", f.status, <>
+            <option value="">Todos</option>
+            {Object.entries(CUSTOMER_STATUS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+          </>)}
+          {select("Estado", "state", f.state, <>
+            <option value="">Todos</option>{options.states.map((s) => <option key={s}>{s}</option>)}
+          </>)}
+          {select("Cidade", "city", f.city, <>
+            <option value="">Todas</option>{cities.map((c) => <option key={c}>{c}</option>)}
+          </>)}
+          {isAdmin && select("Vendedor", "seller", f.seller, <>
+            <option value="">Todos</option><option value="none">Sem vendedor</option>
+            {options.sellers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </>)}
+          {select("Cor comprada", "color", f.color, <>
+            <option value="">Todas</option>{options.colors.map((c) => <option key={c}>{c}</option>)}
+          </>)}
+          {select("Ordenar", "sort", f.sort === "total" ? "" : f.sort,
+            Object.entries(SORTS).map(([k, s]) => <option key={k} value={k === "total" ? "" : k}>{s.label}</option>))}
+        </div>
+        {chips.length > 0 && (
+          <div className="filters-chips">
+            <span className="muted">Filtros ativos</span>
+            {chips.map(([key, label]) => (
+              <button type="button" key={key} className="filter-chip" onClick={() => setFilter(key, "")}>{label} ×</button>
+            ))}
+            <button type="button" className="link-btn" onClick={() => setParams({}, { replace: true })}>Limpar tudo</button>
+          </div>
+        )}
+      </section>
 
-          {withoutOrders.length > 0 && (
-            <section className="customer-group">
-              <div className="customer-group-header">
-                <span><span className="customer-group-dot dot-muted" />SEM PEDIDOS <span className="tag">{withoutOrders.length}</span></span>
-                <span className="muted">oportunidades de primeiro pedido</span>
-              </div>
-              <div className="customer-list">
-                {withoutOrders.map((c) => <Row key={c.id} c={c} />)}
-              </div>
-            </section>
-          )}
-        </>
-      )}
+      <ErrorBox msg={error} />
+
+      <div className={`customers-layout ${selected ? "with-panel" : ""}`}>
+        <section className="customers-table">
+          <div className={`customers-row head ${isAdmin ? "admin" : ""}`}>
+            <span>Cliente</span>{isAdmin && <span>Vendedor</span>}<span className="num">Total</span><span className="num">Pedidos</span><span>Status</span>
+          </div>
+          {pageRows.map((r) => (
+            <button type="button" key={r.id} onClick={() => setSelectedId(r.id)}
+              className={`customers-row ${isAdmin ? "admin" : ""} ${r.id === selectedId ? "on" : ""}`}>
+              <span className="customers-cell-main">
+                <span className="customer-avatar">{initials(r.name)}</span>
+                <span><strong>{r.name}</strong><small>{r.city ? `${r.city}${r.state ? `/${r.state}` : ""}` : "—"}</small></span>
+              </span>
+              {isAdmin && <span>{r.owner_name?.split(" ")[0] || "—"}</span>}
+              <span className="num">{r.total ? compactMoney(r.total) : "—"}</span>
+              <span className="num">{r.orders}</span>
+              <span><span className={`cstatus cstatus-${CUSTOMER_STATUS[r.status].tone}`}>{CUSTOMER_STATUS[r.status].label}</span></span>
+            </button>
+          ))}
+          {!pageRows.length && <p className="customers-empty">Nenhum cliente com esses filtros.</p>}
+          <footer className="customers-footer">
+            <span className="muted">
+              Mostrando {visible.length ? `${(page - 1) * PAGE_SIZE + 1}–${Math.min(visible.length, page * PAGE_SIZE)}` : "0"} de {visible.length}
+            </span>
+            <div className="pager">
+              <button type="button" className="btn" disabled={page === 1} onClick={() => setFilter("page", String(page - 1))}>‹ Anterior</button>
+              <span>{page} / {pages}</span>
+              <button type="button" className="btn" disabled={page === pages} onClick={() => setFilter("page", String(page + 1))}>Próxima ›</button>
+            </div>
+          </footer>
+        </section>
+
+        {selected && (
+          <CustomerPanel customer={selected} isAdmin={isAdmin}
+            onClose={() => setSelectedId(null)} onEdit={() => openEdit(selected.id)} />
+        )}
+      </div>
 
       {form && (
-        <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={() => setForm(null)} wide>
-          <form onSubmit={save} className="form-grid">
-            <Field label="Nome / razão social" span={2}><input required {...f("name")} /></Field>
-            <Field label="CPF/CNPJ" span={2}><input required {...f("document")} /></Field>
-            {isAdmin && (
-              <Field label="Vendedor responsável" span={2}>
-                <select required {...f("owner_id")}>
-                  <option value="">Selecione o vendedor</option>
-                  {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </Field>
-            )}
-            <Field label="Telefone"><input {...f("phone")} /></Field>
-            <Field label="E-mail"><input type="email" {...f("email")} /></Field>
-            <Field label="Cidade / UF" span={2}>
-              <div className="city-row">
-                <input placeholder="Cidade" {...f("city")} />
-                <input placeholder="UF" maxLength={2} className="uf-input" {...f("state")} />
-              </div>
-            </Field>
-            <Field label="Endereço" span={2}><input {...f("address")} /></Field>
-            <Field label="Observações" span={2}><textarea rows={3} {...f("notes")} /></Field>
-            <div className="span-2"><ErrorBox msg={error} /></div>
-            <div className="actions span-2">
-              {form.id && <button type="button" className="btn danger" onClick={remove}>Excluir</button>}
-              <button className="btn btn-primary">Salvar cliente</button>
-            </div>
-          </form>
-        </Modal>
+        <CustomerFormModal initial={form} isAdmin={isAdmin} onClose={() => setForm(null)}
+          onSaved={() => { setForm(null); setSelectedId(null); load(); }} />
       )}
     </div>
   );
