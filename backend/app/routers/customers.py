@@ -2,10 +2,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from .. import clock
 from ..database import get_db
 from ..geocoding import geocode_and_cache_background, lookup_cached_city
 from ..models import Customer, Order, User
 from ..schemas import CustomerIn, CustomerOut
+from ..sales import customer_overview
 from ..security import get_current_user
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -28,6 +30,12 @@ def list_all(search: str = "", db: Session = Depends(get_db), user: User = Depen
         t = f"%{search}%"
         q = q.filter(or_(Customer.name.ilike(t), Customer.city.ilike(t), Customer.document.ilike(t)))
     return q.order_by(Customer.name).all()
+
+
+@router.get("/overview")
+def overview(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Every visible customer with sales aggregates and status, for the Clientes screen."""
+    return customer_overview(db, user, clock.today_br())
 
 
 @router.get("/{cid}", response_model=CustomerOut)

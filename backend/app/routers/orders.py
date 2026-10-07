@@ -3,10 +3,12 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from .. import clock
 from ..database import get_db
 from ..mailer import send_order_delivered_email
 from ..models import ORDER_STATUSES, AppSettings, Customer, Order, OrderItem, Product, User
 from ..schemas import OrderIn, StatusIn
+from ..sales import late_filter
 from ..security import get_current_user, require_admin
 from ..settings_store import get_app_settings
 
@@ -89,7 +91,8 @@ def _find(oid: int, db: Session) -> Order:
 
 @router.get("")
 def list_all(status: str = "", customer_id: int | None = None, start: date | None = None,
-             end: date | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+             end: date | None = None, late: bool = False, db: Session = Depends(get_db),
+             user: User = Depends(get_current_user)):
     q = db.query(Order)
     if user.role != "admin":  # sellers only see their own orders
         q = q.filter(Order.seller_id == user.id)
@@ -101,6 +104,8 @@ def list_all(status: str = "", customer_id: int | None = None, start: date | Non
         q = q.filter(Order.date >= start)
     if end:
         q = q.filter(Order.date <= end)
+    if late:
+        q = q.filter(late_filter(clock.today_br()))
     return [summary(o) for o in q.order_by(Order.id.desc()).all()]
 
 
@@ -121,7 +126,7 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
     app_settings = get_app_settings(db)
     items = _build_items(data, db, u, app_settings, existing_order=None)
     _check_discount(data.discount, items, app_settings)
-    o = Order(customer_id=data.customer_id, seller_id=u.id, date=data.date or date.today(),
+    o = Order(customer_id=data.customer_id, seller_id=u.id, date=data.date or clock.today_br(),
               delivery_date=data.delivery_date, status=data.status,
               payment_method=data.payment_method, payment_terms=data.payment_terms,
               discount=data.discount, notes=data.notes, items=items)
