@@ -768,6 +768,7 @@ section.item-group { margin-top: 0; }
   .hero-goal { padding-left: 0; border-left: 0; }
 }
 .revenue-hero { flex-direction: column; gap: 22px; }
+.revenue-hero .hero-main { flex: none; } /* in a column, the 280px basis would become height */
 .revenue-hero-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
 .revenue-hero-kpis { display: flex; gap: 32px; flex-wrap: wrap; }
 .revenue-hero-kpis div { display: flex; flex-direction: column; gap: 2px; }
