@@ -19,6 +19,7 @@ export default function Settings() {
       const { data } = await api.put("/settings", {
         allow_price_override: form.allow_price_override,
         max_discount_percent: Number(form.max_discount_percent) || 0,
+        monthly_goal: form.monthly_goal === "" || form.monthly_goal == null ? null : Number(form.monthly_goal),
       });
       setForm(data);
       setOk("Configurações salvas com sucesso.");
@@ -31,7 +32,7 @@ export default function Settings() {
     <div className="page">
       <header className="page-header">
         <h1>Configurações</h1>
-        <p className="muted">Regras de preço e desconto para o formulário de pedido.</p>
+        <p className="muted">Regras de preço, desconto e meta de vendas.</p>
       </header>
 
       {form ? (
@@ -51,6 +52,14 @@ export default function Settings() {
               <input type="number" min="0" max="100" step="0.01" value={form.max_discount_percent}
                 onChange={(e) => setForm({ ...form, max_discount_percent: e.target.value })} />
             </Field>
+            <Field label="Meta mensal da empresa (R$)" span={2}>
+              <input type="number" min="0" step="0.01" placeholder="Sem meta"
+                value={form.monthly_goal ?? ""}
+                onChange={(e) => setForm({ ...form, monthly_goal: e.target.value })} />
+            </Field>
+            <p className="muted span-2" style={{ marginTop: -8 }}>
+              Usada no Painel e no Faturamento, proporcional ao período escolhido. Deixe em branco para não usar meta.
+            </p>
             <div className="span-2"><ErrorBox msg={error} /></div>
             {ok && <div className="span-2 muted">{ok}</div>}
             <div className="actions span-2">
