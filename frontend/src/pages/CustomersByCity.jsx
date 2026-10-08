@@ -68,7 +68,6 @@ export default function CustomersByCity() {
       <header className="page-header">
         <div>
           <h1>Clientes por cidade</h1>
-          <p className="muted">Ativos = clientes com pelo menos uma compra no período.</p>
         </div>
       </header>
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { CUSTOMER_STATUS, compactMoney, initials, normalize } from "../format";
@@ -8,10 +8,11 @@ import CustomerPanel from "../components/CustomerPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
 
 const PAGE_SIZE = 20;
+const EXCLUDE_MAP = import.meta.env.VITE_EXCLUDE_MAP === "1"; // the Android build ships without the map
 const SORTS = {
-  total: { label: "Total comprado", fn: (a, b) => b.total - a.total },
-  orders: { label: "Nº de pedidos", fn: (a, b) => b.orders - a.orders },
-  recent: { label: "Compra mais recente", fn: (a, b) => (b.last_order_date || "").localeCompare(a.last_order_date || "") },
+  total: { label: "Maior total", fn: (a, b) => b.total - a.total },
+  orders: { label: "Mais pedidos", fn: (a, b) => b.orders - a.orders },
+  recent: { label: "Mais recente", fn: (a, b) => (b.last_order_date || "").localeCompare(a.last_order_date || "") },
   name: { label: "Nome A–Z", fn: (a, b) => a.name.localeCompare(b.name, "pt-BR") },
 };
 const uniqSorted = (list) => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
@@ -19,6 +20,7 @@ const uniqSorted = (list) => [...new Set(list.filter(Boolean))].sort((a, b) => a
 export default function Customers() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const nav = useNavigate();
   const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState(null);
@@ -109,12 +111,18 @@ export default function Customers() {
           <h1>Clientes</h1>
           <p className="muted">Acompanhe a carteira e encontre oportunidades de venda.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setForm(EMPTY_CUSTOMER)}>+ Cadastrar cliente</button>
+        <div className="header-actions">
+          {isAdmin && !EXCLUDE_MAP && (
+            <button className="btn" onClick={() => nav("/customers-by-city")}>Mapa de clientes</button>
+          )}
+          <button className="btn btn-primary" onClick={() => setForm(EMPTY_CUSTOMER)}>+ Cadastrar cliente</button>
+        </div>
       </header>
 
       <section className="filters-bar">
         <div className="filters-row">
-          <input className="filters-search" placeholder="Nome, cidade ou CPF/CNPJ"
+          <input className="filters-search" placeholder="Buscar cliente" title="Busca por nome, cidade ou CPF/CNPJ"
+            aria-label="Buscar por nome, cidade ou CPF/CNPJ"
             value={f.q} onChange={(e) => setFilter("q", e.target.value)} />
           {select("Status", "status", f.status, <>
             <option value="">Todos</option>
