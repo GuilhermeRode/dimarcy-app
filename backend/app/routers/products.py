@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..models import Color, OrderItem, Product
@@ -29,7 +29,7 @@ def _apply(p: Product, data: ProductIn, db: Session):
 
 @router.get("", response_model=list[ProductOut])
 def list_all(search: str = "", active_only: bool = False, db: Session = Depends(get_db)):
-    q = db.query(Product)
+    q = db.query(Product).options(selectinload(Product.colors))  # colors in one batch, not per product
     if search:
         t = f"%{search}%"
         q = q.filter(or_(Product.reference.ilike(t), Product.description.ilike(t), Product.collection.ilike(t)))

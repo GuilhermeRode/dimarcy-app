@@ -8,7 +8,7 @@ from ..database import get_db
 from ..mailer import send_order_delivered_email
 from ..models import ORDER_STATUSES, AppSettings, Customer, Order, OrderItem, Product, User
 from ..schemas import OrderIn, StatusIn
-from ..sales import late_filter
+from ..sales import late_filter, visible_orders
 from ..security import get_current_user, require_admin
 from ..settings_store import get_app_settings
 
@@ -93,9 +93,7 @@ def _find(oid: int, db: Session) -> Order:
 def list_all(status: str = "", customer_id: int | None = None, start: date | None = None,
              end: date | None = None, late: bool = False, db: Session = Depends(get_db),
              user: User = Depends(get_current_user)):
-    q = db.query(Order)
-    if user.role != "admin":  # sellers only see their own orders
-        q = q.filter(Order.seller_id == user.id)
+    q = visible_orders(db, user)  # sellers only see their own orders
     if status:
         q = q.filter(Order.status == status)
     if customer_id:
