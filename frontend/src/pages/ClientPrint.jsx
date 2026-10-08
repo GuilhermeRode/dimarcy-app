@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
-import { dateBR, money } from "../format";
+import { dateBR, localDate, money, STATUS } from "../format";
 import { ErrorBox, Swatch } from "../components/ui";
 import logoFull from "../assets/logo-full.png";
 
@@ -32,9 +32,17 @@ export default function ClientPrint() {
 
       {/* No order number on the customer's copy — it's an internal reference. */}
       <header className="cp-header">
-        <img src={logoFull} alt="Di Marcy" className="cp-logo" />
-        <span className="cp-title">Pedido</span>
+        <div className="cp-brand">
+          <img src={logoFull} alt="Di Marcy" className="cp-logo" />
+          <small>pedidos@dimarcy.com.br</small>
+        </div>
+        <div className="cp-doc">
+          <span className="cp-title">Resumo do pedido</span>
+          <span className={`status st-${o.status}`}>{STATUS[o.status] || o.status}</span>
+          <small>Emitido em {dateBR(localDate())}</small>
+        </div>
       </header>
+      <p className="cp-greeting">Obrigado pela sua compra! Confira abaixo os detalhes do seu pedido.</p>
 
       <section className="cp-card">
         <div className="cp-customer">
