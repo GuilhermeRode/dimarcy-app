@@ -577,16 +577,27 @@ section.item-group { margin-top: 0; }
 }
 
 /* ---------- client print preview (letterhead + thank-you note) ---------- */
-.print-letterhead {
-  display: flex; justify-content: space-between; align-items: center; gap: 16px;
-  padding-bottom: 10px; margin-bottom: 12px; border-bottom: 2px solid #000;
+.cp-header { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid #c9ced6; }
+.cp-logo { height: 64px; width: auto; object-fit: contain; }
+.cp-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: #555; }
+.cp-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 24px; align-items: center;
+  border: 1px solid #c9ced6; border-radius: 10px; padding: 16px 20px; background: #fff; }
+.cp-customer { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cp-customer span, .cp-facts dt { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7280; }
+.cp-customer strong { font-size: 1.25rem; line-height: 1.2; color: #000; overflow-wrap: anywhere; }
+.cp-customer small { font-size: 0.85rem; color: #444; }
+.cp-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin: 0; padding-left: 20px; border-left: 1px solid #e3e6eb; }
+.cp-facts dd { margin: 2px 0 0; font-size: 0.92rem; font-weight: 600; color: #000; }
+@media (max-width: 600px) {
+  .cp-card { grid-template-columns: 1fr; gap: 14px; }
+  .cp-facts { padding-left: 0; border-left: 0; padding-top: 12px; border-top: 1px solid #e3e6eb; }
 }
-.print-logo { height: 56px; width: auto; object-fit: contain; }
-.print-letterhead-id { text-align: center; }
-.print-doctype { display: block; font-size: 0.7rem; color: #555; text-transform: uppercase; letter-spacing: 0.05em; }
-.print-order-num { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-.print-letterhead-info { text-align: right; font-size: 0.8rem; color: #333; line-height: 1.4; }
-.print-letterhead-info strong { display: block; font-size: 1.15rem; color: #000; }
+@media print {
+  .cp-logo { height: 52px; }
+  .cp-card { padding: 10px 14px; gap: 16px; }
+  .cp-customer strong { font-size: 1.05rem; }
+  .cp-facts dd { font-size: 0.8rem; }
+}
 .print-thanks { margin-top: 16px; padding-top: 10px; border-top: 1px solid #ccc; text-align: center; }
 .print-thanks p { margin: 2px 0; font-size: 0.85rem; }
 /* printers/browsers strip background colors by default — force the color swatches to actually show */
