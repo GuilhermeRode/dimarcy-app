@@ -15,7 +15,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 MAX_PERIOD_DAYS = 731
 DAYS_PER_MONTH = 30.4
-SIZE_ORDER = ["U", "PP", "P", "M", "G", "GG", "XG"]
+SIZE_ORDER = ["U", "PP", "P", "M", "G", "GG", "XG", "XGG"]
 
 
 def _top(d: dict, n=8, by="value"):
