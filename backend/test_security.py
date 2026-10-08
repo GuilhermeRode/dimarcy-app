@@ -1,5 +1,6 @@
 """Security self-check. Run from backend/:  python test_security.py
 Uses a throwaway SQLite file, never dimarcy.db."""
+import io
 import os
 import tempfile
 
@@ -8,10 +9,13 @@ os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.c
                   RESEND_API_KEY="")
 
 from fastapi.testclient import TestClient  # noqa: E402
+from PIL import Image  # noqa: E402
 
 from app.main import MAX_BODY_BYTES, app  # noqa: E402
 
-JPEG = b"\xff\xd8\xff\xe0" + b"0" * 100
+_buf = io.BytesIO()
+Image.new("RGB", (1200, 1800), "#7a3b2e").save(_buf, "JPEG")  # a real photo-shaped JPEG (portrait 2:3)
+JPEG = _buf.getvalue()
 
 with TestClient(app) as c:
     admin = {"Authorization": "Bearer " + c.post("/api/auth/login", json={
@@ -47,12 +51,35 @@ with TestClient(app) as c:
     assert c.post(f"/api/products/{pid}/image", headers=admin,
                   files={"file": ("x.jpg", b"<script>alert(1)</script>", "image/jpeg")}).status_code == 400
 
-    # deleting a product also deletes its photo file (no orphans left in uploads/)
+    # a JPEG header followed by garbage is not a readable image
+    assert c.post(f"/api/products/{pid}/image", headers=admin,
+                  files={"file": ("x.jpg", b"\xff\xd8\xff\xe0" + b"0" * 100, "image/jpeg")}).status_code == 400
+
+    # every photo gets a small thumbnail for lists; the original is kept as is for zoom
     tmp = c.post("/api/products", headers=admin, json={**product, "reference": "R-del"}).json()["id"]
-    tmp_url = c.post(f"/api/products/{tmp}/image", headers=admin, files={"file": ("x.jpg", JPEG, "image/jpeg")}).json()["image_url"]
-    assert c.get(tmp_url).status_code == 200
+    up = c.post(f"/api/products/{tmp}/image", headers=admin, files={"file": ("x.jpg", JPEG, "image/jpeg")}).json()
+    full, thumb = c.get(up["image_url"]), c.get(up["thumb_url"])
+    assert full.status_code == thumb.status_code == 200 and full.content == JPEG
+    assert Image.open(io.BytesIO(thumb.content)).size == (320, 480)
+    assert len(thumb.content) < len(JPEG)
+
+    # replacing the photo deletes the old pair; deleting the product deletes the new pair (no orphans)
+    up2 = c.post(f"/api/products/{tmp}/image", headers=admin, files={"file": ("y.jpg", JPEG, "image/jpeg")}).json()
+    assert c.get(up["image_url"]).status_code == c.get(up["thumb_url"]).status_code == 404
     assert c.delete(f"/api/products/{tmp}", headers=admin).status_code == 204
-    assert c.get(tmp_url).status_code == 404
+    assert c.get(up2["image_url"]).status_code == c.get(up2["thumb_url"]).status_code == 404
+
+    # photos uploaded before thumbnails existed get one at startup
+    from app.routers.products import UPLOAD_DIR
+    from app.uploads import backfill_thumbs, thumb_name
+    old = UPLOAD_DIR / "999999_test-old-photo.jpg"
+    old.write_bytes(JPEG)
+    try:
+        backfill_thumbs(UPLOAD_DIR)
+        assert (UPLOAD_DIR / thumb_name(old.name)).is_file()
+    finally:
+        old.unlink(missing_ok=True)
+        (UPLOAD_DIR / thumb_name(old.name)).unlink(missing_ok=True)
 
     # oversized body rejected, with and without Content-Length
     big = b"x" * (MAX_BODY_BYTES + 1)

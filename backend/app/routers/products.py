@@ -9,12 +9,20 @@ from ..database import get_db
 from ..models import Color, OrderItem, Product
 from ..schemas import ProductIn, ProductOut
 from ..security import get_current_user, require_admin
-from ..uploads import read_validated_image
+from ..uploads import make_thumb, read_validated_image, thumb_name
 
 router = APIRouter(prefix="/products", tags=["products"], dependencies=[Depends(get_current_user)])
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads" / "products"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _delete_image(image_url: str | None):
+    """Removes a product photo and its thumbnail from disk."""
+    if image_url:
+        name = Path(image_url).name
+        (UPLOAD_DIR / name).unlink(missing_ok=True)
+        (UPLOAD_DIR / thumb_name(name)).unlink(missing_ok=True)
 
 
 def _apply(p: Product, data: ProductIn, db: Session):
@@ -75,21 +83,20 @@ def upload_image(pid: int, file: UploadFile = File(...), db: Session = Depends(g
     if not p:
         raise HTTPException(404, "Product not found.")
     content, ext = read_validated_image(file)
+    try:
+        thumb = make_thumb(content)
+    except Exception:
+        raise HTTPException(400, "Não foi possível ler essa imagem. Envie um JPEG, PNG ou WEBP válido.")
 
-    old_path = None
-    if p.image_url:
-        old_path = UPLOAD_DIR / Path(p.image_url).name
-
+    old_url = p.image_url
     filename = f"{pid}_{uuid.uuid4().hex}{ext}"
-    with open(UPLOAD_DIR / filename, "wb") as out:
-        out.write(content)
+    (UPLOAD_DIR / filename).write_bytes(content)
+    (UPLOAD_DIR / thumb_name(filename)).write_bytes(thumb)
 
     p.image_url = f"/uploads/products/{filename}"
     db.commit()
     db.refresh(p)
-
-    if old_path and old_path.exists():
-        old_path.unlink(missing_ok=True)
+    _delete_image(old_url)
     return p
 
 
@@ -99,8 +106,7 @@ def remove_image(pid: int, db: Session = Depends(get_db)):
     if not p:
         raise HTTPException(404, "Product not found.")
     if p.image_url:
-        old_path = UPLOAD_DIR / Path(p.image_url).name
-        old_path.unlink(missing_ok=True)
+        _delete_image(p.image_url)
         p.image_url = None
         db.commit()
         db.refresh(p)
@@ -114,8 +120,7 @@ def delete(pid: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Product not found.")
     if db.query(OrderItem).filter(OrderItem.product_id == pid).first():
         raise HTTPException(400, "This product is already used in orders. Deactivate it instead of deleting.")
-    image = UPLOAD_DIR / Path(p.image_url).name if p.image_url else None
+    image_url = p.image_url
     db.delete(p)
     db.commit()
-    if image:  # the photo file would otherwise be left orphaned in uploads/
-        image.unlink(missing_ok=True)
+    _delete_image(image_url)  # the photo files would otherwise be left orphaned in uploads/

@@ -13,6 +13,7 @@ from .models import User
 from .routers import auth, colors, customers, dashboard, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
+from .uploads import backfill_thumbs
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
                         password_hash=hash_password(settings.admin_password), role="admin"))
             db.commit()
         get_app_settings(db)  # first run: create the single settings row with its defaults
+    backfill_thumbs(products.UPLOAD_DIR)  # photos uploaded before thumbnails existed
     yield
 
 

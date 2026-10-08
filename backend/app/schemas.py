@@ -2,7 +2,9 @@ import datetime as _dt
 from datetime import date, datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+
+from .uploads import thumb_name
 
 
 class ORM(BaseModel):
@@ -113,6 +115,12 @@ class ProductOut(ORM):
     active: bool
     image_url: str | None
     colors: list[ColorOut]
+
+    @computed_field
+    @property
+    def thumb_url(self) -> str | None:
+        """Small version of the photo for lists; image_url is the full-size one (zoom)."""
+        return f"/uploads/products/{thumb_name(self.image_url)}" if self.image_url else None
 
     @field_validator("sizes", mode="before")
     @classmethod
