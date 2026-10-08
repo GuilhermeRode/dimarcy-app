@@ -777,6 +777,10 @@ section.item-group { margin-top: 0; }
 .dash-row > .dash-wide { flex: 1.7 1 460px; }
 .dash-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 .dash-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+/* Cards in a row share the tallest one's height; shorter lists spread out instead of leaving a gap. */
+.dash-grid-3 > .panel, .dash-grid-2 > .panel { display: flex; flex-direction: column; }
+.dash-grid-3 > .panel > .hbars, .dash-grid-3 > .panel > .color-ranking,
+.dash-grid-2 > .panel > .hbars, .dash-grid-2 > .panel > .top-customers { flex: 1; justify-content: space-between; }
 .donut { position: relative; width: 184px; height: 184px; flex-shrink: 0; }
 .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 0 40px; }
 .donut-center strong { font-size: 30px; line-height: 1; }
@@ -832,7 +836,7 @@ section.item-group { margin-top: 0; }
 .hbars li > div { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
 .hbar { display: block; height: 4px; background: var(--surface-2); border-radius: 2px; margin-top: 5px; }
 .hbar span { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
-.top-customers { list-style: none; margin: 0; padding: 0; }
+.top-customers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .top-customers li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
 .top-customers .rank { width: 18px; color: var(--muted); font-weight: 700; }
 .top-customers .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
