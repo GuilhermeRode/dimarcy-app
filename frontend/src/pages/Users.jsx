@@ -12,8 +12,10 @@ export default function Users() {
 
   async function save(e) {
     e.preventDefault();
+    const goal = form.monthly_goal;
+    const body = { ...form, monthly_goal: goal === "" || goal == null ? null : Number(goal) };
     try {
-      form.id ? await api.put(`/users/${form.id}`, form) : await api.post("/users", form);
+      form.id ? await api.put(`/users/${form.id}`, body) : await api.post("/users", body);
       setForm(null);
       load();
     } catch (err) { setError(errorMessage(err)); }
@@ -25,7 +27,7 @@ export default function Users() {
     <div className="page">
       <header className="page-header">
         <h1>Usuários</h1>
-        <button className="btn btn-primary" onClick={() => { setError(""); setForm({ name: "", email: "", password: "", role: "seller", active: true }); }}>Cadastrar usuário</button>
+        <button className="btn btn-primary" onClick={() => { setError(""); setForm({ name: "", email: "", password: "", role: "seller", active: true, monthly_goal: "" }); }}>Cadastrar usuário</button>
       </header>
       <table className="table">
         <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th></tr></thead>
@@ -49,6 +51,9 @@ export default function Users() {
             </Field>
             <Field label="Perfil">
               <select {...f("role")}><option value="seller">Vendedor</option><option value="admin">Administrador</option></select>
+            </Field>
+            <Field label="Meta mensal (R$)">
+              <input type="number" min="0" step="0.01" placeholder="Sem meta" {...f("monthly_goal")} />
             </Field>
             <label className="check">
               <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Acesso liberado

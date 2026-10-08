@@ -18,21 +18,23 @@ UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 
-def _ensure_user_columns():
+def _ensure_columns(table: str, columns: dict[str, str]):
     """create_all only creates missing TABLES, not missing columns on an existing one —
-    there's no migration tool in this repo, so new User columns get added here instead."""
-    existing = {c["name"] for c in inspect(engine).get_columns("users")}
+    there's no migration tool in this repo, so new columns get added here instead.
+    `table` and the DDL are code constants, never user input."""
+    existing = {c["name"] for c in inspect(engine).get_columns(table)}
     with engine.begin() as conn:
-        if "reset_token_hash" not in existing:
-            conn.execute(text("ALTER TABLE users ADD COLUMN reset_token_hash VARCHAR(64)"))
-        if "reset_token_expires_at" not in existing:
-            conn.execute(text("ALTER TABLE users ADD COLUMN reset_token_expires_at TIMESTAMP"))
+        for name, ddl in columns.items():
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
-    _ensure_user_columns()
+    _ensure_columns("users", {"reset_token_hash": "VARCHAR(64)", "reset_token_expires_at": "TIMESTAMP",
+                              "monthly_goal": "NUMERIC(12,2)"})
+    _ensure_columns("app_settings", {"monthly_goal": "NUMERIC(12,2) DEFAULT 0"})
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator
             db.add(User(name="Administrador", email=settings.admin_email,

@@ -9,6 +9,22 @@ from .database import Base
 
 ORDER_STATUSES = ["quote", "confirmed", "in_production", "shipped", "delivered", "canceled"]
 SALE_STATUSES = ["confirmed", "in_production", "shipped", "delivered"]  # count as revenue
+LATE_STATUSES = ["confirmed", "in_production"]  # past delivery_date in these = late
+
+# Customer status by days since the last sale (see customer_status)
+ACTIVE_DAYS = 60
+AT_RISK_DAYS = 150
+
+
+def customer_status(last_sale: date | None, today: date) -> str:
+    if last_sale is None:
+        return "never_ordered"
+    days = (today - last_sale).days
+    if days <= ACTIVE_DAYS:
+        return "active"
+    if days <= AT_RISK_DAYS:
+        return "at_risk"
+    return "inactive"
 
 product_color = Table(
     "product_color",
@@ -28,6 +44,7 @@ class User(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     avatar_url: Mapped[str | None] = mapped_column(String(300))
     theme: Mapped[str] = mapped_column(String(10), default="light")  # light | dark — personal UI preference
+    monthly_goal: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)  # NULL/0 = no goal
     reset_token_hash: Mapped[str | None] = mapped_column(String(64))  # sha256 hex of the forgot-password token
     reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
 
@@ -144,4 +161,5 @@ class AppSettings(Base):
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
     allow_price_override: Mapped[bool] = mapped_column(Boolean, default=False)
     max_discount_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+    monthly_goal: Mapped[float | None] = mapped_column(Numeric(12, 2), default=0)  # company goal; NULL/0 = none
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

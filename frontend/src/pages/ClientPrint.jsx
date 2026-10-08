@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
-import { dateBR, money, orderNumber } from "../format";
+import { dateBR, localDate, money, STATUS } from "../format";
 import { ErrorBox, Swatch } from "../components/ui";
 import logoFull from "../assets/logo-full.png";
 
@@ -30,25 +30,31 @@ export default function ClientPrint() {
       </div>
       <ErrorBox msg={error} />
 
-      <div className="print-letterhead">
-        <img src={logoFull} alt="Di Marcy" className="print-logo" />
-        <div className="print-letterhead-id">
-          <span className="print-doctype">Pedido</span>
-          <strong className="print-order-num">{orderNumber(o.id)}</strong>
+      {/* No order number on the customer's copy — it's an internal reference. */}
+      <header className="cp-header">
+        <div className="cp-brand">
+          <img src={logoFull} alt="Di Marcy" className="cp-logo" />
         </div>
-        <div className="print-letterhead-info">
-          <strong>{o.customer_name}</strong>
-          <span>{dateBR(o.date)}</span>
+        <div className="cp-doc">
+          <span className="cp-title">Resumo do pedido</span>
+          <span className={`status st-${o.status}`}>{STATUS[o.status] || o.status}</span>
+          <small>Emitido em {dateBR(localDate())}</small>
         </div>
-      </div>
+      </header>
+      <p className="cp-greeting">Obrigado pela sua compra! Confira abaixo os detalhes do seu pedido.</p>
 
-      <section className="panel">
-        <div className="order-info">
-          <div className="info-item"><span>Data do pedido</span><strong>{dateBR(o.date)}</strong></div>
-          <div className="info-item"><span>Data de entrega</span><strong>{o.delivery_date ? dateBR(o.delivery_date) : "Não definida"}</strong></div>
-          <div className="info-item"><span>Forma de pagamento</span><strong>{o.payment_method || "—"}</strong></div>
-          <div className="info-item"><span>Prazo / condição</span><strong>{o.payment_terms || "—"}</strong></div>
+      <section className="cp-card">
+        <div className="cp-customer">
+          <span>Cliente</span>
+          <strong>{o.customer_name}</strong>
+          {o.customer_city && <small>{o.customer_city}{o.customer_state ? `/${o.customer_state}` : ""}</small>}
         </div>
+        <dl className="cp-facts">
+          <div><dt>Data do pedido</dt><dd>{dateBR(o.date)}</dd></div>
+          <div><dt>Previsão de entrega</dt><dd>{o.delivery_date ? dateBR(o.delivery_date) : "A definir"}</dd></div>
+          <div><dt>Pagamento</dt><dd>{[o.payment_method, o.payment_terms].filter(Boolean).join(" · ") || "—"}</dd></div>
+          <div><dt>Vendedor</dt><dd>{o.seller_name}</dd></div>
+        </dl>
       </section>
 
       {groups.map((lines) => {
