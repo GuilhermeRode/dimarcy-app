@@ -851,12 +851,64 @@ section.item-group { margin-top: 0; }
 .share-legend i { width: 10px; height: 10px; border-radius: 3px; }
 
 /* ---------- /download (unlisted desktop installer page) ---------- */
-.download-page { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--bg); }
-.download-card { width: 100%; max-width: 520px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
-  box-shadow: var(--shadow); padding: 32px 28px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
-.download-logo { height: 72px; width: auto; }
-.download-card h1 { font-size: 1.4rem; }
-.download-card p { margin: 0; }
-.download-btn { padding: 12px 22px; font-size: 1rem; text-decoration: none; margin-top: 6px; }
-.download-steps { text-align: left; margin: 8px 0 0; padding-left: 20px; font-size: 0.9rem; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
-.download-web { font-size: 0.9rem; color: var(--accent); }
+.dl { min-height: 100vh; background: var(--bg); }
+.dl-hero { background: radial-gradient(1200px 500px at 85% -10%, #1f4f8f 0%, transparent 60%), linear-gradient(160deg, #0c2140 0%, #081830 100%);
+  color: #fff; padding: 56px 24px 72px; }
+.dl-hero-inner { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 56px; align-items: center; }
+.dl-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; }
+.dl-wordmark { height: 26px; width: auto; }
+.dl-copy h1 { font-size: clamp(2rem, 4vw, 3rem); line-height: 1.08; letter-spacing: -0.02em; margin: 0; }
+.dl-copy p { margin: 0; font-size: 1.08rem; color: #b8c8e4; max-width: 46ch; line-height: 1.6; }
+.dl-button { display: inline-flex; align-items: center; gap: 10px; margin-top: 8px; padding: 15px 26px; border-radius: 12px;
+  background: #2f6fed; color: #fff; font-weight: 700; font-size: 1.05rem; text-decoration: none;
+  box-shadow: 0 12px 30px -10px rgba(47, 111, 237, .8); transition: transform .12s ease, background .12s ease; }
+.dl-button:hover { background: #3b7bff; transform: translateY(-1px); }
+.dl-meta { color: #8ea3c6; font-size: 0.85rem; }
+
+/* decorative app window */
+.dl-mock { border-radius: 14px; overflow: hidden; background: #f4f7fc; box-shadow: 0 40px 80px -30px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08);
+  transform: perspective(1400px) rotateY(-8deg) rotateX(3deg); }
+.dl-mock-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: #e6ebf3; color: #5c6c8a; font-size: 12px; }
+.dl-mock-bar i { width: 10px; height: 10px; border-radius: 50%; background: #c7d0de; }
+.dl-mock-bar span { margin-left: 8px; }
+.dl-mock-body { display: grid; grid-template-columns: 74px 1fr; height: 300px; }
+.dl-mock-side { background: #0d2a52; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 14px 10px; }
+.dl-mock-side img { width: 30px; height: 30px; margin-bottom: 6px; }
+.dl-mock-side b { width: 100%; height: 8px; border-radius: 4px; background: rgba(255,255,255,.14); }
+.dl-mock-side b:nth-of-type(2) { background: #2f6fed; }
+.dl-mock-main { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.dl-mock-hero { position: relative; background: #0c2140; border-radius: 10px; height: 104px; padding: 14px; overflow: hidden; }
+.dl-mock-hero b { display: block; width: 46%; height: 9px; border-radius: 4px; background: rgba(255,255,255,.3); }
+.dl-mock-hero em { display: block; width: 34%; height: 18px; border-radius: 5px; background: #fff; margin-top: 10px; }
+.dl-mock-spark { position: absolute; right: 14px; bottom: 12px; width: 44%; height: 58px; display: flex; align-items: flex-end; gap: 4px; }
+.dl-mock-spark s { flex: 1; background: #5aa2ff; border-radius: 2px 2px 0 0; opacity: .85; }
+.dl-mock-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.dl-mock-cards span { height: 46px; border-radius: 8px; background: #fff; border: 1px solid #dbe3f0; }
+.dl-mock-rows { display: flex; flex-direction: column; gap: 8px; background: #fff; border: 1px solid #dbe3f0; border-radius: 8px; padding: 10px; }
+.dl-mock-rows p { margin: 0; height: 8px; border-radius: 4px; background: #e6ebf3; }
+.dl-mock-rows p:nth-child(2) { width: 82%; }
+.dl-mock-rows p:nth-child(3) { width: 64%; }
+
+.dl-content { max-width: 1120px; margin: -36px auto 0; padding: 0 24px 56px; display: flex; flex-direction: column; gap: 28px; }
+.dl-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.dl-features article { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; box-shadow: var(--shadow); }
+.dl-features h2 { font-size: 1rem; margin: 0 0 6px; color: var(--ink); }
+.dl-features p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.55; }
+.dl-steps { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px 26px; }
+.dl-steps h2 { font-size: 1.1rem; margin: 0 0 14px; }
+.dl-steps ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: step; }
+.dl-steps li { counter-increment: step; display: flex; gap: 12px; align-items: flex-start; font-size: 0.95rem; color: var(--ink); line-height: 1.5; }
+.dl-steps li::before { content: counter(step); flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent-light); color: var(--accent-strong); font-weight: 700; }
+.dl-note { margin-top: 18px; display: flex; flex-direction: column; gap: 3px; padding: 12px 16px; border-radius: 10px;
+  background: var(--amber-light); color: var(--amber); font-size: 0.9rem; }
+.dl-footer { text-align: center; }
+.dl-footer a { color: var(--accent); font-weight: 600; }
+@media (max-width: 860px) {
+  .dl-hero { padding: 36px 16px 64px; }
+  .dl-hero-inner { grid-template-columns: 1fr; gap: 36px; }
+  .dl-mock { transform: none; }
+  .dl-mock-body { height: 230px; }
+  .dl-content { padding: 0 16px 40px; }
+  .dl-features, .dl-steps ol { grid-template-columns: 1fr; }
+}
