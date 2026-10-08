@@ -35,7 +35,7 @@ with TestClient(app) as c:
                                                            "color_ids": [color]}).json()["id"]
 
     with SessionLocal() as db:  # straight to the DB: the API would geocode each city over the network
-        rows = [("Loja 1", "Rio do Sul", "SC", ana["id"]), ("Loja 2", " Rio do Sul ", "sc", ana["id"]),
+        rows = [("Loja 1", "Rio do Sul", "SC", ana["id"]), ("Loja 2", " Rio  do Súl ", "sc", ana["id"]),
                 ("Loja 3", "Rio do Sul", "SC", bruno["id"]), ("Loja 4", "Curitiba", "PR", bruno["id"]),
                 ("Loja 5", "Blumenau", "SC", ana["id"]), ("Sem cidade", None, None, ana["id"])]
         objs = [Customer(name=n, document="1", city=ci, state=uf, owner_id=o, lat=-27.2 if ci else None,
@@ -65,7 +65,7 @@ with TestClient(app) as c:
         return {f"{x['city']}/{x['state']}": x for x in r.json()}
 
     m30 = cities(days=30)
-    rs = m30["Rio do Sul/SC"]  # " Rio do Sul "/"sc" grouped with "Rio do Sul"/"SC"
+    rs = m30["Rio do Sul/SC"]  # " Rio  do Súl "/"sc" (accent, spaces, case) grouped with "Rio do Sul"/"SC"
     assert (rs["registered"], rs["active"], rs["orders"], rs["revenue"]) == (3, 1, 2, 1200.0), rs
     assert rs["average_ticket"] == 600.0 and rs["last_order_date"] == (TODAY - timedelta(days=5)).isoformat()
     assert rs["lat"] == -27.2

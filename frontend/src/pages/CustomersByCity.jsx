@@ -47,11 +47,16 @@ export default function CustomersByCity() {
   const [selected, setSelected] = useState(null); // "city/UF"
   const [error, setError] = useState("");
 
-  useEffect(() => { api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller"))); }, []);
   useEffect(() => {
-    api.get("/customers/by-city", { params: { days, ...(ownerId ? { owner_id: ownerId } : {}) } })
-      .then((r) => { setRows(r.data); setError(""); setSelected(null); })
+    api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller")))
       .catch((e) => setError(errorMessage(e)));
+  }, []);
+  useEffect(() => {
+    let current = true; // switching filters quickly: ignore a slower, older response
+    api.get("/customers/by-city", { params: { days, ...(ownerId ? { owner_id: ownerId } : {}) } })
+      .then((r) => { if (current) { setRows(r.data); setError(""); setSelected(null); } })
+      .catch((e) => { if (current) setError(errorMessage(e)); });
+    return () => { current = false; };
   }, [days, ownerId]);
 
   const cities = useMemo(() => rows.map((r) => ({ ...r, key: `${r.city}/${r.state}` }))
@@ -83,7 +88,8 @@ export default function CustomersByCity() {
           <span>Período</span>
           <div className="segmented" role="group" aria-label="Período">
             {PERIODS.map(([d, label]) => (
-              <button key={d} type="button" className={days === d ? "on" : ""} onClick={() => setDays(d)}>{label}</button>
+              <button key={d} type="button" className={days === d ? "on" : ""} aria-pressed={days === d}
+                onClick={() => setDays(d)}>{label}</button>
             ))}
           </div>
         </div>
@@ -143,7 +149,7 @@ export default function CustomersByCity() {
                     </div>
                     <span className="city-rank-bar"><span style={{ width: `${(c.revenue / maxRevenue) * 100}%` }} /></span>
                     <div className="city-rank-sub">
-                      <span>{c.active} ativo{c.active === 1 ? "" : "s"} · {c.registered} cadastrado{c.registered === 1 ? "" : "s"}</span>
+                      <span>{plural(c.active, "ativo", "ativos")} · {plural(c.registered, "cadastrado", "cadastrados")}</span>
                       <span>{ago == null ? "Sem pedidos" : ago === 0 ? "Último pedido hoje" : `Último pedido há ${plural(ago, "dia", "dias")}`}</span>
                     </div>
                     {c.lat == null && <small className="muted">Fora do mapa (endereço não localizado)</small>}

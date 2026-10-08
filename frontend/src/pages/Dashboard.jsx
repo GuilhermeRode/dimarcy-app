@@ -120,7 +120,7 @@ function Bars({ items, label, value, detail }) {
 const TOP_COLORS = 8;
 function ColorRanking({ colors, totalPieces }) {
   if (!colors.length || !totalPieces) return <Empty />;
-  const top = [...colors].sort((a, b) => b.pieces - a.pieces).slice(0, TOP_COLORS);
+  const top = colors.slice(0, TOP_COLORS); // the API sends every color, already ranked by pieces
   const others = totalPieces - top.reduce((t, c) => t + c.pieces, 0);
   const rows = others > 0 ? [...top, { name: "Outras cores", hex: null, pieces: others }] : top;
   const max = Math.max(...rows.map((c) => c.pieces), 1);
@@ -227,7 +227,7 @@ export default function Dashboard() {
             </div>
             <div className="panel">
               <h3>Produtos mais vendidos</h3>
-              <Bars items={[...d.top_products].sort((a, b) => b.pieces - a.pieces).slice(0, 5)} label={(i) => `${i.reference} · ${i.description}`}
+              <Bars items={d.top_products.slice(0, 5)} label={(i) => `${i.reference} · ${i.description}`}
                 value={(i) => i.pieces} detail={(i) => `${i.pieces} pç`} />
             </div>
           </section>

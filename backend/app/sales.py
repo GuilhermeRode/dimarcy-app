@@ -3,6 +3,7 @@ number on the Painel always matches the list it links to.
 
 Seller visibility (same rule as /orders): a seller counts only orders they sold
 (seller_id) and sees only customers they own (owner_id). Admins see everything."""
+import unicodedata
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 
@@ -30,6 +31,12 @@ def visible_customers(db: Session, user: User) -> list[Customer]:
     return q.order_by(Customer.name).all()
 
 
+def _city_key(city: str) -> str:
+    """City is free text: "Jaraguá do Sul", "jaragua  do sul " must land on the same bubble."""
+    plain = unicodedata.normalize("NFD", city).encode("ascii", "ignore").decode()
+    return " ".join(plain.lower().split())
+
+
 def customers_by_city(db: Session, today: date, days: int, owner_id: int | None = None) -> list[dict]:
     """Per-city portfolio for the map (admin): registered customers, customers active in the last
     `days` days (at least one sale), revenue/orders/average ticket in that window, last sale ever.
@@ -48,8 +55,8 @@ def customers_by_city(db: Session, today: date, days: int, owner_id: int | None 
 
     cities: dict[tuple[str, str], dict] = {}
     for c in customers:
-        city, state = c.city.strip(), (c.state or "").strip().upper()
-        g = cities.setdefault((city.lower(), state), {
+        city, state = " ".join(c.city.split()), (c.state or "").strip().upper()
+        g = cities.setdefault((_city_key(city), state), {
             "city": city, "state": state, "lat": None, "lng": None, "registered": 0, "active": 0,
             "orders": 0, "revenue": 0.0, "last_order_date": None})
         g["registered"] += 1

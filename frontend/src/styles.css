@@ -286,9 +286,6 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .city-rank-bar { display: block; height: 3px; background: var(--surface-2); border-radius: 2px; }
 .city-rank-bar span { display: block; height: 100%; background: #0c2140; border-radius: 2px; }
 .city-rank-sub { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); }
-.ranking li { cursor: pointer; border-radius: 8px; padding: 4px 6px; margin: 0 -6px; transition: background .12s ease; }
-.ranking li:hover { background: var(--surface-2); }
-.ranking li.ranking-selected { background: var(--accent-light); }
 .kpi {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; box-shadow: var(--shadow);
@@ -325,19 +322,6 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 
 .dashboard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: stretch; }
 .panel-wide { grid-column: span 2; }
-.ranking { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.ranking-row { display: flex; justify-content: space-between; gap: 8px; font-size: 0.92rem; align-items: center; }
-.ranking-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ranking-rank {
-  width: 21px; height: 21px; border-radius: 50%; background: var(--accent-light); color: var(--accent-strong);
-  font-size: 0.72rem; font-weight: 700; display: grid; place-items: center; flex-shrink: 0;
-}
-.ranking-rank.gold { background: var(--gold-light); color: var(--gold); }
-.ranking-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ranking-value { font-variant-numeric: tabular-nums; font-weight: 600; flex-shrink: 0; }
-.ranking-bar { height: 6px; background: #eceff5; border-radius: 3px; margin: 4px 0 2px; overflow: hidden; }
-.ranking-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--teal)); border-radius: 3px; }
-.ranking-detail { font-size: 0.8rem; color: var(--muted); margin-left: 29px; }
 
 .donut-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
 .donut-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; max-width: 200px; }
@@ -517,7 +501,6 @@ section.item-group { margin-top: 0; }
   .orders-kpis { grid-template-columns: repeat(2, 1fr); }
   .revenue-charts { grid-template-columns: 1fr; }
   .city-map-layout { grid-template-columns: 1fr; }
-  .city-map-canvas { height: 440px; }
   .city-rank { height: auto; max-height: 520px; }
   /* Narrow screens: the legend moves below the map instead of covering it. */
   .city-map-canvas { height: auto; }
@@ -683,7 +666,6 @@ section.item-group { margin-top: 0; }
 .pill-select select { border: 0; background: transparent; padding: 0 2px; width: auto; max-width: 106px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .pill-select.on { background: var(--accent-light); border-color: #bcd2fb; }
 .pill-select.on select, .pill-select.on > span { color: var(--accent-strong); }
-.pill-sort { margin-left: 0; } /* stays with the other filters, even on wide screens */
 .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 600px) {
   .header-actions { width: 100%; }
@@ -695,7 +677,7 @@ section.item-group { margin-top: 0; }
   .filters-search { grid-column: 1 / -1; }
   .pill-select { width: 100%; min-width: 0; }
   .pill-select select { flex: 1; min-width: 0; max-width: none; }
-  .pill-sort { grid-column: 1 / -1; margin-left: 0; }
+  .pill-sort { grid-column: 1 / -1; }
 }
 .filters-chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); }
 .filter-chip { border: 0; background: var(--accent-light); color: var(--accent-strong); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
@@ -835,7 +817,6 @@ section.item-group { margin-top: 0; }
 @media (max-width: 600px) {
   .month-chart { flex-direction: column; }
   .month-card { flex-basis: auto; }
-  .pill-sort { margin-left: 0; }
 }
 .vbars { display: flex; gap: 10px; height: 150px; align-items: flex-end; }
 .vbars > div { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; font-size: 12px; }

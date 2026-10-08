@@ -177,6 +177,20 @@ with TestClient(app) as c:
     assert sa7["goal"] == 7000.0  # the seller gets their own goal, never the company's
     assert [s["name"] for s in sa7["by_seller"]] == ["Ana Vendas"]
 
+    # ---- rankings by pieces, not by value: a cheap best-seller must not be cut ----
+    white = c.post("/api/colors", headers=admin, json={"name": "Branco", "hex": "#ffffff"}).json()
+    cheap = c.post("/api/products", headers=admin, json={
+        "reference": "R2", "description": "Meia", "price": 1, "color_ids": [white["id"]]}).json()
+    r = c.post("/api/orders", headers=seller_a, json={
+        "customer_id": c_active, "date": TODAY.isoformat(), "delivery_date": TODAY.isoformat(), "status": "delivered",
+        "payment_method": "PIX", "payment_terms": "À vista",
+        "items": [{"product_id": cheap["id"], "color_id": white["id"], "size": "P", "quantity": 200}]})
+    assert r.status_code == 201, r.text
+    ranked = c.get("/api/dashboard", headers=admin, params=week).json()
+    assert ranked["top_products"][0]["reference"] == "R2", ranked["top_products"]  # 200 pieces but only R$ 200: last by value, first by pieces
+    assert ranked["by_color"][0]["name"] == "Branco", ranked["by_color"]
+    assert sum(x["pieces"] for x in ranked["by_color"]) == ranked["kpis"]["pieces"]  # every color sent
+
     # ---- every city counts toward the total (Faturamento's "Outras" needs the full list) ----
     from app.database import SessionLocal
     from app.models import Customer

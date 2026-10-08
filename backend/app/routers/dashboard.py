@@ -18,8 +18,8 @@ DAYS_PER_MONTH = 30.4
 SIZE_ORDER = ["U", "PP", "P", "M", "G", "GG", "XG"]
 
 
-def _top(d: dict, n=8):
-    return sorted(d.values(), key=lambda x: x["value"], reverse=True)[:n]
+def _top(d: dict, n=8, by="value"):
+    return sorted(d.values(), key=lambda x: x[by], reverse=True)[:n]
 
 
 def _sales_between(db: Session, user: User, start: date, end: date) -> list[Order]:
@@ -141,11 +141,11 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         "goal": _period_goal(company_goal, days),
         "monthly_sales": [{"month": f"{m:02d}/{str(y)[2:]}", **series[(y, m)]} for y, m in months],
         "by_status": [{"status": s, **v} for s, v in by_status.items()],
-        "top_products": _top(products),
+        "top_products": _top(products, by="pieces"),  # the Painel ranks products by pieces sold
         "top_customers": _top(customers),
         "by_seller": _top(sellers, 50),
         "by_city": _top(cities, len(cities)),  # all of them: Faturamento sums the tail into "Outras"
-        "by_color": _top(colors, 10),
+        "by_color": _top(colors, len(colors), by="pieces"),  # all colors: the Painel pools the tail into "Outras cores"
         "by_size": sorted(
             [{"size": t, "pieces": q} for t, q in sizes.items()],
             key=lambda x: SIZE_ORDER.index(x["size"]) if x["size"] in SIZE_ORDER else 99,
