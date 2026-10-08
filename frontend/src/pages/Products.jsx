@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, fileUrl } from "../api";
 import { money, DEFAULT_SIZES } from "../format";
-import { Field, ErrorBox, Modal, Swatch, EmptyState } from "../components/ui";
+import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom } from "../components/ui";
 
 const EMPTY = { reference: "", description: "", collection: "", price: "", sizes: DEFAULT_SIZES, color_ids: [], active: true, image_url: null };
 
@@ -14,6 +14,7 @@ export default function Products() {
   const [error, setError] = useState("");
   const [newSize, setNewSize] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [zoom, setZoom] = useState(null); // { src, caption } of the photo shown enlarged
 
   const load = () => api.get("/products", { params: { search } }).then((r) => setList(r.data));
   useEffect(() => { api.get("/colors").then((r) => setColors(r.data)); }, []);
@@ -72,7 +73,8 @@ export default function Products() {
               <tr key={p.id} className={`clickable ${p.active ? "" : "inactive"}`} onClick={() => open(p)}>
                 <td>
                   {p.image_url
-                    ? <img className="product-thumb" src={fileUrl(p.image_url)} alt="" />
+                    ? <img className="product-thumb zoomable" src={fileUrl(p.image_url)} alt={`Ampliar foto ${p.reference}`}
+                        onClick={(e) => { e.stopPropagation(); setZoom({ src: fileUrl(p.image_url), caption: `${p.reference} · ${p.description}` }); }} />
                     : <span className="product-thumb product-thumb-empty" aria-hidden="true">🧶</span>}
                 </td>
                 <td className="ref">{p.reference}</td>
@@ -94,7 +96,8 @@ export default function Products() {
               <span>Foto do produto</span>
               <div className="product-image-field">
                 {previewUrl
-                  ? <img className="product-image-preview" src={previewUrl} alt="Pré-visualização" />
+                  ? <img className="product-image-preview zoomable" src={previewUrl} alt="Pré-visualização (clique para ampliar)"
+                      onClick={() => setZoom({ src: previewUrl, caption: form.reference ? `${form.reference} · ${form.description}` : "" })} />
                   : <div className="product-image-preview product-image-empty" aria-hidden="true">🧶</div>}
                 <div className="product-image-actions">
                   <label className="btn btn-light">
@@ -159,6 +162,8 @@ export default function Products() {
           </form>
         </Modal>
       )}
+
+      {zoom && <PhotoZoom {...zoom} onClose={() => setZoom(null)} />}
     </div>
   );
 }
