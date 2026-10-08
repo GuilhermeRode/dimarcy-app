@@ -34,7 +34,6 @@ export default function ClientPrint() {
       <header className="cp-header">
         <div className="cp-brand">
           <img src={logoFull} alt="Di Marcy" className="cp-logo" />
-          <small>pedidos@dimarcy.com.br</small>
         </div>
         <div className="cp-doc">
           <span className="cp-title">Resumo do pedido</span>
