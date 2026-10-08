@@ -257,7 +257,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .segmented button + button { border-left: 1px solid var(--line); }
 .segmented button.on { background: #0c2140; color: #fff; }
 .city-map-layout { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(300px, 1fr); gap: 16px; align-items: stretch; }
-.city-map-canvas { position: relative; height: 640px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.city-map-canvas { position: relative; isolation: isolate; height: 640px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
 .city-map-canvas .leaflet-container { width: 100%; height: 100%; background: #eef0f2; font: inherit; }
 .map-legend { position: absolute; left: 14px; bottom: 14px; z-index: 500; display: flex; flex-direction: column; gap: 6px;
   background: rgba(255,255,255,.96); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 13px; max-width: 340px; }
@@ -519,7 +519,10 @@ section.item-group { margin-top: 0; }
   .city-map-layout { grid-template-columns: 1fr; }
   .city-map-canvas { height: 440px; }
   .city-rank { height: auto; max-height: 520px; }
-  .map-legend { max-width: calc(100% - 28px); }
+  /* Narrow screens: the legend moves below the map instead of covering it. */
+  .city-map-canvas { height: auto; }
+  .city-map-canvas .leaflet-container { height: 380px; }
+  .map-legend { position: static; max-width: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .panel-wide { grid-column: span 1; }
   .board { grid-template-columns: 1fr; }
@@ -661,6 +664,14 @@ section.item-group { margin-top: 0; }
 .pill-select.on { background: var(--accent-light); border-color: #bcd2fb; }
 .pill-select.on select, .pill-select.on > span { color: var(--accent-strong); }
 .pill-sort { margin-left: auto; }
+@media (max-width: 600px) {
+  /* Phones: search on top, filters in an even 2-column grid, sort across the bottom. */
+  .filters-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .filters-search { grid-column: 1 / -1; }
+  .pill-select { width: 100%; min-width: 0; }
+  .pill-select select { flex: 1; min-width: 0; max-width: none; }
+  .pill-sort { grid-column: 1 / -1; margin-left: 0; }
+}
 .filters-chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); }
 .filter-chip { border: 0; background: var(--accent-light); color: var(--accent-strong); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .link-btn { margin-left: auto; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }

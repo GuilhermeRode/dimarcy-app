@@ -7,24 +7,17 @@ import { compactMoney, localDate, money, plural } from "../format";
 import { ErrorBox } from "../components/ui";
 import statesGeo from "../assets/br-states.geo.json";
 
-// Light gray basemap so the colored bubbles stand out (Esri World Light Gray: base + place names).
-const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas";
-const TILE_URL = `${ESRI}/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`;
-const LABELS_URL = `${ESRI}/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}`;
-const TILE_ATTRIBUTION = "Tiles &copy; Esri";
+const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 const PERIODS = [[30, "30 dias"], [90, "90 dias"], [365, "12 meses"]];
-// Average-ticket classes, light to dark (quartiles of the cities with active customers).
+// Average-ticket classes, light to dark: up to R$ 3 mil, 3–5 mil, 5–10 mil, above 10 mil.
 const TICKET_COLORS = ["#c9d3e6", "#8ea0c4", "#4f6491", "#0c2140"];
+const TICKET_CUTS = [3000, 5000, 10000];
+const TICKET_LABELS = ["Até R$ 3 mil", "R$ 3 mil – R$ 5 mil", "R$ 5 mil – R$ 10 mil", "Acima de R$ 10 mil"];
 const brazilBounds = L.geoJSON(statesGeo).getBounds();
 
-function quartiles(values) {
-  const v = [...values].sort((a, b) => a - b);
-  if (!v.length) return [];
-  const at = (p) => v[Math.min(v.length - 1, Math.floor(p * v.length))];
-  return [at(0.25), at(0.5), at(0.75)];
-}
-const ticketClass = (ticket, cuts) => cuts.filter((c) => ticket > c).length;
+const ticketClass = (ticket) => TICKET_CUTS.filter((c) => ticket > c).length;
 
 function daysAgo(iso) {
   if (!iso) return null;
@@ -36,9 +29,12 @@ function FitTo({ points, focus }) {
   useEffect(() => {
     if (focus) { map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), 9)); return; }
     const pts = points.filter((p) => p.lat != null);
+    if (!pts.length) return; // the map already opens on Brazil
+    // Not animated: Leaflet drops a new view requested while a zoom animation is still running.
     // Extra bottom padding keeps bubbles out from under the legend (bottom-left corner).
-    map.fitBounds(pts.length ? L.latLngBounds(pts.map((p) => [p.lat, p.lng])) : brazilBounds,
-      { paddingTopLeft: [40, 40], paddingBottomRight: [40, 270], maxZoom: 9 });
+    const legendOverMap = map.getSize().y > 500; // on narrow screens the legend sits below the map
+    map.fitBounds(L.latLngBounds(pts.map((p) => [p.lat, p.lng])),
+      { paddingTopLeft: [40, 40], paddingBottomRight: [40, legendOverMap ? 270 : 40], maxZoom: 9, animate: false });
   }, [points, focus, map]);
   return null;
 }
@@ -60,17 +56,12 @@ export default function CustomersByCity() {
 
   const cities = useMemo(() => rows.map((r) => ({ ...r, key: `${r.city}/${r.state}` }))
     .sort((a, b) => b.active - a.active || (b.last_order_date || "").localeCompare(a.last_order_date || "")), [rows]);
-  const cuts = useMemo(() => quartiles(cities.filter((c) => c.active).map((c) => c.average_ticket)), [cities]);
   const maxActive = Math.max(1, ...cities.map((c) => c.active));
   const maxRevenue = Math.max(1, ...cities.map((c) => c.revenue));
   const totals = cities.reduce((t, c) => ({ active: t.active + c.active, registered: t.registered + c.registered }), { active: 0, registered: 0 });
   const radius = (c) => (c.active ? 7 + (Math.sqrt(c.active) / Math.sqrt(maxActive)) * 17 : 6);
-  const color = (c) => (c.active ? TICKET_COLORS[ticketClass(c.average_ticket, cuts)] : "#ffffff");
+  const color = (c) => (c.active ? TICKET_COLORS[ticketClass(c.average_ticket)] : "#ffffff");
   const focus = cities.find((c) => c.key === selected && c.lat != null) || null;
-  const legend = cuts.length ? [
-    `Até ${compactMoney(cuts[0])}`, `${compactMoney(cuts[0])} – ${compactMoney(cuts[1])}`,
-    `${compactMoney(cuts[1])} – ${compactMoney(cuts[2])}`, `Acima de ${compactMoney(cuts[2])}`,
-  ] : [];
 
   return (
     <div className="page page-wide">
@@ -102,9 +93,9 @@ export default function CustomersByCity() {
 
       <div className="city-map-layout">
         <section className="city-map-canvas">
-          <MapContainer bounds={brazilBounds} zoomControl={false} scrollWheelZoom style={{ width: "100%", height: "100%" }}>
-            <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} maxZoom={16} />
-            <TileLayer url={LABELS_URL} maxZoom={16} />
+          {/* Size comes from CSS (.city-map-canvas .leaflet-container), so phones can override it. */}
+          <MapContainer bounds={brazilBounds} zoomControl={false} scrollWheelZoom>
+            <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} />
             <ZoomControl position="topleft" />
             <FitTo points={cities} focus={focus} />
             {cities.filter((c) => c.lat != null).map((c) => (
@@ -124,7 +115,7 @@ export default function CustomersByCity() {
 
           <div className="map-legend">
             <strong>Ticket médio por cidade</strong>
-            {legend.map((label, i) => (
+            {TICKET_LABELS.map((label, i) => (
               <span key={i}><i style={{ background: TICKET_COLORS[i] }} />{label}</span>
             ))}
             <small>Cor = ticket médio · Tamanho = nº de clientes ativos</small>
