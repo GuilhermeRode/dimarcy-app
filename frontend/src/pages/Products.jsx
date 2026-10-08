@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, fileUrl } from "../api";
 import { money, DEFAULT_SIZES } from "../format";
-import { Field, ErrorBox, Modal, Swatch, EmptyState } from "../components/ui";
+import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom } from "../components/ui";
 
 const EMPTY = { reference: "", description: "", collection: "", price: "", sizes: DEFAULT_SIZES, color_ids: [], active: true, image_url: null };
 
@@ -15,13 +15,6 @@ export default function Products() {
   const [newSize, setNewSize] = useState("");
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // { src, caption } of the photo shown enlarged
-
-  useEffect(() => {
-    if (!zoom) return;
-    const onKey = (e) => e.key === "Escape" && setZoom(null);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [zoom]);
 
   const load = () => api.get("/products", { params: { search } }).then((r) => setList(r.data));
   useEffect(() => { api.get("/colors").then((r) => setColors(r.data)); }, []);
@@ -170,13 +163,7 @@ export default function Products() {
         </Modal>
       )}
 
-      {zoom && (
-        <div className="photo-zoom" role="dialog" aria-label="Foto ampliada" onClick={() => setZoom(null)}>
-          <button className="photo-zoom-close" aria-label="Fechar">×</button>
-          <img src={zoom.src} alt={zoom.caption} />
-          {zoom.caption && <p>{zoom.caption}</p>}
-        </div>
-      )}
+      {zoom && <PhotoZoom {...zoom} onClose={() => setZoom(null)} />}
     </div>
   );
 }

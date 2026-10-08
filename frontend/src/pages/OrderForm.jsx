@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api, errorMessage } from "../api";
+import { api, errorMessage, fileUrl } from "../api";
 import { useAuth } from "../auth";
 import { localDate, money, orderNumber } from "../format";
-import { Field, ErrorBox, Modal, Swatch } from "../components/ui";
+import { Field, ErrorBox, Modal, Swatch, PhotoZoom } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
 
 const key = (i) => `${i.color_id}|${i.size}`;
@@ -17,6 +17,7 @@ const PAYMENT_TERMS = ["À vista", "30/60", "30/60/90", "30/60/90/120", "30/60/9
 function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, onCancel }) {
   const [qty, setQty] = useState(() => Object.fromEntries(initial.map((i) => [key(i), i.quantity])));
   const [price, setPrice] = useState(initialPrice ?? product.price);
+  const [zoom, setZoom] = useState(false);
 
   const totalPieces = Object.values(qty).reduce((s, v) => s + (Number(v) || 0), 0);
   const set = (k, v) => setQty((q) => ({ ...q, [k]: v.replace(/\D/g, "") }));
@@ -41,9 +42,16 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, on
   return (
     <div className="qty-grid">
       <div className="qty-grid-header">
-        <div>
-          <span className="ref">{product.reference}</span> {product.description}
+        <div className="qty-grid-product">
+          {product.image_url && (
+            <button type="button" className="qty-grid-photo" onClick={() => setZoom(true)} aria-label="Ampliar foto">
+              <img src={fileUrl(product.image_url)} alt="" />
+            </button>
+          )}
+          <div><span className="ref">{product.reference}</span> {product.description}</div>
         </div>
+        {zoom && <PhotoZoom src={fileUrl(product.image_url)} caption={`${product.reference} · ${product.description}`}
+          onClose={() => setZoom(false)} />}
         <label className="qty-grid-price">
           Preço unitário
           {canEditPrice
@@ -256,6 +264,7 @@ export default function OrderForm() {
     for (const i of items) (g[i.product_id] ||= []).push(i);
     return g;
   }, [items]);
+  const photoOf = (pid) => products.find((p) => p.id === Number(pid))?.image_url;
 
   const gross = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
   const pieces = items.reduce((s, i) => s + i.quantity, 0);
@@ -371,8 +380,11 @@ export default function OrderForm() {
           return (
             <div key={pid} className="item-group">
               <div className="item-group-header">
-                <div><span className="ref">{lines[0].product_reference}</span> {lines[0].product_description}
+                <div className="item-group-product">
+                  {photoOf(pid) && <img className="product-thumb" src={fileUrl(photoOf(pid))} alt="" />}
+                  <div><span className="ref">{lines[0].product_reference}</span> {lines[0].product_description}
                   <span className="muted"> · {money(lines[0].unit_price)} un.</span></div>
+                </div>
                 <div className="actions">
                   <button type="button" className="btn btn-light" onClick={() => openExistingGrid(Number(pid))}>Editar grade</button>
                   <button type="button" className="btn btn-light danger"
@@ -437,16 +449,21 @@ export default function OrderForm() {
                   return (
                     <button key={p.id} type="button" className={`product-card ${added ? "added" : ""}`}
                       onClick={() => setEditing(p)}>
-                      <div className="product-card-header">
-                        <span className="ref">{p.reference}</span>
-                        <span className="product-card-price">{money(p.price)}</span>
-                      </div>
-                      <div className="product-card-desc">{p.description}</div>
-                      <div className="product-card-footer">
-                        <span className="product-card-colors">
-                          {p.colors.slice(0, 6).map((c) => <Swatch key={c.id} hex={c.hex} size={13} />)}
-                        </span>
-                        {added ? <span className="tag">no pedido</span> : p.collection ? <span className="muted">{p.collection}</span> : null}
+                      {p.image_url
+                        ? <img className="product-card-photo" src={fileUrl(p.image_url)} alt="" loading="lazy" />
+                        : <span className="product-card-photo product-thumb-empty" aria-hidden="true">🧶</span>}
+                      <div className="product-card-info">
+                        <div className="product-card-header">
+                          <span className="ref">{p.reference}</span>
+                          <span className="product-card-price">{money(p.price)}</span>
+                        </div>
+                        <div className="product-card-desc">{p.description}</div>
+                        <div className="product-card-footer">
+                          <span className="product-card-colors">
+                            {p.colors.slice(0, 6).map((c) => <Swatch key={c.id} hex={c.hex} size={13} />)}
+                          </span>
+                          {added ? <span className="tag">no pedido</span> : p.collection ? <span className="muted">{p.collection}</span> : null}
+                        </div>
                       </div>
                     </button>
                   );

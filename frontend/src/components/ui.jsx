@@ -1,5 +1,22 @@
+import { useEffect } from "react";
 import { STATUS } from "../format";
 import { fileUrl } from "../api";
+
+// A product photo shown full screen; click anywhere, × or Esc closes it. Renders above modals.
+export function PhotoZoom({ src, caption, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="photo-zoom" role="dialog" aria-label="Foto ampliada" onClick={onClose}>
+      <button className="photo-zoom-close" aria-label="Fechar">×</button>
+      <img src={src} alt={caption || ""} />
+      {caption && <p>{caption}</p>}
+    </div>
+  );
+}
 
 export function Modal({ title, onClose, children, wide }) {
   return (
