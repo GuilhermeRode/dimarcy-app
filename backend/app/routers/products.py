@@ -114,5 +114,8 @@ def delete(pid: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Product not found.")
     if db.query(OrderItem).filter(OrderItem.product_id == pid).first():
         raise HTTPException(400, "This product is already used in orders. Deactivate it instead of deleting.")
+    image = UPLOAD_DIR / Path(p.image_url).name if p.image_url else None
     db.delete(p)
     db.commit()
+    if image:  # the photo file would otherwise be left orphaned in uploads/
+        image.unlink(missing_ok=True)
