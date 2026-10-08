@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "app:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && cross-env ELECTRON_DEV=1 electron .\"",
-    "app:dist": "vite build && electron-builder --win",
+    "app:dist": "electron-builder --win",
     "cap:sync:dev": "cp capacitor.config.dev.ts capacitor.config.ts && npx cap sync android",
     "build:capacitor": "cross-env VITE_EXCLUDE_MAP=1 vite build",
     "cap:sync:prod": "git checkout capacitor.config.ts && npm run build:capacitor && npx cap sync android"
@@ -26,18 +26,20 @@
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
     "@vitejs/plugin-react": "^4.3.4",
-    "concurrently": "^9.1.0",
+    "concurrently": "^10.0.5",
     "cross-env": "^7.0.3",
-    "electron": "^33.2.1",
-    "electron-builder": "^25.1.8",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "vite": "^6.0.5",
     "wait-on": "^8.0.1"
+  },
+  "overrides": {
+    "shell-quote": "^1.11.0"
   },
   "build": {
     "appId": "br.com.dimarcy.pedidos",
     "productName": "Di Marcy Pedidos",
     "files": [
-      "dist/**",
       "electron/**"
     ],
     "win": {
