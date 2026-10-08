@@ -1,0 +1,40 @@
+name: Desktop
+
+# Builds the Windows installer and publishes it as the latest GitHub Release, so
+# https://github.com/GuilhermeRode/dimarcy-app/releases/latest/download/Di-Marcy-Pedidos-Setup.exe
+# (linked from app.dimarcy.com.br/download) always serves the newest one. Run it by hand from
+# the Actions tab; only needed when frontend/electron or the Electron version changes — the app
+# itself loads app.dimarcy.com.br, so regular deploys don't need a new installer.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write  # create the release
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build installer
+        working-directory: frontend
+        run: |
+          npm ci
+          npx electron-builder --win --publish never
+
+      - name: Publish release
+        working-directory: frontend
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="desktop-${{ github.run_number }}"
+          gh release create "$tag" dist/Di-Marcy-Pedidos-Setup.exe \
+            --title "Di Marcy Pedidos para Windows (${tag})" \
+            --notes "Instalador do app de desktop. Página de download: https://app.dimarcy.com.br/download" \
+            --latest

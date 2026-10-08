@@ -39,6 +39,7 @@
   "build": {
     "appId": "br.com.dimarcy.pedidos",
     "productName": "Di Marcy Pedidos",
+    "artifactName": "Di-Marcy-Pedidos-Setup.${ext}",
     "files": [
       "electron/**"
     ],
