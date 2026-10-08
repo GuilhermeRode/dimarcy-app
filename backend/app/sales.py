@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from datetime import date, timedelta
 
 from sqlalchemy import and_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from .models import LATE_STATUSES, SALE_STATUSES, Customer, Order, User, customer_status
 
@@ -18,7 +18,8 @@ def late_filter(today: date):
 
 
 def visible_orders(db: Session, user: User):
-    q = db.query(Order)
+    # customer and seller in one batch each, not one query per order (every list shows their names)
+    q = db.query(Order).options(selectinload(Order.customer), selectinload(Order.seller))
     if user.role != "admin":
         q = q.filter(Order.seller_id == user.id)
     return q
