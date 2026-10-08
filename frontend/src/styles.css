@@ -184,7 +184,8 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .chip-input { width: 80px; border-radius: 999px; padding: 4px 10px; }
 
 /* ---------- modal ---------- */
-.modal-backdrop { position: fixed; inset: 0; background: rgba(9, 20, 41, .5); display: grid; place-items: center; z-index: 10; padding: 20px; }
+/* Modals sit above every other layer (phone drawer 20, full-screen customer panel 50, …). */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(9, 20, 41, .5); display: grid; place-items: center; z-index: 100; padding: 20px; }
 .modal { background: var(--surface); color: var(--ink); border-radius: 12px; padding: 22px; width: min(460px, 100%); max-height: 90vh; overflow: auto; box-shadow: 0 30px 60px -20px rgba(9,20,41,.4); }
 .modal-wide { width: min(720px, 100%); }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; }
