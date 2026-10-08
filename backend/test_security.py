@@ -47,6 +47,13 @@ with TestClient(app) as c:
     assert c.post(f"/api/products/{pid}/image", headers=admin,
                   files={"file": ("x.jpg", b"<script>alert(1)</script>", "image/jpeg")}).status_code == 400
 
+    # deleting a product also deletes its photo file (no orphans left in uploads/)
+    tmp = c.post("/api/products", headers=admin, json={**product, "reference": "R-del"}).json()["id"]
+    tmp_url = c.post(f"/api/products/{tmp}/image", headers=admin, files={"file": ("x.jpg", JPEG, "image/jpeg")}).json()["image_url"]
+    assert c.get(tmp_url).status_code == 200
+    assert c.delete(f"/api/products/{tmp}", headers=admin).status_code == 204
+    assert c.get(tmp_url).status_code == 404
+
     # oversized body rejected, with and without Content-Length
     big = b"x" * (MAX_BODY_BYTES + 1)
     assert c.post("/api/auth/login", content=big, headers={"Content-Type": "application/json"}).status_code == 413

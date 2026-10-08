@@ -3,6 +3,9 @@ import { api, errorMessage, fileUrl } from "../api";
 import { money, DEFAULT_SIZES } from "../format";
 import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom } from "../components/ui";
 
+// The image file in a drag-and-drop, or null (e.g. a dragged link or text)
+const droppedImage = (e) => [...(e.dataTransfer?.files || [])].find((f) => f.type.startsWith("image/")) || null;
+
 const EMPTY = { reference: "", description: "", collection: "", price: "", sizes: DEFAULT_SIZES, color_ids: [], active: true, image_url: null };
 
 export default function Products() {
@@ -15,9 +18,19 @@ export default function Products() {
   const [newSize, setNewSize] = useState("");
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // { src, caption } of the photo shown enlarged
+  const [dropTarget, setDropTarget] = useState(null); // product id (or "form") a photo is being dragged over
+  const [sendingId, setSendingId] = useState(null); // product whose dropped photo is uploading
+  const [listError, setListError] = useState("");
 
   const load = () => api.get("/products", { params: { search } }).then((r) => setList(r.data));
   useEffect(() => { api.get("/colors").then((r) => setColors(r.data)); }, []);
+  // A photo dropped outside a drop area would make the browser (and the desktop app) navigate to the file
+  useEffect(() => {
+    const block = (e) => e.preventDefault();
+    window.addEventListener("dragover", block);
+    window.addEventListener("drop", block);
+    return () => { window.removeEventListener("dragover", block); window.removeEventListener("drop", block); };
+  }, []);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);
 
   function open(p) {
@@ -47,6 +60,28 @@ export default function Products() {
     } catch (err) { setError(errorMessage(err)); } finally { setUploading(false); }
   }
 
+  // Dropping a photo on a row in the list uploads it straight away (replacing the current one)
+  async function dropOnRow(e, p) {
+    e.preventDefault();
+    setDropTarget(null);
+    const file = droppedImage(e);
+    if (!file) return setListError("Solte um arquivo de imagem (JPEG, PNG ou WEBP).");
+    setListError("");
+    setSendingId(p.id);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      await api.post(`/products/${p.id}/image`, fd);
+      await load();
+    } catch (err) { setListError(`${p.reference}: ${errorMessage(err)}`); } finally { setSendingId(null); }
+  }
+
+  const dragProps = (target, onDrop) => ({
+    onDragOver: (e) => { e.preventDefault(); if (dropTarget !== target) setDropTarget(target); },
+    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDropTarget(null); },
+    onDrop,
+  });
+
   async function remove() {
     if (!confirm(`Excluir ${form.reference}?`)) return;
     try { await api.delete(`/products/${form.id}`); setForm(null); load(); }
@@ -65,14 +100,19 @@ export default function Products() {
           <button className="btn btn-primary" onClick={() => open(null)}>Cadastrar produto</button>
         </div>
       </header>
+      {list.length > 0 && <p className="muted drop-hint">Dica: arraste uma foto do computador para cima de um produto para adicioná-la.</p>}
+      <ErrorBox msg={listError} />
       {!list.length ? <EmptyState text="Nenhum produto cadastrado." /> : (
         <table className="table">
           <thead><tr><th></th><th>Ref.</th><th>Descrição</th><th>Coleção</th><th>Tamanhos</th><th>Cores</th><th className="num">Preço</th></tr></thead>
           <tbody>
             {list.map((p) => (
-              <tr key={p.id} className={`clickable ${p.active ? "" : "inactive"}`} onClick={() => open(p)}>
+              <tr key={p.id} className={`clickable ${p.active ? "" : "inactive"} ${dropTarget === p.id ? "drop-over" : ""}`}
+                onClick={() => open(p)} {...dragProps(p.id, (e) => dropOnRow(e, p))}>
                 <td>
-                  {p.image_url
+                  {sendingId === p.id
+                    ? <span className="product-thumb product-thumb-empty" aria-label="Enviando foto">⏳</span>
+                    : p.image_url
                     ? <img className="product-thumb zoomable" src={fileUrl(p.image_url)} alt={`Ampliar foto ${p.reference}`}
                         onClick={(e) => { e.stopPropagation(); setZoom({ src: fileUrl(p.image_url), caption: `${p.reference} · ${p.description}` }); }} />
                     : <span className="product-thumb product-thumb-empty" aria-hidden="true">🧶</span>}
@@ -94,12 +134,19 @@ export default function Products() {
           <form onSubmit={save} className="form-grid">
             <div className="field span-2">
               <span>Foto do produto</span>
-              <div className="product-image-field">
+              <div className={`product-image-field ${dropTarget === "form" ? "drop-over" : ""}`}
+                {...dragProps("form", (e) => {
+                  e.preventDefault();
+                  setDropTarget(null);
+                  const file = droppedImage(e);
+                  if (file) setImageFile(file); else setError("Solte um arquivo de imagem (JPEG, PNG ou WEBP).");
+                })}>
                 {previewUrl
                   ? <img className="product-image-preview zoomable" src={previewUrl} alt="Pré-visualização (clique para ampliar)"
                       onClick={() => setZoom({ src: previewUrl, caption: form.reference ? `${form.reference} · ${form.description}` : "" })} />
                   : <div className="product-image-preview product-image-empty" aria-hidden="true">🧶</div>}
                 <div className="product-image-actions">
+                  <span className="muted">Arraste a foto para cá ou</span>
                   <label className="btn btn-light">
                     Escolher arquivo
                     <input type="file" accept="image/*" hidden
