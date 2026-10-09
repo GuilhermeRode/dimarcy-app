@@ -45,7 +45,7 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, on
         <div className="qty-grid-product">
           {product.image_url && (
             <button type="button" className="qty-grid-photo" onClick={() => setZoom(true)} aria-label="Ampliar foto">
-              <img src={fileUrl(product.image_url)} alt="" />
+              <img src={fileUrl(product.thumb_url)} alt="" />
             </button>
           )}
           <div><span className="ref">{product.reference}</span> {product.description}</div>
@@ -264,7 +264,7 @@ export default function OrderForm() {
     for (const i of items) (g[i.product_id] ||= []).push(i);
     return g;
   }, [items]);
-  const photoOf = (pid) => products.find((p) => p.id === Number(pid))?.image_url;
+  const photoOf = (pid) => products.find((p) => p.id === Number(pid))?.thumb_url;
 
   const gross = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
   const pieces = items.reduce((s, i) => s + i.quantity, 0);
@@ -450,7 +450,7 @@ export default function OrderForm() {
                     <button key={p.id} type="button" className={`product-card ${added ? "added" : ""}`}
                       onClick={() => setEditing(p)}>
                       {p.image_url
-                        ? <img className="product-card-photo" src={fileUrl(p.image_url)} alt="" loading="lazy" />
+                        ? <img className="product-card-photo" src={fileUrl(p.thumb_url)} alt="" loading="lazy" />
                         : <span className="product-card-photo product-thumb-empty" aria-hidden="true">🧶</span>}
                       <div className="product-card-info">
                         <div className="product-card-header">

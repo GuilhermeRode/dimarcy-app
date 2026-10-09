@@ -89,7 +89,10 @@ export default function Products() {
   }
 
   const sizeOptions = [...new Set([...DEFAULT_SIZES, "XG", ...(form?.sizes || [])])];
-  const previewUrl = imageFile ? URL.createObjectURL(imageFile) : fileUrl(form?.image_url);
+  // the small version for the preview box; the full-size photo for zoom
+  const fileBlob = imageFile ? URL.createObjectURL(imageFile) : null;
+  const previewUrl = fileBlob || fileUrl(form?.thumb_url);
+  const fullUrl = fileBlob || fileUrl(form?.image_url);
 
   return (
     <div className="page">
@@ -113,7 +116,7 @@ export default function Products() {
                   {sendingId === p.id
                     ? <span className="product-thumb product-thumb-empty" aria-label="Enviando foto">⏳</span>
                     : p.image_url
-                    ? <img className="product-thumb zoomable" src={fileUrl(p.image_url)} alt={`Ampliar foto ${p.reference}`}
+                    ? <img className="product-thumb zoomable" src={fileUrl(p.thumb_url)} alt={`Ampliar foto ${p.reference}`} loading="lazy"
                         onClick={(e) => { e.stopPropagation(); setZoom({ src: fileUrl(p.image_url), caption: `${p.reference} · ${p.description}` }); }} />
                     : <span className="product-thumb product-thumb-empty" aria-hidden="true">🧶</span>}
                 </td>
@@ -143,7 +146,7 @@ export default function Products() {
                 })}>
                 {previewUrl
                   ? <img className="product-image-preview zoomable" src={previewUrl} alt="Pré-visualização (clique para ampliar)"
-                      onClick={() => setZoom({ src: previewUrl, caption: form.reference ? `${form.reference} · ${form.description}` : "" })} />
+                      onClick={() => setZoom({ src: fullUrl, caption: form.reference ? `${form.reference} · ${form.description}` : "" })} />
                   : <div className="product-image-preview product-image-empty" aria-hidden="true">🧶</div>}
                 <div className="product-image-actions">
                   <span className="muted">Arraste a foto para cá ou</span>
