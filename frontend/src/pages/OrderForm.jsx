@@ -69,7 +69,7 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, on
               const rowTotal = product.sizes.reduce((s, t) => s + (Number(qty[`${c.id}|${t}`]) || 0), 0);
               return (
                 <tr key={c.id}>
-                  <td className="qty-grid-color"><Swatch hex={c.hex} size={16} /> {c.name}</td>
+                  <td className="qty-grid-color"><Swatch hex={c.hex} hex2={c.hex2} size={16} /> {c.name}</td>
                   {product.sizes.map((t) => (
                     <td key={t}>
                       <input inputMode="numeric" className="qty-input" value={qty[`${c.id}|${t}`] || ""}
@@ -396,7 +396,7 @@ export default function OrderForm() {
                 <tbody>
                   {colors.map((c) => (
                     <tr key={c.color_id}>
-                      <td><Swatch hex={c.color_hex} /> {c.color_name}</td>
+                      <td><Swatch hex={c.color_hex} hex2={c.color_hex2} /> {c.color_name}</td>
                       {sizes.map((t) => <td key={t} className="num">{q(c.color_id, t) || "–"}</td>)}
                     </tr>
                   ))}
@@ -460,7 +460,7 @@ export default function OrderForm() {
                         <div className="product-card-desc">{p.description}</div>
                         <div className="product-card-footer">
                           <span className="product-card-colors">
-                            {p.colors.slice(0, 6).map((c) => <Swatch key={c.id} hex={c.hex} size={13} />)}
+                            {p.colors.slice(0, 6).map((c) => <Swatch key={c.id} hex={c.hex} hex2={c.hex2} size={13} />)}
                           </span>
                           {added ? <span className="tag">no pedido</span> : p.collection ? <span className="muted">{p.collection}</span> : null}
                         </div>

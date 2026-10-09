@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
     _ensure_columns("users", {"reset_token_hash": "VARCHAR(64)", "reset_token_expires_at": "TIMESTAMP",
                               "monthly_goal": "NUMERIC(12,2)"})
+    _ensure_columns("colors", {"hex2": "VARCHAR(7)"})
     _ensure_columns("app_settings", {"monthly_goal": "NUMERIC(12,2) DEFAULT 0"})
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator

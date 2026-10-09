@@ -89,6 +89,7 @@ class CustomerOut(CustomerIn):
 class ColorIn(ORM):
     name: str = Field(min_length=1)
     hex: str = Field(default="#cccccc", pattern=r"^#[0-9a-fA-F]{6}$")
+    hex2: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
 
 
 class ColorOut(ColorIn):

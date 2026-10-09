@@ -30,7 +30,7 @@ def update(cid: int, data: ColorIn, db: Session = Depends(get_db)):
     c = db.get(Color, cid)
     if not c:
         raise HTTPException(404, "Color not found.")
-    c.name, c.hex = data.name, data.hex
+    c.name, c.hex, c.hex2 = data.name, data.hex, data.hex2
     db.commit()
     db.refresh(c)
     return c

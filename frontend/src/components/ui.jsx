@@ -34,8 +34,11 @@ export function Modal({ title, onClose, children, wide }) {
 
 export const Status = ({ s }) => <span className={`status st-${s}`}>{STATUS[s] || s}</span>;
 
-export const Swatch = ({ hex, size = 14 }) => (
-  <span className="swatch" style={{ background: hex, width: size, height: size }} />
+// Two-color combos (e.g. 09/37) show as a dot split diagonally in both tones
+export const swatchBg = (hex, hex2) => (hex2 ? `linear-gradient(135deg, ${hex} 50%, ${hex2} 50%)` : hex);
+
+export const Swatch = ({ hex, hex2, size = 14 }) => (
+  <span className="swatch" style={{ background: swatchBg(hex, hex2), width: size, height: size }} />
 );
 
 export function Avatar({ url, name, size = "sm" }) {

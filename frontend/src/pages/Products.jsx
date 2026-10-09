@@ -124,7 +124,7 @@ export default function Products() {
                 <td>{p.description}{!p.active && <span className="tag">inativo</span>}</td>
                 <td>{p.collection}</td>
                 <td>{p.sizes.join(" ")}</td>
-                <td><span className="swatches">{p.colors.map((c) => <Swatch key={c.id} hex={c.hex} />)}</span></td>
+                <td><span className="swatches">{p.colors.map((c) => <Swatch key={c.id} hex={c.hex} hex2={c.hex2} />)}</span></td>
                 <td className="num">{money(p.price)}</td>
               </tr>
             ))}
@@ -193,7 +193,7 @@ export default function Products() {
                 <div className="chips">
                   {colors.map((c) => (
                     <button type="button" key={c.id} className={`chip ${form.color_ids.includes(c.id) ? "on" : ""}`} onClick={() => toggle("color_ids", c.id)}>
-                      <Swatch hex={c.hex} /> {c.name}
+                      <Swatch hex={c.hex} hex2={c.hex2} /> {c.name}
                     </button>
                   ))}
                 </div>
