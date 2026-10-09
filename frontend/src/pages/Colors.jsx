@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
-import { Field, ErrorBox, Modal, Swatch, EmptyState } from "../components/ui";
+import { Field, ErrorBox, Modal, Swatch, EmptyState, swatchBg } from "../components/ui";
 
 // Picks readable text (light or dark) for a given background color.
 function textOn(hex) {
@@ -48,10 +48,10 @@ export default function Colors() {
             const uses = usageCount(c.id);
             const fg = textOn(c.hex);
             return (
-              <button key={c.id} className="color-card" style={{ background: c.hex, color: fg }}
+              <button key={c.id} className="color-card" style={{ background: swatchBg(c.hex, c.hex2), color: fg }}
                 onClick={() => { setError(""); setForm(c); }}>
                 <span className="color-card-name">{c.name}</span>
-                <span className="color-card-hex" style={{ color: fg, opacity: .8 }}>{c.hex.toUpperCase()}</span>
+                <span className="color-card-hex" style={{ color: fg, opacity: .8 }}>{c.hex.toUpperCase()}{c.hex2 && ` / ${c.hex2.toUpperCase()}`}</span>
                 <span className="color-card-usage" style={{ color: fg, opacity: .8 }}>
                   {uses ? `${uses} produto${uses > 1 ? "s" : ""}` : "Não usada em produtos"}
                 </span>
@@ -67,10 +67,15 @@ export default function Colors() {
             <Field label="Tom" span={2}>
               <div className="field-row">
                 <input type="color" value={form.hex} onChange={(e) => setForm({ ...form, hex: e.target.value })} />
-                <Swatch hex={form.hex} size={28} />
-                <span className="muted">{form.hex.toUpperCase()}</span>
+                {form.hex2 && <input type="color" value={form.hex2} onChange={(e) => setForm({ ...form, hex2: e.target.value })} />}
+                <Swatch hex={form.hex} hex2={form.hex2} size={28} />
+                <span className="muted">{form.hex.toUpperCase()}{form.hex2 && ` / ${form.hex2.toUpperCase()}`}</span>
               </div>
             </Field>
+            <label className="check span-2">
+              <input type="checkbox" checked={!!form.hex2} onChange={(e) => setForm({ ...form, hex2: e.target.checked ? "#ffffff" : null })} />
+              Duas cores (listrada / bicolor)
+            </label>
             <div className="span-2"><ErrorBox msg={error} /></div>
             <div className="actions span-2">
               {form.id && <button type="button" className="btn danger" onClick={remove}>Excluir</button>}

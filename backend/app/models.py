@@ -77,6 +77,7 @@ class Color(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(60), unique=True)
     hex: Mapped[str] = mapped_column(String(7), default="#cccccc")
+    hex2: Mapped[str | None] = mapped_column(String(7))  # second tone of a two-color combo (e.g. 09/37)
 
 
 class Product(Base):

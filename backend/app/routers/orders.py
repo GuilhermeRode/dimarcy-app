@@ -38,7 +38,7 @@ def full(o: Order) -> dict:
         "id": i.id, "product_id": i.product_id, "color_id": i.color_id, "size": i.size,
         "quantity": i.quantity, "unit_price": float(i.unit_price), "subtotal": i.subtotal,
         "product_reference": i.product.reference, "product_description": i.product.description,
-        "color_name": i.color.name, "color_hex": i.color.hex,
+        "color_name": i.color.name, "color_hex": i.color.hex, "color_hex2": i.color.hex2,
     } for i in sorted(o.items, key=lambda x: (x.product.reference, x.color.name))]
     return d
 

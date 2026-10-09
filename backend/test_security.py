@@ -39,6 +39,12 @@ with TestClient(app) as c:
     assert c.get("/api/users", headers=seller).status_code == 403
     pid = c.post("/api/products", headers=admin, json=product).json()["id"]
 
+    # two-tone colors keep their second tone; a bad one is rejected
+    duo = c.post("/api/colors", headers=admin, json={"name": "09/37", "hex": "#f0f7de", "hex2": "#6b4a32"}).json()
+    assert duo["hex2"] == "#6b4a32"
+    assert c.put(f"/api/colors/{duo['id']}", headers=admin, json={**duo, "hex2": None}).json()["hex2"] is None
+    assert c.post("/api/colors", headers=admin, json={"name": "x", "hex2": "red"}).status_code == 422
+
     # SQL injection in search is just text, not SQL
     r = c.get("/api/products", headers=admin, params={"search": "' OR 1=1 --"})
     assert r.status_code == 200 and r.json() == []

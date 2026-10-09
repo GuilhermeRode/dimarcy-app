@@ -86,7 +86,7 @@ export default function OrderDetail() {
               <tbody>
                 {colors.map((c) => (
                   <tr key={c.color_id}>
-                    <td><Swatch hex={c.color_hex} /> {c.color_name}</td>
+                    <td><Swatch hex={c.color_hex} hex2={c.color_hex2} /> {c.color_name}</td>
                     {sizes.map((t) => <td key={t} className="num">{q(c.color_id, t) || "–"}</td>)}
                     <td className="num">{lines.filter((l) => l.color_id === c.color_id).reduce((s, l) => s + l.quantity, 0)}</td>
                   </tr>
