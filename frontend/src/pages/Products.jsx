@@ -4,7 +4,9 @@ import { money, DEFAULT_SIZES } from "../format";
 import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom } from "../components/ui";
 
 // The image file in a drag-and-drop, or null (e.g. a dragged link or text)
-const droppedImage = (e) => [...(e.dataTransfer?.files || [])].find((f) => f.type.startsWith("image/")) || null;
+// (Windows sometimes gives a dragged .jpg no type, so the extension counts too; the server checks the real bytes)
+const isImage = (f) => f.type.startsWith("image/") || /\.(jpe?g|jfif|png|webp|gif)$/i.test(f.name);
+const droppedImage = (e) => [...(e.dataTransfer?.files || [])].find(isImage) || null;
 
 const EMPTY = { reference: "", description: "", collection: "", price: "", sizes: DEFAULT_SIZES, color_ids: [], active: true, image_url: null };
 
@@ -152,7 +154,7 @@ export default function Products() {
                   <span className="muted">Arraste a foto para cá ou</span>
                   <label className="btn btn-light">
                     Escolher arquivo
-                    <input type="file" accept="image/*" hidden
+                    <input type="file" accept="image/*,.jpg,.jpeg,.jfif,.png,.webp" hidden
                       onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
                   </label>
                   {(imageFile || form.image_url) && (
@@ -187,18 +189,21 @@ export default function Products() {
               </div>
             </div>
 
-            <div className="field span-2">
-              <span>Cores disponíveis</span>
-              {colors.length ? (
-                <div className="chips">
-                  {colors.map((c) => (
-                    <button type="button" key={c.id} className={`chip ${form.color_ids.includes(c.id) ? "on" : ""}`} onClick={() => toggle("color_ids", c.id)}>
-                      <Swatch hex={c.hex} hex2={c.hex2} /> {c.name}
-                    </button>
-                  ))}
+            {!colors.length && <p className="muted span-2">Cadastre as cores primeiro na tela Cores.</p>}
+            {[["Cores disponíveis", colors.filter((c) => !c.hex2)], ["Combinações (listradas / bicolor)", colors.filter((c) => c.hex2)]]
+              .filter(([, group]) => group.length)
+              .map(([label, group]) => (
+                <div className="field span-2" key={label}>
+                  <span>{label}</span>
+                  <div className="chips">
+                    {group.map((c) => (
+                      <button type="button" key={c.id} className={`chip ${form.color_ids.includes(c.id) ? "on" : ""}`} onClick={() => toggle("color_ids", c.id)}>
+                        <Swatch hex={c.hex} hex2={c.hex2} /> {c.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ) : <p className="muted">Cadastre as cores primeiro na tela Cores.</p>}
-            </div>
+              ))}
 
             <label className="check span-2">
               <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
