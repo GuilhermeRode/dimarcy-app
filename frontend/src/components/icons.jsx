@@ -108,3 +108,11 @@ export const EyeOffIcon = (p) => (
     <line x1="2" y1="2" x2="22" y2="22" />
   </svg>
 );
+
+export const WarningIcon = (p) => (
+  <svg viewBox="0 0 24 24" width={p.size || 18} height={p.size || 18} {...base} {...p}>
+    <path d="M10.3 3.9 2.4 17.6A2 2 0 0 0 4.1 20.6h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+    <line x1="12" y1="9.5" x2="12" y2="13.5" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);

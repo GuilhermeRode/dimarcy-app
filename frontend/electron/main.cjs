@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, dialog, shell } = require("electron");
 
 // The desktop app is a window onto the web app: always the deployed version, no reinstall
 // per release, and same-origin API calls (no CORS). Dev mode points at the local Vite server.
@@ -29,6 +29,21 @@ function createWindow() {
   win.loadURL(APP_URL);
   win.webContents.on("did-fail-load", (_e, code, _desc, url, isMainFrame) => {
     if (isMainFrame && code !== -3 && url.startsWith(APP_ORIGIN)) win.loadURL(OFFLINE_PAGE); // -3 = aborted
+  });
+  // The order screen blocks unloading while an order is unsaved (beforeunload). Electron would then
+  // silently refuse to close — ask instead, like the in-app dialog does.
+  win.webContents.on("will-prevent-unload", (e) => {
+    const choice = dialog.showMessageBoxSync(win, {
+      type: "warning",
+      title: "Pedido não salvo",
+      message: "Sair sem salvar o pedido?",
+      detail: "Os produtos e dados preenchidos neste pedido serão perdidos.",
+      buttons: ["Continuar no pedido", "Sair sem salvar"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (choice === 1) e.preventDefault(); // preventDefault here = ignore the page's block and close
   });
   win.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: "deny" }; });
   win.webContents.on("will-navigate", (e, url) => {

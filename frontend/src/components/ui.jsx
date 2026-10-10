@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { STATUS } from "../format";
 import { fileUrl } from "../api";
+import { WarningIcon } from "./icons";
 
 // A product photo shown full screen; click anywhere, × or Esc closes it. Renders above modals.
 export function PhotoZoom({ src, caption, onClose }) {
@@ -42,7 +43,7 @@ export function ConfirmDialog({ title, message, confirmLabel = "Confirmar", canc
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
       <div className="modal confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
-        <div className={`confirm-icon ${danger ? "danger" : ""}`} aria-hidden="true">!</div>
+        <div className={`confirm-icon ${danger ? "danger" : ""}`} aria-hidden="true"><WarningIcon size={26} strokeWidth={2.2} /></div>
         <h2 id="confirm-title">{title}</h2>
         {message && <p className="muted">{message}</p>}
         <div className="confirm-actions">
