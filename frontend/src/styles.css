@@ -47,6 +47,10 @@ input, select, textarea {
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
+/* same height for text fields, dates and selects so form rows line up (mobile date pickers size themselves otherwise) */
+input:not([type="color"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { min-height: 42px; }
+input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; height: 42px; text-align: left; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 input[type="color"] { width: 48px; height: 36px; padding: 2px; }
 input[type="checkbox"] { width: auto; }
 
@@ -188,6 +192,17 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .modal-backdrop { position: fixed; inset: 0; background: rgba(9, 20, 41, .5); display: grid; place-items: center; z-index: 100; padding: 20px; }
 .modal { background: var(--surface); color: var(--ink); border-radius: 12px; padding: 22px; width: min(460px, 100%); max-height: 90vh; overflow: auto; box-shadow: 0 30px 60px -20px rgba(9,20,41,.4); }
 .modal-wide { width: min(720px, 100%); }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn-danger:hover { filter: brightness(.92); border-color: var(--danger); }
+.confirm-dialog { width: min(400px, 100%); text-align: center; padding: 26px 22px 20px; }
+.confirm-dialog h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.confirm-dialog p { margin: 0 0 20px; line-height: 1.45; }
+.confirm-icon { width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 800; font-size: 1.3rem; background: var(--amber-light); color: var(--amber); }
+.confirm-icon.danger { background: var(--danger-light); color: var(--danger); }
+.confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.confirm-actions .btn { padding: 10px 12px; font-weight: 600; white-space: normal; }
+@media (max-width: 420px) { .confirm-actions { grid-template-columns: 1fr; } }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; }
 .btn-x { background: none; border: 0; font-size: 1.6rem; line-height: 1; cursor: pointer; color: var(--muted); }
 .modal-back { background: none; border: 0; cursor: pointer; font: inherit; color: var(--accent-strong); font-weight: 600; padding: 0; display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
@@ -381,7 +396,11 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .qty-grid-table { border-collapse: separate; border-spacing: 4px; }
 .qty-grid-table th { font-size: 0.85rem; color: var(--muted); font-weight: 600; text-align: center; padding: 2px 4px; }
 .qty-grid-table th:first-child { text-align: left; }
-.qty-grid-color { white-space: nowrap; padding-right: 12px; }
+.qty-grid-color { padding-right: 10px; }
+.color-label { display: flex; flex-direction: column; gap: 2px; line-height: 1.15; max-width: 140px; }
+.color-label-code { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.color-label strong { font-variant-numeric: tabular-nums; }
+.color-label small { color: var(--muted); font-size: 0.76rem; }
 .qty-input { width: 58px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; padding: 7px 4px; }
 .qty-input:not(:placeholder-shown) { border-color: var(--accent); background: var(--accent-light); }
 .qty-total { text-align: center; font-weight: 700; min-width: 44px; }
@@ -572,6 +591,8 @@ section.item-group { margin-top: 0; }
   .qty-grid { padding: 10px; }
   .qty-grid-table { border-spacing: 2px; }
   .qty-grid-color { font-size: 0.85rem; }
+  .color-label { max-width: 92px; }
+  .color-label small { font-size: 0.7rem; }
   .qty-input { width: 36px; padding: 6px 2px; }
   .qty-total { min-width: 26px; font-size: 0.9rem; }
   .qty-grid-header { font-size: 0.92rem; }

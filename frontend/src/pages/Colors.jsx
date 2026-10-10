@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
-import { Field, ErrorBox, Modal, Swatch, EmptyState, swatchBg } from "../components/ui";
+import { Field, ErrorBox, Modal, Swatch, EmptyState, swatchBg, useConfirm } from "../components/ui";
 
 // Picks readable text (light or dark) for a given background color.
 function textOn(hex) {
@@ -11,6 +11,7 @@ function textOn(hex) {
 }
 
 export default function Colors() {
+  const [confirmDialog, ask] = useConfirm();
   const [list, setList] = useState([]);
   const [products, setProducts] = useState([]);
   const [form, setForm] = useState(null);
@@ -31,7 +32,7 @@ export default function Colors() {
   }
 
   async function remove() {
-    if (!confirm(`Excluir a cor ${form.name}?`)) return;
+    if (!(await ask({ title: `Excluir a cor ${form.name}?`, message: "Ela deixa de aparecer nos produtos que a usam.", confirmLabel: "Excluir", danger: true }))) return;
     try { await api.delete(`/colors/${form.id}`); setForm(null); load(); }
     catch (err) { setError(errorMessage(err)); }
   }
@@ -84,6 +85,7 @@ export default function Colors() {
           </form>
         </Modal>
       )}
+      {confirmDialog}
     </div>
   );
 }

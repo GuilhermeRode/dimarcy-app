@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { STATUS } from "../format";
 import { fileUrl } from "../api";
 
@@ -30,6 +30,37 @@ export function Modal({ title, onClose, children, wide }) {
       </div>
     </div>
   );
+}
+
+// In-app replacement for window.confirm(): clear title, explanation and labelled buttons
+export function ConfirmDialog({ title, message, confirmLabel = "Confirmar", cancelLabel = "Cancelar", danger, onConfirm, onCancel }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onCancel();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
+      <div className="modal confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+        <div className={`confirm-icon ${danger ? "danger" : ""}`} aria-hidden="true">!</div>
+        <h2 id="confirm-title">{title}</h2>
+        {message && <p className="muted">{message}</p>}
+        <div className="confirm-actions">
+          <button type="button" className="btn btn-light" onClick={onCancel} autoFocus>{cancelLabel}</button>
+          <button type="button" className={`btn ${danger ? "btn-danger" : "btn-primary"}`} onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// const [confirmDialog, ask] = useConfirm();  if (!(await ask({ title, ... }))) return;  ...  render {confirmDialog}
+export function useConfirm() {
+  const [pending, setPending] = useState(null); // { options, resolve }
+  const ask = useCallback((options) => new Promise((resolve) => setPending({ options, resolve })), []);
+  const close = (answer) => { pending.resolve(answer); setPending(null); };
+  const dialog = pending && <ConfirmDialog {...pending.options} onConfirm={() => close(true)} onCancel={() => close(false)} />;
+  return [dialog, ask];
 }
 
 export const Status = ({ s }) => <span className={`status st-${s}`}>{STATUS[s] || s}</span>;
