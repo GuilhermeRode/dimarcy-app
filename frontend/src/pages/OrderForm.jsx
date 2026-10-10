@@ -1,17 +1,29 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useBlocker, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, errorMessage, fileUrl } from "../api";
 import { useAuth } from "../auth";
 import { localDate, money, orderNumber } from "../format";
-import { Field, ErrorBox, Modal, Swatch, PhotoZoom } from "../components/ui";
+import { Field, ErrorBox, Modal, Swatch, PhotoZoom, ConfirmDialog } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
+
+// "09/37 - Nuvem/Marrom Terra" -> the card number stands out, the name goes small underneath,
+// so long two-tone names don't push the size columns off screen
+function ColorLabel({ name, hex, hex2, size }) {
+  const [code, label] = name.includes(" - ") ? name.split(" - ", 2) : [null, name];
+  return (
+    <span className="color-label">
+      <span className="color-label-code"><Swatch hex={hex} hex2={hex2} size={size} />{code && <strong>{code}</strong>}</span>
+      <small>{label.split("/").join(" / ")}</small>
+    </span>
+  );
+}
 
 const key = (i) => `${i.color_id}|${i.size}`;
 const customerLabel = (c) => `${c.name}${c.city ? ` — ${c.city}/${c.state || ""}` : ""}`;
 
 const EMPTY_CUSTOMER = { name: "", document: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
-const PAYMENT_METHODS = ["Dinheiro", "Pix", "Boleto"];
-const PAYMENT_TERMS = ["À vista", "30/60", "30/60/90", "30/60/90/120", "30/60/90/120/150", "Quinzenal", "A combinar"];
+const PAYMENT_METHODS = ["Dinheiro", "Pix", "Boleto", "Cheque"];
+const PAYMENT_TERMS = ["À vista", "30/60", "30/60/90", "30/60/90/120", "30/60/90/120/150", "Quinzenal"];
 
 // Color × size grid for a product: the core of placing an order
 function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, onCancel }) {
@@ -69,7 +81,7 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, on
               const rowTotal = product.sizes.reduce((s, t) => s + (Number(qty[`${c.id}|${t}`]) || 0), 0);
               return (
                 <tr key={c.id}>
-                  <td className="qty-grid-color"><Swatch hex={c.hex} hex2={c.hex2} size={20} /> {c.name}</td>
+                  <td className="qty-grid-color"><ColorLabel name={c.name} hex={c.hex} hex2={c.hex2} size={20} /></td>
                   {product.sizes.map((t) => (
                     <td key={t}>
                       <input inputMode="numeric" className="qty-input" value={qty[`${c.id}|${t}`] || ""}
@@ -150,6 +162,7 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
 function CustomerSearch({ customers, value, onSelect }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     if (value && !query) {
@@ -167,11 +180,13 @@ function CustomerSearch({ customers, value, onSelect }) {
     setQuery(customerLabel(c));
     setOpen(false);
     onSelect(c, customerLabel(c));
+    // a long name would stay scrolled to its end (where the caret was); show the beginning instead
+    requestAnimationFrame(() => { const el = inputRef.current; if (el) { el.setSelectionRange(0, 0); el.scrollLeft = 0; el.blur(); } });
   }
 
   return (
     <div className="customer-search">
-      <input placeholder="Buscar cliente por nome ou CNPJ" value={query}
+      <input ref={inputRef} placeholder="Buscar cliente por nome ou CNPJ" value={query}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); onSelect(null); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)} />
@@ -220,6 +235,12 @@ export default function OrderForm() {
   // A customer preselected from the Clientes screen alone isn't "unsaved work".
   const customerChanged = Boolean(header.customer_id) && Number(header.customer_id) !== presetCustomer;
   const hasUnsavedChanges = !saved && (customerChanged || items.length > 0);
+  // Leaving the screen any way (side menu, back button, Cancelar) with an order in progress asks first.
+  // A ref, not the state: right after saving, navigate() runs before the re-render would update it.
+  const unsavedRef = useRef(false);
+  unsavedRef.current = hasUnsavedChanges;
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    unsavedRef.current && currentLocation.pathname !== nextLocation.pathname);
 
   // Warn before closing the window/app with an unsaved order in progress.
   useEffect(() => {
@@ -232,10 +253,7 @@ export default function OrderForm() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsavedChanges]);
 
-  function goBack() {
-    if (hasUnsavedChanges && !confirm("Deseja realmente sair? O pedido não será salvo.")) return;
-    nav(-1);
-  }
+  const goBack = () => nav(-1);
 
   useEffect(() => {
     api.get("/customers").then((r) => {
@@ -319,6 +337,7 @@ export default function OrderForm() {
     try {
       const { data } = id ? await api.put(`/orders/${id}`, body) : await api.post("/orders", body);
       setSaved(true);
+      unsavedRef.current = false;
       // Sellers don't have access to the order detail screen — send them back to their dashboard.
       nav(isAdmin ? `/orders/${data.id}` : "/");
     } catch (e) { setError(errorMessage(e)); setSaving(false); }
@@ -326,6 +345,12 @@ export default function OrderForm() {
 
   return (
     <div className="page">
+      {blocker.state === "blocked" && (
+        <ConfirmDialog danger title="Sair sem salvar o pedido?"
+          message="Os produtos e dados preenchidos neste pedido serão perdidos."
+          cancelLabel="Continuar no pedido" confirmLabel="Sair sem salvar"
+          onCancel={() => blocker.reset()} onConfirm={() => blocker.proceed()} />
+      )}
       <header className="page-header">
         <h1>{id ? `Editar pedido ${orderNumber(id)}` : "Novo pedido"}</h1>
       </header>
@@ -396,7 +421,7 @@ export default function OrderForm() {
                 <tbody>
                   {colors.map((c) => (
                     <tr key={c.color_id}>
-                      <td><Swatch hex={c.color_hex} hex2={c.color_hex2} size={18} /> {c.color_name}</td>
+                      <td className="qty-grid-color"><ColorLabel name={c.color_name} hex={c.color_hex} hex2={c.color_hex2} size={18} /></td>
                       {sizes.map((t) => <td key={t} className="num">{q(c.color_id, t) || "–"}</td>)}
                     </tr>
                   ))}

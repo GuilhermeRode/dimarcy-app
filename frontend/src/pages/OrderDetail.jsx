@@ -3,9 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { dateBR, money, orderNumber, STATUS } from "../format";
-import { ErrorBox, Status, Swatch } from "../components/ui";
+import { ErrorBox, Status, Swatch, useConfirm } from "../components/ui";
 
 export default function OrderDetail() {
+  const [confirmDialog, ask] = useConfirm();
   const { id } = useParams();
   const nav = useNavigate();
   const { user } = useAuth();
@@ -27,7 +28,7 @@ export default function OrderDetail() {
   }
 
   async function remove() {
-    if (!confirm("Excluir este pedido? Esta ação não pode ser desfeita.")) return;
+    if (!(await ask({ title: "Excluir este pedido?", message: "Esta ação não pode ser desfeita.", confirmLabel: "Excluir", danger: true }))) return;
     try { await api.delete(`/orders/${id}`); nav("/orders"); }
     catch (e) { setError(errorMessage(e)); }
   }
@@ -107,6 +108,7 @@ export default function OrderDetail() {
           <div className="grand-total"><span>Total</span><strong>{money(o.total)}</strong></div>
         </div>
       </section>
+      {confirmDialog}
     </div>
   );
 }

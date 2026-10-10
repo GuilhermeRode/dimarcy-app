@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
-import { Field, ErrorBox, Modal } from "./ui";
+import { Field, ErrorBox, Modal, useConfirm } from "./ui";
 
 export const EMPTY_CUSTOMER = { name: "", document: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
 
 export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved }) {
+  const [confirmDialog, ask] = useConfirm();
   const [form, setForm] = useState({ ...initial, owner_id: initial.owner_id || "" });
   const [sellers, setSellers] = useState([]);
   const [error, setError] = useState("");
@@ -22,7 +23,7 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved }
   }
 
   async function remove() {
-    if (!confirm(`Excluir ${form.name}?`)) return;
+    if (!(await ask({ title: `Excluir ${form.name}?`, message: "O cliente será removido do cadastro.", confirmLabel: "Excluir", danger: true }))) return;
     try { await api.delete(`/customers/${form.id}`); onSaved(); }
     catch (err) { setError(errorMessage(err)); }
   }
@@ -30,6 +31,7 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved }
   const f = (k) => ({ value: form[k] || "", onChange: (e) => setForm({ ...form, [k]: e.target.value }) });
 
   return (
+    <>
     <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={onClose} wide>
       <form onSubmit={save} className="form-grid">
         <Field label="Nome / razão social" span={2}><input required {...f("name")} /></Field>
@@ -59,5 +61,7 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved }
         </div>
       </form>
     </Modal>
+    {confirmDialog}
+    </>
   );
 }

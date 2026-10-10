@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, fileUrl } from "../api";
 import { money, DEFAULT_SIZES } from "../format";
-import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom } from "../components/ui";
+import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom, useConfirm } from "../components/ui";
 
 // The image file in a drag-and-drop, or null (e.g. a dragged link or text)
 // (Windows sometimes gives a dragged .jpg no type, so the extension counts too; the server checks the real bytes)
@@ -11,6 +11,7 @@ const droppedImage = (e) => [...(e.dataTransfer?.files || [])].find(isImage) || 
 const EMPTY = { reference: "", description: "", collection: "", price: "", sizes: DEFAULT_SIZES, color_ids: [], active: true, image_url: null };
 
 export default function Products() {
+  const [confirmDialog, ask] = useConfirm();
   const [list, setList] = useState([]);
   const [colors, setColors] = useState([]);
   const [search, setSearch] = useState("");
@@ -85,7 +86,7 @@ export default function Products() {
   });
 
   async function remove() {
-    if (!confirm(`Excluir ${form.reference}?`)) return;
+    if (!(await ask({ title: `Excluir ${form.reference} · ${form.description}?`, message: "O produto e a foto dele serão removidos.", confirmLabel: "Excluir", danger: true }))) return;
     try { await api.delete(`/products/${form.id}`); setForm(null); load(); }
     catch (err) { setError(errorMessage(err)); }
   }
@@ -219,6 +220,7 @@ export default function Products() {
       )}
 
       {zoom && <PhotoZoom {...zoom} onClose={() => setZoom(null)} />}
+      {confirmDialog}
     </div>
   );
 }
