@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
@@ -29,7 +29,9 @@ const CustomersByCity = EXCLUDE_MAP ? null : lazy(() => import("./pages/Customer
 
 function Protected({ children, admin }) {
   const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  // Remember where the user was going (e.g. an order link from an e-mail) so login can send them back.
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   if (admin && user.role !== "admin") return <Navigate to="/" replace />;
   return children;
 }
