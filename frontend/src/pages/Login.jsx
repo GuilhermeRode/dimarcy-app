@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { errorMessage } from "../api";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
@@ -10,6 +10,7 @@ const REMEMBER_KEY = "rememberedCredentials";
 export default function Login() {
   const { user, login } = useAuth();
   const nav = useNavigate();
+  const from = useLocation().state?.from || "/";
   const remembered = (() => {
     try { return JSON.parse(localStorage.getItem(REMEMBER_KEY)); } catch { return null; }
   })();
@@ -20,7 +21,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to={from} replace />;
 
   async function submit(e) {
     e.preventDefault();
@@ -30,7 +31,7 @@ export default function Login() {
       await login(email, password);
       if (rememberMe) localStorage.setItem(REMEMBER_KEY, JSON.stringify({ email, password }));
       else localStorage.removeItem(REMEMBER_KEY);
-      nav("/");
+      nav(from, { replace: true });
     } catch (err) {
       setError(errorMessage(err));
     } finally {

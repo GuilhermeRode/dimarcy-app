@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..database import get_db
-from ..mailer import send_order_delivered_email
+from ..mailer import send_order_created_emails, send_order_delivered_email
 from ..models import ORDER_STATUSES, AppSettings, Customer, Order, OrderItem, Product, User
 from ..schemas import OrderIn, StatusIn
 from ..sales import late_filter, visible_orders
@@ -131,6 +131,7 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
     db.add(o)
     db.commit()
     db.refresh(o)
+    send_order_created_emails(o)
     return full(o)
 
 
