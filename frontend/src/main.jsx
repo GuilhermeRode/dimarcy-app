@@ -18,3 +18,6 @@ window.addEventListener("vite:preloadError", (event) => {
 });
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+// Makes the site installable as an app on Android (see public/sw.js)
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
