@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, errorMessage, fileUrl } from "../api";
+import { api, errorMessage, fileUrl, screenCache } from "../api";
 import { money, DEFAULT_SIZES } from "../format";
 import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom, useConfirm } from "../components/ui";
 
@@ -12,7 +12,7 @@ const EMPTY = { reference: "", description: "", collection: "", price: "", sizes
 
 export default function Products() {
   const [confirmDialog, ask] = useConfirm();
-  const [list, setList] = useState([]);
+  const [list, setList] = useState(() => screenCache.get("products") || []);
   const [colors, setColors] = useState([]);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(null);
@@ -25,7 +25,10 @@ export default function Products() {
   const [sendingId, setSendingId] = useState(null); // product whose dropped photo is uploading
   const [listError, setListError] = useState("");
 
-  const load = () => api.get("/products", { params: { search } }).then((r) => setList(r.data));
+  const load = () => api.get("/products", { params: { search } }).then((r) => {
+    setList(r.data);
+    if (!search) screenCache.set("products", r.data); // only the unfiltered list is worth showing on return
+  });
   useEffect(() => { api.get("/colors").then((r) => setColors(r.data)); }, []);
   // A photo dropped outside a drop area would make the browser (and the desktop app) navigate to the file
   useEffect(() => {
@@ -34,7 +37,7 @@ export default function Products() {
     window.addEventListener("drop", block);
     return () => { window.removeEventListener("dragover", block); window.removeEventListener("drop", block); };
   }, []);
-  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { const t = setTimeout(load, search ? 250 : 0); return () => clearTimeout(t); }, [search]);
 
   function open(p) {
     setError("");

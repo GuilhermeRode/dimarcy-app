@@ -23,6 +23,10 @@ api.interceptors.response.use(
   }
 );
 
+// Last response of each list screen, so going back to a screen shows it at once while it refreshes.
+// Cleared on logout: another user may sign in on the same device.
+export const screenCache = new Map();
+
 // Uploaded files (e.g. product images) are served from the API's root, outside the "/api" prefix.
 export const fileUrl = (path) =>
   path ? `${api.defaults.baseURL.replace(/\/api\/?$/, "")}${path}` : null;
