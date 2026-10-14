@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { api, errorMessage } from "../api";
+import { api, errorMessage, screenCache } from "../api";
 import { useAuth } from "../auth";
 import { dateBR, money, orderNumber, STATUS } from "../format";
 import { ErrorBox, Status, EmptyState } from "../components/ui";
@@ -21,19 +21,20 @@ export default function Orders() {
   const isAdmin = user?.role === "admin";
   const [params, setParams] = useSearchParams();
   const late = params.get("late") === "1";
-  const [orders, setOrders] = useState([]);
+  const cacheKey = late ? "orders-late" : "orders";
+  const [orders, setOrders] = useState(() => screenCache.get(cacheKey) || []);
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(() => screenCache.has(cacheKey));
 
   useEffect(() => {
     api.get("/orders", { params: late ? { late: 1 } : {} })
-      .then((r) => { setOrders(r.data); setError(""); })
+      .then((r) => { setOrders(r.data); screenCache.set(cacheKey, r.data); setError(""); })
       .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoaded(true));
-  }, [late]);
+  }, [late, cacheKey]);
 
   const counts = useMemo(() => {
     const c = {};

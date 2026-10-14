@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { api, errorMessage } from "../api";
+import { api, errorMessage, screenCache } from "../api";
 import { useAuth } from "../auth";
 import { CUSTOMER_STATUS, compactMoney, initials, normalize } from "../format";
 import { ErrorBox } from "../components/ui";
@@ -21,14 +21,14 @@ export default function Customers() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const nav = useNavigate();
-  const [rows, setRows] = useState([]);
+  const [rows, setRows] = useState(() => screenCache.get("customers") || []);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [form, setForm] = useState(null);
   const [params, setParams] = useSearchParams();
 
   const load = () => api.get("/customers/overview")
-    .then((r) => { setRows(r.data); setError(""); })
+    .then((r) => { setRows(r.data); screenCache.set("customers", r.data); setError(""); })
     .catch((e) => setError(errorMessage(e)));
   useEffect(() => { load(); }, []);
 

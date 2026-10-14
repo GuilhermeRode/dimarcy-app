@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from "react";
-import { api } from "./api";
+import { api, screenCache } from "./api";
 
 const Ctx = createContext(null);
 
@@ -19,6 +19,7 @@ export function AuthProvider({ children }) {
   function logout() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    screenCache.clear();
     setUser(null);
   }
 

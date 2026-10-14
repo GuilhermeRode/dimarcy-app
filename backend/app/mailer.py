@@ -200,10 +200,13 @@ def send_password_reset_email(to_email: str, reset_url: str) -> bool:
         return False
 
 
+def _with_seller(recipients: list[str], order) -> list[str]:
+    """Adds the order's seller, once (an admin seller may already be in the list)."""
+    return list(dict.fromkeys([*recipients, *([order.seller.email] if order.seller.email else [])]))
+
+
 def send_order_created_emails(order) -> None:
-    to = list(ORDER_CREATED_RECIPIENTS)
-    if order.seller.email:
-        to.append(order.seller.email)
+    to = _with_seller(ORDER_CREATED_RECIPIENTS, order)
     subject = f"Pedido #{order.id:05d} criado — {order.customer.name}"
     heading = f"Um novo pedido para {order.customer.name} foi criado por {order.seller.name} em {_date_br(order.date)}."
     intro = (f"Um novo pedido para <strong>{html.escape(order.customer.name)}</strong> foi criado por "
@@ -219,14 +222,14 @@ def send_order_created_emails(order) -> None:
 
 
 def send_order_delivered_email(order) -> None:
-    to_addr = settings.notify_email or settings.admin_email
+    to = _with_seller([settings.notify_email or settings.admin_email], order)
     subject = f"Pedido #{order.id:05d} entregue — {order.customer.name}"
     heading = f"O pedido de {order.customer.name} foi marcado como entregue."
     intro = f"O pedido de <strong>{html.escape(order.customer.name)}</strong> foi marcado como entregue."
     body_html = _order_html(order, "Pedido entregue", DELIVERED_COLOR, f"Pedido #{order.id:05d} entregue", intro)
     try:
-        if _send(subject, _order_body(order, heading), body_html, [to_addr], _pdf_attachment(order)):
-            print(f"[mailer] Delivery notification sent to {to_addr} for order #{order.id}.")
+        if _send(subject, _order_body(order, heading), body_html, to, _pdf_attachment(order)):
+            print(f"[mailer] Delivery notification sent to {to} for order #{order.id}.")
         else:
             print(f"[mailer] Resend not configured — skipped delivery notification for order #{order.id}.")
     except Exception as e:  # never let a mail failure break the order update

@@ -34,4 +34,7 @@ assert "Em produção" in body and "Etapa atual" in body
 assert "Etapa atual" not in mailer._order_html(NS(**{**vars(order), "status": "quote"}), "", "", "", "")
 assert "07/10/2026" in mailer._order_body(order, "x")
 assert mailer._pdf_attachment(order)[0]["filename"] == "pedido-00123.pdf"
+assert mailer._with_seller(["a@x.com"], order) == ["a@x.com"]  # seller without e-mail
+assert mailer._with_seller(["a@x.com"], NS(seller=NS(email="v@x.com"))) == ["a@x.com", "v@x.com"]
+assert mailer._with_seller(["a@x.com"], NS(seller=NS(email="a@x.com"))) == ["a@x.com"]  # no duplicate
 print("mailer OK")
