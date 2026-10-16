@@ -19,6 +19,9 @@ function ColorLabel({ name, hex, hex2, size }) {
 }
 
 const key = (i) => `${i.color_id}|${i.size}`;
+// Integer cents, half up — same as the server's retail_price; the server prices the order again on save.
+const tablePrice = (price, table, markup) =>
+  table === "retail" ? Math.round(Math.round(price * 100) * Math.round((100 + Number(markup)) * 100) / 10000) / 100 : price;
 const customerLabel = (c) => `${c.name}${c.city ? ` — ${c.city}/${c.state || ""}` : ""}`;
 
 const EMPTY_CUSTOMER = { name: "", document: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
@@ -289,9 +292,7 @@ export default function OrderForm() {
     return g;
   }, [items]);
   const photoOf = (pid) => products.find((p) => p.id === Number(pid))?.thumb_url;
-  // Same rounding as the server's retail_price; the server prices the order again on save.
-  const priceOf = (p, table = header.price_table) =>
-    table === "retail" ? Math.round(p.price * (100 + Number(settings.retail_markup_percent))) / 100 : p.price;
+  const priceOf = (p, table = header.price_table) => tablePrice(p.price, table, settings.retail_markup_percent);
 
   function changePriceTable(table) {
     setHeader((h) => ({ ...h, price_table: table }));
@@ -419,7 +420,8 @@ export default function OrderForm() {
       <section className="panel">
         <div className="panel-header">
           <h3>Produtos</h3>
-          <button type="button" className="btn btn-primary" onClick={openNewProductModal}>+ Adicionar produto</button>
+          {/* waits for the price table (from /settings or the order) so items are never priced on the wrong one */}
+          <button type="button" className="btn btn-primary" disabled={!header.price_table} onClick={openNewProductModal}>+ Adicionar produto</button>
         </div>
 
         {!Object.keys(groups).length && <p className="muted">Nenhum produto adicionado ainda.</p>}

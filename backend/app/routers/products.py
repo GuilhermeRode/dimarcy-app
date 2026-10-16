@@ -33,7 +33,8 @@ def _apply(p: Product, data: ProductIn, db: Session):
     p.sizes = ",".join(t.strip().upper() for t in data.sizes if t.strip())
     p.active = data.active
     p.colors = db.query(Color).filter(Color.id.in_(data.color_ids)).all() if data.color_ids else []
-    p.sellers = db.query(User).filter(User.id.in_(data.seller_ids)).all() if data.seller_ids else []
+    if data.seller_ids is not None:
+        p.sellers = db.query(User).filter(User.id.in_(data.seller_ids), User.role == "seller").all()
 
 
 def available_to(user: User):

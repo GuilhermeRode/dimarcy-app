@@ -92,4 +92,20 @@ with TestClient(app) as c:
     assert order(R, only_r).status_code == 201
     assert c.get(f"/api/products/{only_r}", headers=admin).json()["seller_ids"] == [ids["r"]]
 
+    # ---- review fixes ----
+    from app.settings_store import retail_price  # noqa: E402
+    assert retail_price(0.15, 50) == 0.23 and retail_price(0.29, 50) == 0.44  # half cent rounds up, like the form
+    assert c.get("/api/settings", headers=admin).json()["price_tables"] == ["wholesale", "retail"]
+    assert order(admin, common, price_table="retail").status_code == 201
+    # an older cached app that doesn't send the new fields must not wipe them
+    c.put(f"/api/users/{ids['r']}", headers=admin, json={"name": "r", "email": "r@t.com", "role": "seller"})
+    assert c.get("/api/settings", headers=R).json()["price_tables"] == ["retail"]
+    c.put(f"/api/products/{only_r}", headers=admin, json={"reference": "R2", "description": "Blusão", "price": 100,
+                                                          "color_ids": [color]})
+    assert c.get(f"/api/products/{only_r}", headers=admin).json()["seller_ids"] == [ids["r"]]
+    # only sellers can be picked; other ids are ignored
+    p = c.put(f"/api/products/{only_r}", headers=admin, json={"reference": "R2", "description": "Blusão", "price": 100,
+                                                              "color_ids": [color], "seller_ids": [1, ids["w"]]}).json()
+    assert p["seller_ids"] == [ids["w"]], p["seller_ids"]
+
 print("price tables + product sellers OK")

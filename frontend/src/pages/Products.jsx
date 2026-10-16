@@ -32,7 +32,7 @@ export default function Products() {
   });
   useEffect(() => {
     api.get("/colors").then((r) => setColors(r.data));
-    api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller" && u.active)));
+    api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller")));
   }, []);
   // A photo dropped outside a drop area would make the browser (and the desktop app) navigate to the file
   useEffect(() => {
@@ -218,9 +218,10 @@ export default function Products() {
               <div className="field span-2">
                 <span>Disponível para</span>
                 <div className="chips">
-                  {sellers.map((u) => (
+                  {/* inactive sellers only if already picked, so they can still be unchecked */}
+                  {sellers.filter((u) => u.active || form.seller_ids.includes(u.id)).map((u) => (
                     <button type="button" key={u.id} className={`chip ${form.seller_ids.includes(u.id) ? "on" : ""}`}
-                      onClick={() => toggle("seller_ids", u.id)}>{u.name}</button>
+                      onClick={() => toggle("seller_ids", u.id)}>{u.name}{!u.active && " (inativo)"}</button>
                   ))}
                 </div>
                 <small className="muted">

@@ -54,7 +54,8 @@ class User(Base):
     avatar_url: Mapped[str | None] = mapped_column(String(300))
     theme: Mapped[str] = mapped_column(String(10), default="light")  # light | dark — personal UI preference
     monthly_goal: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)  # NULL/0 = no goal
-    price_table: Mapped[str] = mapped_column(String(10), default="wholesale")  # wholesale | retail | both
+    price_table: Mapped[str] = mapped_column(String(10), default="wholesale",
+                                             server_default="wholesale")  # wholesale | retail | both
     reset_token_hash: Mapped[str | None] = mapped_column(String(64))  # sha256 hex of the forgot-password token
     reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
 
@@ -119,7 +120,8 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(20), default="quote", index=True)
     payment_method: Mapped[str | None] = mapped_column(String(40))
     payment_terms: Mapped[str | None] = mapped_column(String(80))
-    price_table: Mapped[str] = mapped_column(String(10), default="wholesale")  # see PRICE_TABLES
+    price_table: Mapped[str] = mapped_column(String(10), default="wholesale",
+                                             server_default="wholesale")  # see PRICE_TABLES
     discount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -34,6 +34,8 @@ class UserBase(ORM):
 
 class UserIn(UserBase):
     password: str | None = None
+    # None = keep the current one (an older cached app doesn't send it)
+    price_table: Literal["wholesale", "retail", "both"] | None = None
 
 
 class UserOut(UserBase):
@@ -105,7 +107,7 @@ class ProductIn(BaseModel):
     sizes: list[str] = ["U", "P", "M", "G", "GG"]
     active: bool = True
     color_ids: list[int] = []
-    seller_ids: list[int] = []  # empty = every seller may sell it
+    seller_ids: list[int] | None = None  # empty = every seller may sell it; None = keep the current ones
 
 
 class ProductOut(ORM):
