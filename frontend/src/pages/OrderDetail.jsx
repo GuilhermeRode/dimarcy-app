@@ -4,6 +4,7 @@ import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { dateBR, money, orderNumber, STATUS } from "../format";
 import { ErrorBox, Status, Swatch, useConfirm } from "../components/ui";
+import { EntryStatus, PayModal } from "./Finance";
 
 export default function OrderDetail() {
   const [confirmDialog, ask] = useConfirm();
@@ -13,6 +14,23 @@ export default function OrderDetail() {
   const isAdmin = user?.role === "admin";
   const [o, setO] = useState(null);
   const [error, setError] = useState("");
+  const [installments, setInstallments] = useState([]);
+  const [paying, setPaying] = useState(null);
+  const [generating, setGenerating] = useState(false);
+
+  // Admin only: sellers can open this screen too and must not see the order's receivables.
+  function loadInstallments() {
+    if (!isAdmin) return;
+    api.get("/finance/entries", { params: { order_id: id, status: "all" } })
+      .then((r) => setInstallments(r.data)).catch((e) => setError(errorMessage(e)));
+  }
+  useEffect(loadInstallments, [id]);
+
+  async function generate() {
+    setGenerating(true);
+    try { await api.post(`/finance/orders/${id}/generate`); loadInstallments(); }
+    catch (e) { setError(errorMessage(e)); } finally { setGenerating(false); }
+  }
 
   useEffect(() => { api.get(`/orders/${id}`).then((r) => setO(r.data)).catch((e) => setError(errorMessage(e))); }, [id]);
 
@@ -23,7 +41,7 @@ export default function OrderDetail() {
   }, [o]);
 
   async function changeStatus(status) {
-    try { setO((await api.patch(`/orders/${id}/status`, { status })).data); }
+    try { setO((await api.patch(`/orders/${id}/status`, { status })).data); loadInstallments(); }
     catch (e) { setError(errorMessage(e)); }
   }
 
@@ -34,6 +52,9 @@ export default function OrderDetail() {
   }
 
   if (!o) return <div className="page"><ErrorBox msg={error} /></div>;
+
+  const paidTotal = installments.filter((x) => x.paid_at).reduce((s, x) => s + x.amount, 0);
+  const canGenerate = o.status === "delivered" && !installments.some((x) => !x.paid_at) && o.total - paidTotal > 0.005;
 
   return (
     <div className="page">
@@ -100,6 +121,33 @@ export default function OrderDetail() {
         );
       })}
 
+      {isAdmin && (installments.length > 0 || canGenerate) && (
+        <section className="panel">
+          <div className="panel-header">
+            <h3>Parcelas</h3>
+            {canGenerate && <button className="btn btn-primary" disabled={generating} onClick={generate}>Gerar parcelas</button>}
+          </div>
+          {installments.length > 0 && (
+            <table className="table table-compact">
+              <thead><tr><th>Parcela</th><th>Vencimento</th><th className="num">Valor</th><th>Situação</th><th></th></tr></thead>
+              <tbody>
+                {installments.map((x) => (
+                  <tr key={x.id}>
+                    <td>{x.installments ? `${x.installment}/${x.installments}` : x.description}</td>
+                    <td>{dateBR(x.due_date)}</td>
+                    <td className="num">{money(x.amount)}</td>
+                    <td><EntryStatus s={x.status} /></td>
+                    <td>{x.paid_at
+                      ? <span className="muted">pago em {dateBR(x.paid_at)}</span>
+                      : <button className="btn btn-light" onClick={() => setPaying(x)}>Dar baixa</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
+
       <section className="panel order-summary">
         <div>{o.notes && <><h3>Observações</h3><p className="notes-text">{o.notes}</p></>}</div>
         <div className="totals">
@@ -110,6 +158,7 @@ export default function OrderDetail() {
         </div>
       </section>
       {confirmDialog}
+      {paying && <PayModal entry={paying} onClose={() => setPaying(null)} onDone={() => { setPaying(null); loadInstallments(); }} />}
     </div>
   );
 }
