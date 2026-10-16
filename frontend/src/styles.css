@@ -959,7 +959,7 @@ section.item-group { margin-top: 0; }
 }
 /* ---------- Faturamento: Vendas · Contas a receber · Contas a pagar ---------- */
 .revenue-header { display: flex; flex-direction: column; gap: 2px; }
-.breadcrumb { font-size: 0.85rem; color: var(--muted); }
+.breadcrumb { font-size: 1.02rem; color: var(--muted); }
 .revenue-header h1 { margin: 0 0 8px; }
 .revenue-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px 16px; flex-wrap: wrap; }
 .tabs-underline { display: flex; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
