@@ -10,24 +10,21 @@ const PRESETS = [
 export const defaultPeriod = () => ({ start: PRESETS[2].start(), end: localDate() });
 
 // The active chip comes from `value` (so a parent can set the period too), except "Personalizado", which is a mode.
-export default function PeriodPicker({ value, onChange, presets = PRESETS, label }) {
+export default function PeriodPicker({ value, onChange, presets = PRESETS }) {
   const [custom, setCustom] = useState(false);
   const match = presets.find((p) => p.start() === value.start && p.end() === value.end);
   const active = custom || !match ? "custom" : match.key;
   return (
     <div className="period-block">
-      <div className="period-row">
-        {label && <span className="period-label">{label}</span>}
-        <div className="seg-control" role="group" aria-label={label || "Período"}>
-          {presets.map((p) => (
-            <button key={p.key} type="button" className={active === p.key ? "on" : ""} aria-pressed={active === p.key}
-              onClick={() => { setCustom(false); onChange({ start: p.start(), end: p.end() }); }}>
-              {p.label}
-            </button>
-          ))}
-          <button type="button" className={active === "custom" ? "on" : ""} aria-pressed={active === "custom"}
-            onClick={() => setCustom(true)}>Personalizado</button>
-        </div>
+      <div className="seg-control" role="group" aria-label="Período">
+        {presets.map((p) => (
+          <button key={p.key} type="button" className={active === p.key ? "on" : ""} aria-pressed={active === p.key}
+            onClick={() => { setCustom(false); onChange({ start: p.start(), end: p.end() }); }}>
+            {p.label}
+          </button>
+        ))}
+        <button type="button" className={active === "custom" ? "on" : ""} aria-pressed={active === "custom"}
+          onClick={() => setCustom(true)}>Personalizado</button>
       </div>
       {active === "custom" && (
         <div className="period-filter">

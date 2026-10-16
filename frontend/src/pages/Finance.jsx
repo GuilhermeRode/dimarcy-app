@@ -16,7 +16,7 @@ const EMPTY_FILTERS = { status: "open", start: "", end: "", search: "", category
 const monthEnd = () => { const d = new Date(); return localDate(new Date(d.getFullYear(), d.getMonth() + 1, 0)); };
 const DUE_PRESETS = [
   { key: "all", label: "Todos", start: () => "", end: () => "" },
-  { key: "7d", label: "Próximos 7 dias", start: localDate, end: () => addDays(localDate(), 7) },
+  { key: "7d", label: "7 dias", start: localDate, end: () => addDays(localDate(), 7) },
   { key: "month", label: "Este mês", start: () => `${localDate().slice(0, 8)}01`, end: monthEnd },
 ];
 
@@ -340,8 +340,9 @@ export default function Finance({ kind }) {
 
   return (
     <div className="page">
-      <RevenueHeader title={receivable ? "Contas a receber" : "Contas a pagar"}>
-        <PeriodPicker label="Vencimento" presets={DUE_PRESETS} value={{ start: filters.start, end: filters.end }}
+      <RevenueHeader subtitle={receivable ? "Acompanhe os recebimentos dos clientes e dê baixa no que entrou."
+        : "Controle as contas da empresa e dê baixa no que foi pago."}>
+        <PeriodPicker presets={DUE_PRESETS} value={{ start: filters.start, end: filters.end }}
           onChange={({ start, end }) => setFilters({ ...filters, start, end })} />
         <button className="btn btn-primary" onClick={() => setEditing("new")}>+ Lançar conta</button>
       </RevenueHeader>
