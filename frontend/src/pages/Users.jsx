@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
 import { Field, ErrorBox, Modal } from "../components/ui";
+import { useSort } from "../components/useSort";
 
 export default function Users() {
   const [list, setList] = useState([]);
@@ -21,6 +22,13 @@ export default function Users() {
     } catch (err) { setError(errorMessage(err)); }
   }
 
+  const { sorted, sortHeader } = useSort(list, {
+    name: (u) => u.name,
+    email: (u) => u.email,
+    role: (u) => (u.role === "admin" ? "Administrador" : "Vendedor"),
+    active: (u) => (u.active ? "Ativo" : "Bloqueado"),
+  });
+
   const f = (k) => ({ value: form[k] || "", onChange: (e) => setForm({ ...form, [k]: e.target.value }) });
 
   return (
@@ -30,9 +38,16 @@ export default function Users() {
         <button className="btn btn-primary" onClick={() => { setError(""); setForm({ name: "", email: "", password: "", role: "seller", active: true, monthly_goal: "", price_table: "wholesale" }); }}>Cadastrar usuário</button>
       </header>
       <table className="table">
-        <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th></tr></thead>
+        <thead>
+          <tr>
+            {sortHeader("name", "Nome")}
+            {sortHeader("email", "E-mail")}
+            {sortHeader("role", "Perfil")}
+            {sortHeader("active", "Situação")}
+          </tr>
+        </thead>
         <tbody>
-          {list.map((u) => (
+          {sorted.map((u) => (
             <tr key={u.id} className={`clickable ${u.active ? "" : "inactive"}`} onClick={() => { setError(""); setForm({ ...u, password: "" }); }}>
               <td>{u.name}</td><td>{u.email}</td>
               <td>{u.role === "admin" ? "Administrador" : "Vendedor"}</td>

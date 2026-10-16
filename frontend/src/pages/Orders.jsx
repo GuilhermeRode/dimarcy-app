@@ -4,8 +4,10 @@ import { api, errorMessage, screenCache } from "../api";
 import { useAuth } from "../auth";
 import { dateBR, money, orderNumber, STATUS } from "../format";
 import { ErrorBox, Status, EmptyState } from "../components/ui";
+import { useSort } from "../components/useSort";
 
 const OPEN_STATUSES = ["quote", "confirmed", "in_production", "shipped"];
+const STATUS_ORDER = Object.keys(STATUS); // the Situação column sorts by the order's flow, not alphabetically
 const PAGE_SIZE = 20;
 
 function daysUntil(dateStr) {
@@ -51,8 +53,18 @@ export default function Orders() {
 
   useEffect(() => { setPage(1); }, [search, status]);
 
+  // Sorting applies to the whole filtered list, before it's split into pages
+  const { sorted, sortHeader } = useSort(filtered, {
+    number: (o) => (isAdmin ? o.id : o.date),
+    customer: (o) => o.customer_name,
+    delivery: (o) => o.delivery_date,
+    pieces: (o) => o.pieces,
+    total: (o) => o.total,
+    status: (o) => STATUS_ORDER.indexOf(o.status),
+  });
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageItems = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const kpis = useMemo(() => {
     const open = orders.filter((o) => OPEN_STATUSES.includes(o.status));
@@ -124,8 +136,13 @@ export default function Orders() {
           <table className="table table-orders">
             <thead>
               <tr>
-                <th>{isAdmin ? "Nº" : "Data"}</th><th>Cliente</th><th>Entrega</th><th className="num">Peças</th>
-                <th className="num">Total</th><th className="num">Situação</th><th></th>
+                {sortHeader("number", isAdmin ? "Nº" : "Data")}
+                {sortHeader("customer", "Cliente")}
+                {sortHeader("delivery", "Entrega")}
+                {sortHeader("pieces", "Peças", "num")}
+                {sortHeader("total", "Total", "num")}
+                {sortHeader("status", "Situação", "num")}
+                <th></th>
               </tr>
             </thead>
             <tbody>

@@ -5,11 +5,13 @@ import { addDays, dateBR, localDate, money, orderNumber } from "../format";
 import { EmptyState, ErrorBox, Field, Modal, useConfirm } from "../components/ui";
 import RevenueTabs from "../components/RevenueTabs";
 import PeriodPicker from "../components/PeriodPicker";
+import { useSort } from "../components/useSort";
 
 // Same list as PAYABLE_CATEGORIES in backend/app/models.py
 const PAYABLE_CATEGORIES = ["Matéria-prima", "Aluguel", "Salários", "Impostos", "Energia", "Manutenção", "Outros"];
 const PAYMENT_METHODS = ["Boleto", "Pix", "Transferência", "Cheque", "Dinheiro", "Cartão"];
 const STATUS_LABEL = { open: "Em aberto", overdue: "Vencida", paid: "Paga" };
+const STATUS_RANK = { overdue: 0, open: 1, paid: 2 }; // sort order of the Situação column
 const STATUS_FILTERS = [["open", "Em aberto"], ["overdue", "Vencidas"], ["paid", "Pagas"], ["all", "Todas"]];
 // Due-date periods look ahead (unlike the sales ones); "Todos" = no date filter
 const monthEnd = () => { const d = new Date(); return localDate(new Date(d.getFullYear(), d.getMonth() + 1, 0)); };
@@ -202,8 +204,18 @@ export default function Finance({ kind }) {
   }
   useEffect(() => { const t = setTimeout(load, filters.search ? 250 : 0); return () => clearTimeout(t); }, [kind, filters]);
 
+  const { sorted, sortHeader } = useSort(list, {
+    due: (x) => x.due_date,
+    party: (x) => (receivable ? x.customer_name : x.supplier),
+    ref: (x) => (receivable ? x.order_id : x.category),
+    description: (x) => x.description,
+    installment: (x) => x.installment,
+    amount: (x) => x.amount,
+    status: (x) => STATUS_RANK[x.status],
+  });
+
   const setFilter = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
-  const show = (next) => setFilters({ ...filters, start: "", end: "", ...next });
+  const show =(next) => setFilters({ ...filters, start: "", end: "", ...next });
   const today = localDate();
   const week = addDays(today, 7);
   const noDates = !filters.start && !filters.end;
@@ -264,12 +276,18 @@ export default function Finance({ kind }) {
           <table className="table">
             <thead>
               <tr>
-                <th>Vencimento</th><th>{receivable ? "Cliente" : "Fornecedor"}</th><th>{receivable ? "Pedido" : "Categoria"}</th>
-                <th>Descrição</th><th>Parcela</th><th className="num">Valor</th><th>Situação</th><th></th>
+                {sortHeader("due", "Vencimento")}
+                {sortHeader("party", receivable ? "Cliente" : "Fornecedor")}
+                {sortHeader("ref", receivable ? "Pedido" : "Categoria")}
+                {sortHeader("description", "Descrição")}
+                {sortHeader("installment", "Parcela")}
+                {sortHeader("amount", "Valor", "num")}
+                {sortHeader("status", "Situação")}
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              {list.map((x) => (
+              {sorted.map((x) => (
                 <tr key={x.id} className={`clickable ${x.status === "overdue" ? "row-overdue" : ""}`} onClick={() => setEditing(x)}>
                   <td>{dateBR(x.due_date)}</td>
                   <td>{(receivable ? x.customer_name : x.supplier) || "—"}</td>

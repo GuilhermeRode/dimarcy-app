@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, errorMessage, fileUrl, screenCache } from "../api";
 import { money, DEFAULT_SIZES } from "../format";
 import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom, useConfirm } from "../components/ui";
+import { useSort } from "../components/useSort";
 
 // The image file in a drag-and-drop, or null (e.g. a dragged link or text)
 // (Windows sometimes gives a dragged .jpg no type, so the extension counts too; the server checks the real bytes)
@@ -98,7 +99,16 @@ export default function Products() {
     catch (err) { setError(errorMessage(err)); }
   }
 
-  const sizeOptions = [...new Set([...DEFAULT_SIZES, "XG", ...(form?.sizes || [])])];
+  const { sorted, sortHeader } = useSort(list, {
+    reference: (p) => p.reference,
+    description: (p) => p.description,
+    collection: (p) => p.collection,
+    sizes: (p) => p.sizes.length,
+    colors: (p) => p.colors.length,
+    price: (p) => p.price,
+  });
+
+  const sizeOptions =[...new Set([...DEFAULT_SIZES, "XG", ...(form?.sizes || [])])];
   // the small version for the preview box; the full-size photo for zoom
   const fileBlob = imageFile ? URL.createObjectURL(imageFile) : null;
   const previewUrl = fileBlob || fileUrl(form?.thumb_url);
@@ -117,9 +127,19 @@ export default function Products() {
       <ErrorBox msg={listError} />
       {!list.length ? <EmptyState text="Nenhum produto cadastrado." /> : (
         <table className="table">
-          <thead><tr><th></th><th>Ref.</th><th>Descrição</th><th>Coleção</th><th>Tamanhos</th><th>Cores</th><th className="num">Preço</th></tr></thead>
+          <thead>
+            <tr>
+              <th></th>
+              {sortHeader("reference", "Ref.")}
+              {sortHeader("description", "Descrição")}
+              {sortHeader("collection", "Coleção")}
+              {sortHeader("sizes", "Tamanhos")}
+              {sortHeader("colors", "Cores")}
+              {sortHeader("price", "Preço", "num")}
+            </tr>
+          </thead>
           <tbody>
-            {list.map((p) => (
+            {sorted.map((p) => (
               <tr key={p.id} className={`clickable ${p.active ? "" : "inactive"} ${dropTarget === p.id ? "drop-over" : ""}`}
                 onClick={() => open(p)} {...dragProps(p.id, (e) => dropOnRow(e, p))}>
                 <td>
