@@ -969,3 +969,4 @@ section.item-group { margin-top: 0; }
 .finance-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 @media (max-width: 800px) { .finance-cards { grid-template-columns: repeat(2, 1fr); } }
 .filter-bar input[type="date"] { min-width: 0; flex: 0 0 auto; margin-left: 4px; }
+.row-overdue td { color: var(--amber); }

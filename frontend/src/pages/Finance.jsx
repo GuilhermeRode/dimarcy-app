@@ -55,16 +55,16 @@ export function PayModal({ entry, onClose, onDone }) {
   );
 }
 
-const EMPTY = { description: "", amount: "", due_date: localDate(), payment_method: "", notes: "", supplier: "",
-  category: "Outros", order_number: "", repeat_months: 1 };
+const emptyEntry = () => ({ description: "", amount: "", due_date: localDate(), payment_method: "", notes: "", supplier: "",
+  category: "Outros", order_number: "", repeat_months: 1 });
 
 function EntryModal({ kind, entry, onClose, onDone }) {
   const [confirmDialog, ask] = useConfirm();
   const isNew = !entry;
   const payable = kind === "payable";
   const paid = Boolean(entry?.paid_at);
-  const [f, setF] = useState(() => (entry ? { ...EMPTY, ...entry, supplier: entry.supplier || "", notes: entry.notes || "",
-    payment_method: entry.payment_method || "", category: entry.category || "Outros" } : EMPTY));
+  const [f, setF] = useState(() => (entry ? { ...emptyEntry(), ...entry, supplier: entry.supplier || "", notes: entry.notes || "",
+    payment_method: entry.payment_method || "", category: entry.category || "Outros" } : emptyEntry()));
   const [split, setSplit] = useState(null); // { amount, due_date } while splitting
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -182,6 +182,7 @@ export default function Finance({ kind }) {
   const [editing, setEditing] = useState(null); // entry, or "new"
 
   function load() {
+    setError("");
     const { status, start, end, search, category } = filters;
     api.get("/finance/entries", { params: { kind, status, search, category, start: start || undefined, end: end || undefined } })
       .then((r) => setList(r.data)).catch((e) => setError(errorMessage(e)));
@@ -240,7 +241,7 @@ export default function Finance({ kind }) {
             </thead>
             <tbody>
               {list.map((x) => (
-                <tr key={x.id} className="clickable" onClick={() => setEditing(x)}>
+                <tr key={x.id} className={`clickable ${x.status === "overdue" ? "row-overdue" : ""}`} onClick={() => setEditing(x)}>
                   <td>{dateBR(x.due_date)}</td>
                   <td>{(receivable ? x.customer_name : x.supplier) || "—"}</td>
                   <td>{receivable

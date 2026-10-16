@@ -91,12 +91,17 @@ def summary(kind: Literal["receivable", "payable"], db: Session = Depends(get_db
     }
 
 
+def _numbered(text: str, i: int, n: int) -> str:
+    suffix = f" ({i}/{n})"
+    return text[:200 - len(suffix)] + suffix
+
+
 @router.post("/entries", status_code=201)
 def create_entry(data: EntryIn, db: Session = Depends(get_db)):
     _check(db, data.kind, data.category, data.order_id)
     n = data.repeat_months
     entries = [FinancialEntry(
-        kind=data.kind, description=data.description if n == 1 else f"{data.description} ({i + 1}/{n})",
+        kind=data.kind, description=data.description if n == 1 else _numbered(data.description, i + 1, n),
         amount=finance.to_decimal(data.amount), due_date=finance.add_months(data.due_date, i),
         payment_method=data.payment_method, notes=data.notes,
         order_id=data.order_id if data.kind == "receivable" else None,

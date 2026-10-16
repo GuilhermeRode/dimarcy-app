@@ -14,7 +14,7 @@ export default function OrderDetail() {
   const isAdmin = user?.role === "admin";
   const [o, setO] = useState(null);
   const [error, setError] = useState("");
-  const [installments, setInstallments] = useState([]);
+  const [installments, setInstallments] = useState(null);
   const [paying, setPaying] = useState(null);
   const [generating, setGenerating] = useState(false);
 
@@ -53,8 +53,9 @@ export default function OrderDetail() {
 
   if (!o) return <div className="page"><ErrorBox msg={error} /></div>;
 
-  const paidTotal = installments.filter((x) => x.paid_at).reduce((s, x) => s + x.amount, 0);
-  const canGenerate = o.status === "delivered" && !installments.some((x) => !x.paid_at) && o.total - paidTotal > 0.005;
+  const list = installments || [];
+  const paidTotal = list.filter((x) => x.paid_at).reduce((s, x) => s + x.amount, 0);
+  const canGenerate = installments !== null && o.status === "delivered" && !list.some((x) => !x.paid_at) && o.total - paidTotal > 0.005;
 
   return (
     <div className="page">
@@ -121,17 +122,17 @@ export default function OrderDetail() {
         );
       })}
 
-      {isAdmin && (installments.length > 0 || canGenerate) && (
+      {isAdmin && (list.length > 0 || canGenerate) && (
         <section className="panel">
           <div className="panel-header">
             <h3>Parcelas</h3>
             {canGenerate && <button className="btn btn-primary" disabled={generating} onClick={generate}>Gerar parcelas</button>}
           </div>
-          {installments.length > 0 && (
+          {list.length > 0 && (
             <table className="table table-compact">
               <thead><tr><th>Parcela</th><th>Vencimento</th><th className="num">Valor</th><th>Situação</th><th></th></tr></thead>
               <tbody>
-                {installments.map((x) => (
+                {list.map((x) => (
                   <tr key={x.id}>
                     <td>{x.installments ? `${x.installment}/${x.installments}` : x.description}</td>
                     <td>{dateBR(x.due_date)}</td>

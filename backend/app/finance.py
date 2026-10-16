@@ -16,7 +16,7 @@ def installment_days(terms: str | None) -> list[int]:
     if t.lower() == "quinzenal":
         return QUINZENAL_DAYS
     parts = [p.strip() for p in t.split("/")]
-    if all(p.isdigit() for p in parts):
+    if all(p.isascii() and p.isdigit() for p in parts) and all(int(p) <= 3650 for p in parts):
         return [int(p) for p in parts]
     return [0]  # "À vista" and anything unknown: one installment, due on delivery
 

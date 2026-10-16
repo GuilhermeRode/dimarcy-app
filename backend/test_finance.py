@@ -26,6 +26,8 @@ assert finance.installment_days("30/60/90/120/150") == [30, 60, 90, 120, 150]
 assert finance.installment_days("28/56") == [28, 56]
 assert finance.installment_days("Quinzenal") == [15, 30, 45, 60, 75, 90, 105, 120, 135, 150]
 assert finance.installment_days("combinar") == [0] and finance.installment_days(None) == [0]
+assert finance.installment_days("30/²") == [0] and finance.installment_days("99999999") == [0]
+assert finance.installment_days("30/3650") == [30, 3650]
 
 assert finance.split_cents(10000, 3) == [3334, 3333, 3333]
 assert finance.split_cents(5, 10) == [5] + [0] * 9  # callers drop the zero ones
@@ -163,6 +165,11 @@ with TestClient(app) as c:
     rent = r.json()
     assert len(rent) == 12 and [x["due_date"] for x in rent[:3]] == ["2027-01-31", "2027-02-28", "2027-03-31"]
     assert (rent[2]["description"], rent[2]["installment"], rent[2]["installments"]) == ("Aluguel (3/12)", 3, 12)
+    r = post_entry(repeat_months=12, description="x" * 200)
+    assert r.status_code == 201, r.text
+    assert all(len(x["description"]) <= 200 for x in r.json()) and r.json()[-1]["description"].endswith("(12/12)")
+    for x in r.json():  # keep the summary numbers below untouched
+        assert c.delete(f"/api/finance/entries/{x['id']}", headers=admin).status_code == 204
     assert post_entry(category="Viagem").status_code == 400
     assert post_entry(amount=0).status_code == 422
     assert post_entry(repeat_months=61).status_code == 422
