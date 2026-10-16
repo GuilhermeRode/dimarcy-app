@@ -103,8 +103,6 @@ para os testes poderem trocar o relógio, e passadas ao banco como parâmetro �
 - `DELETE /orders/{id}`: se o pedido tem qualquer lançamento financeiro → 400
   "Este pedido tem parcelas lançadas. Exclua as parcelas antes." (Senão, no Postgres a FK daria erro 500
   e no SQLite ficariam parcelas órfãs.)
-- `POST /orders` por vendedor: só aceita status `quote` ou `confirmed` (hoje a API aceitaria
-  `delivered`, o que geraria contas a receber por um vendedor).
 - `full()` / `GET /orders/{id}` **não** incluem parcelas (vendedores também leem essa rota).
 
 **Rotas (`/api/finance`):**
@@ -167,7 +165,8 @@ e entregue de novo. O botão fica desabilitado enquanto a requisição roda; o s
 - `installment_days`: cada prazo do formulário, Quinzenal = 10, "28/56", texto desconhecido = `[0]`.
 - `split_cents`: 10000 ÷ 3 = 3334 / 3333 / 3333; soma sempre igual ao total.
 - Pedido marcado entregue gera parcelas com valores e vencimentos certos; marcar de novo não duplica.
-- Pedido criado já como entregue (admin) gera parcelas; vendedor não consegue criar como entregue.
+- Pedido criado já como entregue gera parcelas. (Restringir os status que um vendedor pode usar ao
+  criar pedido é regra de pedidos, fora deste escopo — os testes atuais criam pedidos entregues por vendedor.)
 - Pedido com total 0 (desconto de 100%) não gera parcela.
 - Sair de Entregue (cancelado e outro status) remove as abertas e mantém as pagas; voltar a
   Entregue gera só o saldo.
