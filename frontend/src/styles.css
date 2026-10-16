@@ -864,7 +864,7 @@ section.item-group { margin-top: 0; }
   .month-chart { flex-direction: column; }
   .month-card { flex-basis: auto; }
   .revenue-tabs { display: flex; }
-  .revenue-tabs a { flex: 1; padding: 8px 6px; font-size: 13px; text-align: center; }
+  .segmented.revenue-tabs a { flex: 1; padding: 8px 6px; font-size: 13px; text-align: center; }
 }
 .vbars { display: flex; gap: 10px; height: 150px; align-items: flex-end; }
 .vbars > div { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; font-size: 12px; }
