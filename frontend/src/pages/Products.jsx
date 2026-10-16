@@ -8,12 +8,13 @@ import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom, useConfirm } fro
 const isImage = (f) => f.type.startsWith("image/") || /\.(jpe?g|jfif|png|webp|gif)$/i.test(f.name);
 const droppedImage = (e) => [...(e.dataTransfer?.files || [])].find(isImage) || null;
 
-const EMPTY = { reference: "", description: "", collection: "", price: "", sizes: DEFAULT_SIZES, color_ids: [], active: true, image_url: null };
+const EMPTY = { reference: "", description: "", collection: "", price: "", sizes: DEFAULT_SIZES, color_ids: [], seller_ids: [], active: true, image_url: null };
 
 export default function Products() {
   const [confirmDialog, ask] = useConfirm();
   const [list, setList] = useState(() => screenCache.get("products") || []);
   const [colors, setColors] = useState([]);
+  const [sellers, setSellers] = useState([]);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(null);
   const [imageFile, setImageFile] = useState(null);
@@ -29,7 +30,10 @@ export default function Products() {
     setList(r.data);
     if (!search) screenCache.set("products", r.data); // only the unfiltered list is worth showing on return
   });
-  useEffect(() => { api.get("/colors").then((r) => setColors(r.data)); }, []);
+  useEffect(() => {
+    api.get("/colors").then((r) => setColors(r.data));
+    api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller" && u.active)));
+  }, []);
   // A photo dropped outside a drop area would make the browser (and the desktop app) navigate to the file
   useEffect(() => {
     const block = (e) => e.preventDefault();
@@ -42,7 +46,7 @@ export default function Products() {
   function open(p) {
     setError("");
     setImageFile(null);
-    setForm(p ? { ...p, color_ids: p.colors.map((c) => c.id) } : EMPTY);
+    setForm(p ? { ...p, color_ids: p.colors.map((c) => c.id), seller_ids: p.seller_ids || [] } : EMPTY);
   }
 
   const toggle = (field, v) =>
@@ -127,7 +131,8 @@ export default function Products() {
                     : <span className="product-thumb product-thumb-empty" aria-hidden="true">🧶</span>}
                 </td>
                 <td className="ref">{p.reference}</td>
-                <td>{p.description}{!p.active && <span className="tag">inativo</span>}</td>
+                <td>{p.description}{!p.active && <span className="tag">inativo</span>}
+                  {p.seller_ids?.length > 0 && <span className="tag" title="Disponível só para alguns vendedores">exclusivo</span>}</td>
                 <td>{p.collection}</td>
                 <td>{p.sizes.join(" ")}</td>
                 <td><span className="swatches">{p.colors.map((c) => <Swatch key={c.id} hex={c.hex} hex2={c.hex2} />)}</span></td>
@@ -208,6 +213,21 @@ export default function Products() {
                   </div>
                 </div>
               ))}
+
+            {sellers.length > 0 && (
+              <div className="field span-2">
+                <span>Disponível para</span>
+                <div className="chips">
+                  {sellers.map((u) => (
+                    <button type="button" key={u.id} className={`chip ${form.seller_ids.includes(u.id) ? "on" : ""}`}
+                      onClick={() => toggle("seller_ids", u.id)}>{u.name}</button>
+                  ))}
+                </div>
+                <small className="muted">
+                  {form.seller_ids.length ? "Só os vendedores marcados podem vender este produto." : "Nenhum marcado: todos os vendedores podem vender."}
+                </small>
+              </div>
+            )}
 
             <label className="check span-2">
               <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />

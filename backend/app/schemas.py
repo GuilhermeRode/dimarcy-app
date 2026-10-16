@@ -1,6 +1,6 @@
 import datetime as _dt
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
@@ -29,6 +29,7 @@ class UserBase(ORM):
     avatar_url: str | None = None
     theme: str = "light"
     monthly_goal: Goal = None
+    price_table: Literal["wholesale", "retail", "both"] = "wholesale"
 
 
 class UserIn(UserBase):
@@ -104,6 +105,7 @@ class ProductIn(BaseModel):
     sizes: list[str] = ["U", "P", "M", "G", "GG"]
     active: bool = True
     color_ids: list[int] = []
+    seller_ids: list[int] = []  # empty = every seller may sell it
 
 
 class ProductOut(ORM):
@@ -116,6 +118,7 @@ class ProductOut(ORM):
     active: bool
     image_url: str | None
     colors: list[ColorOut]
+    seller_ids: list[int]
 
     @computed_field
     @property
@@ -145,6 +148,7 @@ class OrderIn(BaseModel):
     status: str = "quote"
     payment_method: str = Field(min_length=1)
     payment_terms: str = Field(min_length=1)
+    price_table: Literal["wholesale", "retail"] | None = None  # None = the seller's default
     discount: float = Field(default=0, ge=0)
     notes: str | None = None
     items: list[OrderItemIn] = Field(min_length=1)
@@ -158,6 +162,7 @@ class StatusIn(BaseModel):
 class AppSettingsIn(BaseModel):
     allow_price_override: bool
     max_discount_percent: float = Field(ge=0, le=100)
+    retail_markup_percent: float = Field(default=50, ge=0, le=1000)
     monthly_goal: Goal = None
 
 
@@ -165,6 +170,7 @@ class AppSettingsOut(ORM):
     """What every logged-in user may read (the order form needs these rules)."""
     allow_price_override: bool
     max_discount_percent: float
+    retail_markup_percent: float
 
 
 class AppSettingsAdminOut(AppSettingsOut):

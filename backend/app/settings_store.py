@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from .models import AppSettings
+from .models import AppSettings, User
 
 
 def get_app_settings(db: Session) -> AppSettings:
@@ -12,3 +12,12 @@ def get_app_settings(db: Session) -> AppSettings:
         db.commit()
         db.refresh(s)
     return s
+
+
+def allowed_price_tables(user: User) -> list[str]:
+    """Order price tables a user may sell with; the first one is their default."""
+    return {"retail": ["retail"], "both": ["wholesale", "retail"]}.get(user.price_table, ["wholesale"])
+
+
+def retail_price(price: float, markup_percent: float) -> float:
+    return round(float(price) * (1 + float(markup_percent) / 100), 2)

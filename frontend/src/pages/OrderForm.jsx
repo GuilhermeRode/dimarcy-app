@@ -217,10 +217,12 @@ export default function OrderForm() {
   const [customers, setCustomers] = useState([]);
   const [sellers, setSellers] = useState([]);
   const [products, setProducts] = useState([]);
-  const [settings, setSettings] = useState({ allow_price_override: false, max_discount_percent: 0 });
+  const [settings, setSettings] = useState({
+    allow_price_override: false, max_discount_percent: 0, retail_markup_percent: 0, price_tables: ["wholesale"],
+  });
   const [header, setHeader] = useState({
     customer_id: "", date: localDate(), delivery_date: "",
-    status: "confirmed", payment_method: "", payment_terms: "", discount: 0, notes: "",
+    status: "confirmed", payment_method: "", payment_terms: "", price_table: "", discount: 0, notes: "",
   });
   const [customerKey, setCustomerKey] = useState(0); // forces CustomerSearch to resync its label after a save
   const [items, setItems] = useState([]);
@@ -265,13 +267,17 @@ export default function OrderForm() {
       }
     });
     api.get("/products", { params: { active_only: true } }).then((r) => setProducts(r.data));
-    api.get("/settings").then((r) => setSettings(r.data));
+    api.get("/settings").then((r) => {
+      setSettings(r.data);
+      if (!id) setHeader((h) => ({ ...h, price_table: r.data.price_tables[0] })); // the seller's default table
+    });
     if (isAdmin) api.get("/users").then((r) => setSellers(r.data));
     if (id) api.get(`/orders/${id}`).then(({ data }) => {
       setHeader({
         customer_id: data.customer_id, date: data.date, delivery_date: data.delivery_date || "",
         status: data.status, payment_method: data.payment_method || "",
-        payment_terms: data.payment_terms || "", discount: data.discount, notes: data.notes || "",
+        payment_terms: data.payment_terms || "", price_table: data.price_table, discount: data.discount,
+        notes: data.notes || "",
       });
       setItems(data.items);
     });
@@ -283,6 +289,17 @@ export default function OrderForm() {
     return g;
   }, [items]);
   const photoOf = (pid) => products.find((p) => p.id === Number(pid))?.thumb_url;
+  // Same rounding as the server's retail_price; the server prices the order again on save.
+  const priceOf = (p, table = header.price_table) =>
+    table === "retail" ? Math.round(p.price * (100 + Number(settings.retail_markup_percent))) / 100 : p.price;
+
+  function changePriceTable(table) {
+    setHeader((h) => ({ ...h, price_table: table }));
+    setItems((cur) => cur.map((i) => {
+      const p = products.find((x) => x.id === i.product_id);
+      return p ? { ...i, unit_price: priceOf(p, table) } : i;
+    }));
+  }
 
   const gross = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
   const pieces = items.reduce((s, i) => s + i.quantity, 0);
@@ -331,6 +348,7 @@ export default function OrderForm() {
     setSaving(true);
     const body = {
       ...header, customer_id: Number(header.customer_id), discount: Number(header.discount) || 0,
+      price_table: header.price_table || null,
       items: items.map(({ product_id, color_id, size, quantity, unit_price }) =>
         ({ product_id, color_id, size, quantity, unit_price })),
     };
@@ -387,6 +405,15 @@ export default function OrderForm() {
             {PAYMENT_TERMS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </Field>
+        {/* New order: only sellers with both tables choose. Editing: the table is fixed, shown if retail. */}
+        {(id ? header.price_table === "retail" : settings.price_tables.length > 1) && (
+          <Field label="Tabela de preço">
+            <select value={header.price_table} disabled={Boolean(id)} onChange={(e) => changePriceTable(e.target.value)}>
+              <option value="wholesale">Atacado</option>
+              <option value="retail">Varejo (+{settings.retail_markup_percent}%)</option>
+            </select>
+          </Field>
+        )}
       </section>
 
       <section className="panel">
@@ -480,7 +507,7 @@ export default function OrderForm() {
                       <div className="product-card-info">
                         <div className="product-card-header">
                           <span className="ref">{p.reference}</span>
-                          <span className="product-card-price">{money(p.price)}</span>
+                          <span className="product-card-price">{money(priceOf(p))}</span>
                         </div>
                         <div className="product-card-desc">{p.description}</div>
                         <div className="product-card-footer">
@@ -499,7 +526,7 @@ export default function OrderForm() {
             <>
               <button type="button" className="modal-back" onClick={() => setEditing(null)}>← Escolher outro produto</button>
               <QuantityGrid product={editing} initial={groups[editing.id] || []}
-                initialPrice={groups[editing.id]?.[0]?.unit_price} canEditPrice={isAdmin && settings.allow_price_override}
+                initialPrice={groups[editing.id]?.[0]?.unit_price ?? priceOf(editing)} canEditPrice={isAdmin && settings.allow_price_override}
                 onSave={saveGrid} onCancel={closeProductModal} />
             </>
           )}

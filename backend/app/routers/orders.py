@@ -10,7 +10,7 @@ from ..models import ORDER_STATUSES, AppSettings, Customer, Order, OrderItem, Pr
 from ..schemas import OrderIn, StatusIn
 from ..sales import late_filter, visible_orders
 from ..security import get_current_user, require_admin
-from ..settings_store import get_app_settings
+from ..settings_store import allowed_price_tables, get_app_settings, retail_price
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -33,6 +33,7 @@ def full(o: Order) -> dict:
     d = summary(o)
     d["payment_method"] = o.payment_method
     d["payment_terms"] = o.payment_terms
+    d["price_table"] = o.price_table
     d["notes"] = o.notes
     d["items"] = [{
         "id": i.id, "product_id": i.product_id, "color_id": i.color_id, "size": i.size,
@@ -44,7 +45,7 @@ def full(o: Order) -> dict:
 
 
 def _build_items(data: OrderIn, db: Session, user: User, app_settings: AppSettings,
-                  existing_order: Order | None) -> list[OrderItem]:
+                  existing_order: Order | None, price_table: str) -> list[OrderItem]:
     if data.status not in ORDER_STATUSES:
         raise HTTPException(400, "Invalid status.")
     if not db.get(Customer, data.customer_id):
@@ -55,7 +56,7 @@ def _build_items(data: OrderIn, db: Session, user: User, app_settings: AppSettin
     items = []
     for it in data.items:
         prod = db.get(Product, it.product_id)
-        if not prod:
+        if not prod or (user.role != "admin" and prod.sellers and user not in prod.sellers):
             raise HTTPException(400, f"Product {it.product_id} not found.")
         if it.color_id not in {c.id for c in prod.colors}:
             raise HTTPException(400, f"The chosen color is not registered for {prod.reference}.")
@@ -65,6 +66,8 @@ def _build_items(data: OrderIn, db: Session, user: User, app_settings: AppSettin
             price = it.unit_price
         elif prod.id in price_on_record:
             price = price_on_record[prod.id]
+        elif price_table == "retail":
+            price = retail_price(prod.price, app_settings.retail_markup_percent)
         else:
             price = float(prod.price)
         items.append(OrderItem(product_id=prod.id, color_id=it.color_id, size=it.size,
@@ -121,12 +124,16 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
         customer = db.get(Customer, data.customer_id)
         if not customer or customer.owner_id != u.id:
             raise HTTPException(400, "Customer not found.")
+    tables = allowed_price_tables(u)
+    price_table = data.price_table or tables[0]
+    if price_table not in tables:
+        raise HTTPException(400, "Tabela de preço não permitida para este vendedor.")
     app_settings = get_app_settings(db)
-    items = _build_items(data, db, u, app_settings, existing_order=None)
+    items = _build_items(data, db, u, app_settings, existing_order=None, price_table=price_table)
     _check_discount(data.discount, items, app_settings)
     o = Order(customer_id=data.customer_id, seller_id=u.id, date=data.date or clock.today_br(),
               delivery_date=data.delivery_date, status=data.status,
-              payment_method=data.payment_method, payment_terms=data.payment_terms,
+              payment_method=data.payment_method, payment_terms=data.payment_terms, price_table=price_table,
               discount=data.discount, notes=data.notes, items=items)
     db.add(o)
     db.commit()
@@ -139,7 +146,8 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
 def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o = _find(oid, db)
     app_settings = get_app_settings(db)
-    items = _build_items(data, db, user, app_settings, existing_order=o)
+    # The table is fixed when the order is created; editing keeps it.
+    items = _build_items(data, db, user, app_settings, existing_order=o, price_table=o.price_table)
     _check_discount(data.discount, items, app_settings)
     o.items = items
     became_delivered = data.status == "delivered" and o.status != "delivered"

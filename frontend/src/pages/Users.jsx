@@ -27,7 +27,7 @@ export default function Users() {
     <div className="page">
       <header className="page-header">
         <h1>Usuários</h1>
-        <button className="btn btn-primary" onClick={() => { setError(""); setForm({ name: "", email: "", password: "", role: "seller", active: true, monthly_goal: "" }); }}>Cadastrar usuário</button>
+        <button className="btn btn-primary" onClick={() => { setError(""); setForm({ name: "", email: "", password: "", role: "seller", active: true, monthly_goal: "", price_table: "wholesale" }); }}>Cadastrar usuário</button>
       </header>
       <table className="table">
         <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th></tr></thead>
@@ -54,6 +54,13 @@ export default function Users() {
             </Field>
             <Field label="Meta mensal (R$)">
               <input type="number" min="0" step="0.01" placeholder="Sem meta" {...f("monthly_goal")} />
+            </Field>
+            <Field label="Tabela de preço">
+              <select {...f("price_table")}>
+                <option value="wholesale">Atacado</option>
+                <option value="retail">Varejo</option>
+                <option value="both">Atacado e varejo</option>
+              </select>
             </Field>
             <label className="check">
               <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Acesso liberado
