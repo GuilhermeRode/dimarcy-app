@@ -998,7 +998,12 @@ section.item-group { margin-top: 0; }
 .toolbar-summary { margin-left: auto; white-space: nowrap; }
 .link-btn { all: unset; cursor: pointer; color: var(--accent-strong); font-weight: 600; font-size: 0.92rem; }
 .link-btn:hover { text-decoration: underline; }
-.bulk-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; width: 100%; }
+/* floating selection bar, bottom center (stays put while the list scrolls) */
+.bulk-bar { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 18; /* under the mobile menu (19+) and modals */
+  display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 20px; max-width: calc(100vw - 32px); box-sizing: border-box;
+  background: var(--ink); color: #fff; border-radius: 12px; box-shadow: 0 8px 24px rgba(13, 42, 82, .28); white-space: nowrap; }
+.bulk-spacer { height: 72px; }
+.bulk-bar .link-btn { color: #fff; opacity: .8; }
 .table-scroll { overflow-x: auto; }
 .table-fin { border: 0; border-radius: 0; border-top: 1px solid var(--line); }
 .table-fin th { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
@@ -1027,6 +1032,9 @@ section.item-group { margin-top: 0; }
   .finance-kpis .fin-card strong { font-size: 1.1rem; }
   .revenue-toolbar, .header-actions { align-items: stretch; justify-content: flex-start; }
   .toolbar-summary { margin-left: 0; }
+  .bulk-bar { left: 16px; right: 16px; bottom: 16px; transform: none; flex-wrap: wrap; gap: 8px 14px; padding: 12px 16px; }
+  .bulk-bar .btn { flex: 1 0 100%; order: 3; }
+  .bulk-spacer { height: 120px; }
 }
 
 /* Sortable list columns (components/useSort.jsx) */

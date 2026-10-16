@@ -363,29 +363,18 @@ export default function Finance({ kind }) {
 
       <section className="panel panel-table">
         <div className="table-toolbar">
-          {picked.length ? (
-            <div className="bulk-bar">
-              <strong>{picked.length} {picked.length === 1 ? "selecionado" : "selecionados"}</strong>
-              <span className="muted">· {money(picked.reduce((sum, x) => sum + x.amount, 0))}</span>
-              <button className="btn btn-primary" onClick={() => setBulkPaying(true)}>Dar baixa nos selecionados</button>
-              <button type="button" className="link-btn" onClick={() => setSelected(new Set())}>Limpar seleção</button>
-            </div>
-          ) : (
-            <>
-              <input className="toolbar-search" value={filters.search} onChange={setFilter("search")}
-                placeholder={receivable ? "Buscar por cliente ou descrição" : "Buscar por fornecedor ou descrição"} />
-              {!receivable && (
-                <select value={filters.category} onChange={setFilter("category")} aria-label="Categoria">
-                  <option value="">Todas as categorias</option>
-                  {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-                </select>
-              )}
-              {filtersOn && <button type="button" className="link-btn" onClick={() => setFilters(EMPTY_FILTERS)}>Limpar filtros</button>}
-              <span className="muted toolbar-summary">
-                {list.length} {list.length === 1 ? "lançamento" : "lançamentos"} · {money(total)}
-              </span>
-            </>
+          <input className="toolbar-search" value={filters.search} onChange={setFilter("search")}
+            placeholder={receivable ? "Buscar por cliente ou descrição" : "Buscar por fornecedor ou descrição"} />
+          {!receivable && (
+            <select value={filters.category} onChange={setFilter("category")} aria-label="Categoria">
+              <option value="">Todas as categorias</option>
+              {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+            </select>
           )}
+          {filtersOn && <button type="button" className="link-btn" onClick={() => setFilters(EMPTY_FILTERS)}>Limpar filtros</button>}
+          <span className="muted toolbar-summary">
+            {list.length} {list.length === 1 ? "lançamento" : "lançamentos"} · {money(total)}
+          </span>
         </div>
 
         {!list.length ? <EmptyState text="Nenhum lançamento encontrado." /> : (
@@ -411,6 +400,16 @@ export default function Finance({ kind }) {
           </div>
         )}
       </section>
+
+      {picked.length > 0 && <div className="bulk-spacer" />}{/* keeps the last rows reachable above the bar */}
+      {picked.length > 0 && (
+        <div className="bulk-bar" role="region" aria-label="Seleção">
+          <strong>{picked.length} {picked.length === 1 ? "selecionado" : "selecionados"}</strong>
+          <span>{money(picked.reduce((sum, x) => sum + x.amount, 0))}</span>
+          <button className="btn btn-primary" onClick={() => setBulkPaying(true)}>Dar baixa nos selecionados</button>
+          <button type="button" className="link-btn" onClick={() => setSelected(new Set())}>Limpar</button>
+        </div>
+      )}
 
       {paying && <PayModal entry={paying} onClose={() => setPaying(null)} onDone={done} />}
       {bulkPaying && <BulkPayModal entries={picked} onClose={done} onDone={done} />}
