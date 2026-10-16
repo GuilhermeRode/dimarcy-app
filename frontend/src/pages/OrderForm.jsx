@@ -272,7 +272,8 @@ export default function OrderForm() {
     api.get("/products", { params: { active_only: true } }).then((r) => setProducts(r.data));
     api.get("/settings").then((r) => {
       setSettings(r.data);
-      if (!id) setHeader((h) => ({ ...h, price_table: r.data.price_tables[0] })); // the seller's default table
+      // A single table is set for them; with both, the seller must pick one ("Tipo de venda")
+      if (!id && r.data.price_tables.length === 1) setHeader((h) => ({ ...h, price_table: r.data.price_tables[0] }));
     });
     if (isAdmin) api.get("/users").then((r) => setSellers(r.data));
     if (id) api.get(`/orders/${id}`).then(({ data }) => {
@@ -343,6 +344,7 @@ export default function OrderForm() {
     if (!header.delivery_date) return setError("Informe a data de entrega.");
     if (!header.payment_method) return setError("Selecione a forma de pagamento.");
     if (!header.payment_terms) return setError("Selecione o prazo de pagamento.");
+    if (!header.price_table) return setError("Selecione o tipo de venda.");
     if (!items.length) return setError("Adicione ao menos um produto.");
     if (discountTooHigh) return setError(
       `O desconto máximo é de ${settings.max_discount_percent}% (${money(maxDiscount)}). Peça ao administrador para alterar o limite.`);
@@ -406,14 +408,17 @@ export default function OrderForm() {
             {PAYMENT_TERMS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </Field>
-        {/* New order: only sellers with both tables choose. Editing: the table is fixed, shown if retail. */}
+        {/* New order: only sellers with both tables choose. Editing: the table is fixed, shown if retail.
+            A plain <label> (not Field) so .sale-type keeps it beside the payment terms. */}
         {(id ? header.price_table === "retail" : settings.price_tables.length > 1) && (
-          <Field label="Tabela de preço">
-            <select value={header.price_table} disabled={Boolean(id)} onChange={(e) => changePriceTable(e.target.value)}>
+          <label className="field sale-type">
+            <span>Tipo de venda</span>
+            <select required value={header.price_table} disabled={Boolean(id)} onChange={(e) => changePriceTable(e.target.value)}>
+              <option value="">Selecione</option>
               <option value="wholesale">Atacado</option>
-              <option value="retail">Varejo (+{settings.retail_markup_percent}%)</option>
+              <option value="retail">Varejo</option>
             </select>
-          </Field>
+          </label>
         )}
       </section>
 
@@ -421,7 +426,8 @@ export default function OrderForm() {
         <div className="panel-header">
           <h3>Produtos</h3>
           {/* waits for the price table (from /settings or the order) so items are never priced on the wrong one */}
-          <button type="button" className="btn btn-primary" disabled={!header.price_table} onClick={openNewProductModal}>+ Adicionar produto</button>
+          <button type="button" className="btn btn-primary" disabled={!header.price_table}
+            title={header.price_table ? undefined : "Selecione o tipo de venda primeiro"} onClick={openNewProductModal}>+ Adicionar produto</button>
         </div>
 
         {!Object.keys(groups).length && <p className="muted">Nenhum produto adicionado ainda.</p>}

@@ -174,6 +174,8 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .form-order .span-2 { grid-column: span 1; }
 /* payment terms fills the empty last column so its long label doesn't wrap on narrow laptops */
 .form-order .field:last-child { grid-column: span 2; }
+/* "Tipo de venda" (sellers with both tables) sits beside the payment terms in the last column */
+.form-order .field.sale-type:last-child { grid-column: auto; }
 .span-2 { grid-column: span 2; }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field > span { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
