@@ -177,3 +177,34 @@ class AppSettingsOut(ORM):
 
 class AppSettingsAdminOut(AppSettingsOut):
     monthly_goal: float | None = None
+
+
+# ---------- Finance ----------
+Money = Annotated[float, Field(gt=0, le=9_999_999_999, allow_inf_nan=False)]
+
+
+class EntryUpdate(BaseModel):
+    description: str = Field(min_length=1, max_length=200)
+    amount: Money
+    due_date: _dt.date
+    payment_method: str | None = Field(default=None, max_length=40)
+    notes: str | None = None
+    supplier: str | None = Field(default=None, max_length=160)
+    category: str | None = None
+
+
+class EntryIn(EntryUpdate):
+    kind: Literal["receivable", "payable"]
+    order_id: int | None = None
+    repeat_months: int = Field(default=1, ge=1, le=60)
+
+
+class PayIn(BaseModel):
+    paid_at: _dt.date | None = None  # default: today
+    paid_amount: Money | None = None  # default: the entry's amount
+    payment_method: str | None = Field(default=None, max_length=40)
+
+
+class SplitIn(BaseModel):
+    amount: Money
+    due_date: _dt.date

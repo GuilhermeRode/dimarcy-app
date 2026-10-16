@@ -146,4 +146,96 @@ with TestClient(app) as c:
     assert r.status_code == 400 and "parcelas" in r.json()["detail"], r.text
     assert c.delete(f"/api/orders/{new_order(status='quote')}", headers=admin).status_code == 204
 
+    # ---- /api/finance: admin only ----
+    for path in ("/api/finance/entries", "/api/finance/summary?kind=payable"):
+        assert c.get(path, headers=A).status_code == 403
+    assert c.post("/api/finance/entries", headers=A, json={}).status_code == 403
+    assert c.post(f"/api/finance/orders/{oe}/generate", headers=A).status_code == 403
+
+    def post_entry(**kw):
+        return c.post("/api/finance/entries", headers=admin, json={
+            "kind": "payable", "description": "Aluguel", "amount": 1500, "due_date": "2027-01-31",
+            "category": "Aluguel", **kw})
+
+    # monthly repetition, from the first date (no drift)
+    r = post_entry(repeat_months=12, supplier="Imobiliária")
+    assert r.status_code == 201, r.text
+    rent = r.json()
+    assert len(rent) == 12 and [x["due_date"] for x in rent[:3]] == ["2027-01-31", "2027-02-28", "2027-03-31"]
+    assert (rent[2]["description"], rent[2]["installment"], rent[2]["installments"]) == ("Aluguel (3/12)", 3, 12)
+    assert post_entry(category="Viagem").status_code == 400
+    assert post_entry(amount=0).status_code == 422
+    assert post_entry(repeat_months=61).status_code == 422
+    assert post_entry(kind="receivable", order_id=999999).status_code == 400
+
+    bill = post_entry(description="Fio", amount=100, due_date=(TODAY - timedelta(days=1)).isoformat(),
+                      category="Matéria-prima").json()[0]
+    assert (bill["status"], bill["category"], bill["supplier"]) == ("overdue", "Matéria-prima", None)
+
+    # pay / pay twice / can't change a paid amount / unpay
+    def pay(eid, **kw):
+        return c.post(f"/api/finance/entries/{eid}/pay", headers=admin, json=kw)
+
+    r = pay(bill["id"], paid_amount=98.5)
+    assert r.status_code == 200 and (r.json()["status"], r.json()["paid_at"], r.json()["paid_amount"]) == \
+        ("paid", TODAY.isoformat(), 98.5), r.text
+    assert pay(bill["id"]).status_code == 400
+    upd = {"description": "Fio", "amount": 120, "due_date": bill["due_date"], "category": "Matéria-prima"}
+    assert c.put(f"/api/finance/entries/{bill['id']}", headers=admin, json=upd).status_code == 400
+    r = c.post(f"/api/finance/entries/{bill['id']}/unpay", headers=admin)
+    assert (r.json()["paid_at"], r.json()["paid_amount"]) == (None, None)
+    assert c.put(f"/api/finance/entries/{bill['id']}", headers=admin, json=upd).json()["amount"] == 120
+
+    # split: total preserved, the original keeps its due date (Review Focus 5)
+    split = f"/api/finance/entries/{bill['id']}/split"
+    assert c.post(split, headers=admin, json={"amount": 120, "due_date": "2026-12-01"}).status_code == 400
+    r = c.post(split, headers=admin, json={"amount": 20, "due_date": "2026-12-01"})
+    assert r.status_code == 201, r.text
+    part = r.json()
+    assert part["description"] == "Fio (restante)"
+    found = c.get("/api/finance/entries", headers=admin,
+                  params={"kind": "payable", "status": "all", "search": "fio"}).json()
+    assert sorted((x["amount"], x["due_date"]) for x in found) == [(20.0, "2026-12-01"), (100.0, bill["due_date"])]
+    pay(part["id"])
+    assert c.post(f"/api/finance/entries/{part['id']}/split", headers=admin,
+                  json={"amount": 5, "due_date": "2026-12-01"}).status_code == 400
+
+    # cards
+    s = c.get("/api/finance/summary", headers=admin, params={"kind": "payable"}).json()
+    assert s == {"overdue": {"total": 100.0, "count": 1}, "due_soon": {"total": 0.0, "count": 0},
+                 "open": {"total": 18100.0, "count": 13}, "paid_this_month": {"total": 20.0, "count": 1}}, s
+    assert [x["id"] for x in c.get("/api/finance/entries", headers=admin,
+                                    params={"kind": "payable", "status": "overdue"}).json()] == [bill["id"]]
+    assert c.get("/api/finance/entries", headers=admin, params={"kind": "payable", "category": "Aluguel",
+                                                                "start": "2027-01-01", "end": "2027-02-28"}).json()[1]["due_date"] == "2027-02-28"
+
+    # receivables show the order's *current* customer (Review Focus 2) and search is case-insensitive (3)
+    rec = c.get("/api/finance/entries", headers=admin, params={"kind": "receivable", "order_id": oe}).json()
+    assert [x["customer_name"] for x in rec] == ["Loja Bela"] * 2
+    assert c.get("/api/finance/entries", headers=admin, params={"kind": "receivable", "status": "all",
+                                                                "search": "bela"}).json()
+    c.put(f"/api/orders/{oe}", headers=admin, json=body(status="delivered", payment_method="Pix", payment_terms="30/60",
+                                                         customer_id=cust2))
+    rec = c.get("/api/finance/entries", headers=admin, params={"kind": "receivable", "order_id": oe}).json()
+    assert [x["customer_name"] for x in rec] == ["Malharia Sul"] * 2
+
+    # "Gerar parcelas" for orders delivered before this feature
+    old = new_order(status="delivered", payment_terms="30/60")
+    gen = f"/api/finance/orders/{old}/generate"
+    assert c.post(gen, headers=admin).status_code == 400  # already has open ones
+    with SessionLocal() as db:
+        db.query(FinancialEntry).filter(FinancialEntry.order_id == old).delete()
+        db.commit()
+    r = c.post(gen, headers=admin)
+    assert r.status_code == 201 and len(r.json()) == 2, r.text
+    assert c.post(f"/api/finance/orders/{new_order()}/generate", headers=admin).status_code == 400  # not delivered
+    assert c.post(f"/api/finance/orders/{oz}/generate", headers=admin).status_code == 400  # nothing owed
+
+    # a manual receivable linked to an order
+    r = post_entry(kind="receivable", description="Acerto", amount=10, order_id=oe, category=None)
+    assert r.status_code == 201 and (r.json()[0]["order_id"], r.json()[0]["category"]) == (oe, None), r.text
+
+    assert c.delete(f"/api/finance/entries/{part['id']}", headers=admin).status_code == 204
+    assert c.delete(f"/api/finance/entries/{part['id']}", headers=admin).status_code == 404
+
 print("finance checks OK")
