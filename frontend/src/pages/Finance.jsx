@@ -161,13 +161,14 @@ function EntryModal({ kind, entry, onClose, onDone }) {
   );
 }
 
-function Card({ label, card, onClick }) {
+// Same card shape as the Pedidos KPIs (label + icon, value, caption); `active` marks the card whose filter is on
+function Card({ label, icon, tone, card, active, onClick }) {
   return (
-    <div className="kpi kpi-clickable" role="button" tabIndex={0} onClick={onClick}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}>
-      <span>{label}</span>
+    <div className={`kpi kpi-clickable ${active ? "kpi-active" : ""}`} role="button" tabIndex={0} aria-pressed={active}
+      onClick={onClick} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}>
+      <div className="kpi-header"><span>{label}</span><span className={`kpi-icon ${tone}`} aria-hidden="true">{icon}</span></div>
       <strong>{money(card.total)}</strong>
-      <small>{card.count} {card.count === 1 ? "lançamento" : "lançamentos"}</small>
+      <span>{card.count} {card.count === 1 ? "lançamento" : "lançamentos"}</span>
     </div>
   );
 }
@@ -194,43 +195,63 @@ export default function Finance({ kind }) {
   const setFilter = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
   const show = (next) => setFilters({ ...filters, start: "", end: "", ...next });
   const today = localDate();
+  const week = addDays(today, 7);
+  const noDates = !filters.start && !filters.end;
   const done = () => { setPaying(null); setEditing(null); load(); };
 
   return (
     <div className="page">
-      <RevenueTabs />
       <header className="page-header">
-        <h1>{receivable ? "Contas a receber" : "Contas a pagar"}</h1>
+        <div>
+          <h1>{receivable ? "Contas a receber" : "Contas a pagar"}</h1>
+          <RevenueTabs />
+        </div>
         <button className="btn btn-primary" onClick={() => setEditing("new")}>Lançar conta</button>
       </header>
       <ErrorBox msg={error} />
 
       {summary && (
-        <div className="finance-cards">
-          <Card label="Vencido" card={summary.overdue} onClick={() => show({ status: "overdue" })} />
-          <Card label="Vence em 7 dias" card={summary.due_soon} onClick={() => show({ status: "open", start: today, end: addDays(today, 7) })} />
-          <Card label="Em aberto" card={summary.open} onClick={() => show({ status: "open" })} />
-          <Card label={receivable ? "Recebido no mês" : "Pago no mês"} card={summary.paid_this_month} onClick={() => show({ status: "paid" })} />
-        </div>
+        <section className="orders-kpis">
+          <Card label="Vencido" icon="⏰" tone="icon-amber" card={summary.overdue}
+            active={filters.status === "overdue" && noDates} onClick={() => show({ status: "overdue" })} />
+          <Card label="Vence em 7 dias" icon="📅" tone="icon-gold" card={summary.due_soon}
+            active={filters.status === "open" && filters.start === today && filters.end === week}
+            onClick={() => show({ status: "open", start: today, end: week })} />
+          <Card label="Em aberto" icon="📋" tone="icon-indigo" card={summary.open}
+            active={filters.status === "open" && noDates} onClick={() => show({ status: "open" })} />
+          <Card label={receivable ? "Recebido no mês" : "Pago no mês"} icon="✅" tone="icon-teal" card={summary.paid_this_month}
+            active={filters.status === "paid" && noDates} onClick={() => show({ status: "paid" })} />
+        </section>
       )}
 
-      <section className="panel">
-        <div className="filter-bar">
-          <input placeholder={receivable ? "Buscar por cliente ou descrição" : "Buscar por fornecedor ou descrição"}
-            value={filters.search} onChange={setFilter("search")} />
-          <select value={filters.status} onChange={setFilter("status")} aria-label="Situação">
-            {STATUS_FILTERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          {!receivable && (
-            <select value={filters.category} onChange={setFilter("category")} aria-label="Categoria">
-              <option value="">Todas as categorias</option>
-              {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
-          )}
-          <label className="muted">Vencimento de <input type="date" value={filters.start} onChange={setFilter("start")} /></label>
-          <label className="muted">até <input type="date" value={filters.end} onChange={setFilter("end")} /></label>
+      {/* Same layout as the Pedidos filters: search on the left, status chips, then the extra filters */}
+      <div className="filter-bar">
+        <input placeholder={receivable ? "Buscar por cliente ou descrição" : "Buscar por fornecedor ou descrição"}
+          value={filters.search} onChange={setFilter("search")} />
+        <div className="period-chips">
+          {STATUS_FILTERS.map(([v, l]) => (
+            <button key={v} type="button" className={`period-chip ${filters.status === v ? "on" : ""}`}
+              onClick={() => setFilters({ ...filters, status: v })}>{l}</button>
+          ))}
         </div>
+      </div>
+      <div className="filter-bar filter-bar-secondary">
+        <div className="date-range">
+          <span className="muted">Vencimento</span>
+          <input type="date" aria-label="Vencimento a partir de" value={filters.start} onChange={setFilter("start")} />
+          <span className="muted">até</span>
+          <input type="date" aria-label="Vencimento até" value={filters.end} onChange={setFilter("end")} />
+          {!noDates && <button type="button" className="btn btn-light" onClick={() => setFilters({ ...filters, start: "", end: "" })}>Limpar</button>}
+        </div>
+        {!receivable && (
+          <select value={filters.category} onChange={setFilter("category")} aria-label="Categoria">
+            <option value="">Todas as categorias</option>
+            {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+          </select>
+        )}
+      </div>
 
+      <section className="panel">
         {!list.length ? <EmptyState text="Nenhum lançamento encontrado." /> : (
           <table className="table">
             <thead>

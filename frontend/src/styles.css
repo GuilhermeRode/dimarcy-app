@@ -960,13 +960,16 @@ section.item-group { margin-top: 0; }
   .dl-features, .dl-steps ol { grid-template-columns: 1fr; }
 }
 /* Faturamento tabs (NavLinks styled like .segmented buttons) */
-.revenue-tabs { margin-bottom: 16px; }
+/* sits under the page title, inside the header (block parent, so it never stretches full width) */
+.revenue-tabs { margin-top: 10px; }
 .segmented a { padding: 8px 14px; font-size: 14px; color: inherit; text-decoration: none; background: var(--surface); }
 .segmented a + a { border-left: 1px solid var(--line); }
 .segmented a.active { background: #0c2140; color: #fff; }
 
 /* Contas a pagar / receber */
-.finance-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
-@media (max-width: 800px) { .finance-cards { grid-template-columns: repeat(2, 1fr); } }
-.filter-bar input[type="date"] { min-width: 0; flex: 0 0 auto; margin-left: 4px; }
+.kpi-icon.icon-amber { background: var(--amber-light); color: var(--amber); }
+.kpi-active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.filter-bar-secondary { justify-content: flex-start; margin-top: -8px; }
+.date-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.filter-bar .date-range input[type="date"] { min-width: 0; flex: 0 0 auto; max-width: 170px; }
 .row-overdue td { color: var(--amber); }

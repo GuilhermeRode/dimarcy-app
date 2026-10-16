@@ -23,11 +23,10 @@ export default function Revenue() {
 
   return (
     <div className="page">
-      <RevenueTabs />
       <header className="dashboard-header">
         <div>
           <h1>Faturamento</h1>
-          <p className="dashboard-greeting muted">Desempenho de vendas no período.</p>
+          <RevenueTabs />
         </div>
         <PeriodPicker value={period} onChange={setPeriod} />
       </header>
