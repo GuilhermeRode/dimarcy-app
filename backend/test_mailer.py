@@ -18,7 +18,7 @@ def item(ref, color_id, color, size, qty):
 items = [item("A100", 1, "Bordô", "P", 3), item("A100", 1, "Bordô", "M", 2), item("A100", 2, "Preto", "P", 1),
          item("B200", 3, "Cru", "U", 4)]
 order = NS(id=123, date=date(2026, 10, 7), delivery_date=None, status="in_production", payment_method="Boleto",
-           payment_terms="30/60", discount=10, notes="Entregar pela manhã.\nLigar antes.", items=items,
+           payment_terms="30/60", price_table="wholesale", discount=10, notes="Entregar pela manhã.\nLigar antes.", items=items,
            pieces=10, gross=999.0, total=989.0,
            customer=NS(name="Loja <b>Exemplo</b> & Cia"), seller=NS(name="Vendedor Teste", email=None))
 

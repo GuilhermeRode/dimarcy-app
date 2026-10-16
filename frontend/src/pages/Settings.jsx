@@ -19,6 +19,7 @@ export default function Settings() {
       const { data } = await api.put("/settings", {
         allow_price_override: form.allow_price_override,
         max_discount_percent: Number(form.max_discount_percent) || 0,
+        retail_markup_percent: Number(form.retail_markup_percent) || 0,
         monthly_goal: form.monthly_goal === "" || form.monthly_goal == null ? null : Number(form.monthly_goal),
       });
       setForm(data);
@@ -52,6 +53,13 @@ export default function Settings() {
               <input type="number" min="0" max="100" step="0.01" value={form.max_discount_percent}
                 onChange={(e) => setForm({ ...form, max_discount_percent: e.target.value })} />
             </Field>
+            <Field label="Acréscimo da tabela de varejo (%)" span={2}>
+              <input type="number" min="0" max="1000" step="0.01" value={form.retail_markup_percent}
+                onChange={(e) => setForm({ ...form, retail_markup_percent: e.target.value })} />
+            </Field>
+            <p className="muted span-2" style={{ marginTop: -8 }}>
+              Aplicado sobre o preço de atacado nos pedidos de varejo. A tabela de cada vendedor é definida em Usuários.
+            </p>
             <Field label="Meta mensal da empresa (R$)" span={2}>
               <input type="number" min="0" step="0.01" placeholder="Sem meta"
                 value={form.monthly_goal ?? ""}

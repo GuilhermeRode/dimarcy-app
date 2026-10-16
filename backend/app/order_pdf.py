@@ -62,10 +62,12 @@ def build_order_pdf(order) -> bytes:
     pdf.line(15, 40, 15 + w, 40)
     pdf.set_y(45)
 
-    # Order info, 4 columns
+    # Order info, 4 columns (5 on a retail order)
     info = [("DATA DO PEDIDO", date_br(order.date)), ("DATA DE ENTREGA", date_br(order.delivery_date)),
             ("FORMA DE PAGAMENTO", order.payment_method or "-"), ("PRAZO / CONDIÇÃO", order.payment_terms or "-")]
-    col = w / 4
+    if order.price_table == "retail":
+        info.append(("TABELA", "Varejo"))
+    col = w / len(info)
     pdf.set_fill_color(*BG)
     pdf.rect(15, pdf.get_y(), w, 16, "F")
     y = pdf.get_y() + 2

@@ -69,6 +69,7 @@ export default function OrderDetail() {
           <div className="info-item"><span>Data de entrega</span><strong>{o.delivery_date ? dateBR(o.delivery_date) : "Não definida"}</strong></div>
           <div className="info-item"><span>Forma de pagamento</span><strong>{o.payment_method || "—"}</strong></div>
           <div className="info-item"><span>Prazo / condição</span><strong>{o.payment_terms || "—"}</strong></div>
+          {o.price_table === "retail" && <div className="info-item"><span>Tabela de preço</span><strong>Varejo</strong></div>}
         </div>
       </section>
 

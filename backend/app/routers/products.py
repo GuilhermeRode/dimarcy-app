@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..models import Color, OrderItem, Product
+from ..models import Color, OrderItem, Product, User
 from ..schemas import ProductIn, ProductOut
 from ..security import get_current_user, require_admin
 from ..uploads import make_thumb, read_validated_image, thumb_name
@@ -33,11 +33,22 @@ def _apply(p: Product, data: ProductIn, db: Session):
     p.sizes = ",".join(t.strip().upper() for t in data.sizes if t.strip())
     p.active = data.active
     p.colors = db.query(Color).filter(Color.id.in_(data.color_ids)).all() if data.color_ids else []
+    if data.seller_ids is not None:
+        p.sellers = db.query(User).filter(User.id.in_(data.seller_ids), User.role == "seller").all()
+
+
+def available_to(user: User):
+    """Filter for the products a user may sell: unrestricted ones, or ones restricted to them."""
+    return or_(~Product.sellers.any(), Product.sellers.any(User.id == user.id))
 
 
 @router.get("", response_model=list[ProductOut])
-def list_all(search: str = "", active_only: bool = False, db: Session = Depends(get_db)):
-    q = db.query(Product).options(selectinload(Product.colors))  # colors in one batch, not per product
+def list_all(search: str = "", active_only: bool = False, db: Session = Depends(get_db),
+             user: User = Depends(get_current_user)):
+    # colors/sellers in one batch each, not per product
+    q = db.query(Product).options(selectinload(Product.colors), selectinload(Product.sellers))
+    if user.role != "admin":
+        q = q.filter(available_to(user))
     if search:
         t = f"%{search}%"
         q = q.filter(or_(Product.reference.ilike(t), Product.description.ilike(t), Product.collection.ilike(t)))
@@ -47,9 +58,9 @@ def list_all(search: str = "", active_only: bool = False, db: Session = Depends(
 
 
 @router.get("/{pid}", response_model=ProductOut)
-def get(pid: int, db: Session = Depends(get_db)):
+def get(pid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     p = db.get(Product, pid)
-    if not p:
+    if not p or (user.role != "admin" and p.sellers and user not in p.sellers):
         raise HTTPException(404, "Product not found.")
     return p
 

@@ -10,6 +10,7 @@ from .database import Base
 ORDER_STATUSES = ["quote", "confirmed", "in_production", "shipped", "delivered", "canceled"]
 SALE_STATUSES = ["confirmed", "in_production", "shipped", "delivered"]  # count as revenue
 LATE_STATUSES = ["confirmed", "in_production"]  # past delivery_date in these = late
+PRICE_TABLES = ["wholesale", "retail"]  # wholesale = registered price; retail = + AppSettings.retail_markup_percent
 
 # Customer status by days since the last sale (see customer_status)
 ACTIVE_DAYS = 60
@@ -33,6 +34,14 @@ product_color = Table(
     Column("color_id", ForeignKey("colors.id", ondelete="CASCADE"), primary_key=True),
 )
 
+# Sellers a product is restricted to; no rows = available to every seller
+product_seller = Table(
+    "product_seller",
+    Base.metadata,
+    Column("product_id", ForeignKey("products.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class User(Base):
     __tablename__ = "users"
@@ -45,6 +54,8 @@ class User(Base):
     avatar_url: Mapped[str | None] = mapped_column(String(300))
     theme: Mapped[str] = mapped_column(String(10), default="light")  # light | dark — personal UI preference
     monthly_goal: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)  # NULL/0 = no goal
+    price_table: Mapped[str] = mapped_column(String(10), default="wholesale",
+                                             server_default="wholesale")  # wholesale | retail | both
     reset_token_hash: Mapped[str | None] = mapped_column(String(64))  # sha256 hex of the forgot-password token
     reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
 
@@ -91,6 +102,11 @@ class Product(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     image_url: Mapped[str | None] = mapped_column(String(300))
     colors: Mapped[list[Color]] = relationship(secondary=product_color, order_by=Color.name)
+    sellers: Mapped[list[User]] = relationship(secondary=product_seller)
+
+    @property
+    def seller_ids(self) -> list[int]:
+        return [u.id for u in self.sellers]
 
 
 class Order(Base):
@@ -104,6 +120,8 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(20), default="quote", index=True)
     payment_method: Mapped[str | None] = mapped_column(String(40))
     payment_terms: Mapped[str | None] = mapped_column(String(80))
+    price_table: Mapped[str] = mapped_column(String(10), default="wholesale",
+                                             server_default="wholesale")  # see PRICE_TABLES
     discount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -162,5 +180,6 @@ class AppSettings(Base):
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
     allow_price_override: Mapped[bool] = mapped_column(Boolean, default=False)
     max_discount_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+    retail_markup_percent: Mapped[float] = mapped_column(Numeric(6, 2), default=50)
     monthly_goal: Mapped[float | None] = mapped_column(Numeric(12, 2), default=0)  # company goal; NULL/0 = none
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
