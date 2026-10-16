@@ -252,8 +252,8 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .period-block { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .period-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .period-chip {
-  font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; border: 1px solid var(--line);
-  background: var(--surface); border-radius: 999px; padding: 5px 12px; color: var(--muted);
+  font: inherit; font-size: 0.98rem; font-weight: 600; cursor: pointer; border: 1px solid var(--line);
+  background: var(--surface); border-radius: 999px; padding: 6px 15px; color: var(--muted);
 }
 .period-chip:hover { border-color: var(--accent); color: var(--accent-strong); }
 .period-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -957,3 +957,93 @@ section.item-group { margin-top: 0; }
   .dl-content { padding: 0 16px 40px; }
   .dl-features, .dl-steps ol { grid-template-columns: 1fr; }
 }
+/* ---------- Faturamento: Vendas · Contas a receber · Contas a pagar ---------- */
+.revenue-header { display: flex; flex-direction: column; gap: 2px; }
+.breadcrumb { font-size: 1.02rem; color: var(--muted); }
+.revenue-header h1 { margin: 0 0 8px; }
+.revenue-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px 16px; flex-wrap: wrap; }
+.tabs-underline { display: flex; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tabs-underline a { padding: 10px 16px; color: var(--muted); text-decoration: none; font-weight: 500; white-space: nowrap;
+  border-bottom: 2px solid transparent; }
+.tabs-underline a:hover { color: var(--ink); }
+.tabs-underline a.active { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+.header-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* period menu (components/PeriodPicker.jsx): grey track, the chosen option on white */
+.period-row { display: flex; align-items: center; gap: 10px; }
+.period-label { font-size: 0.95rem; color: var(--muted); }
+.seg-control { display: inline-flex; gap: 2px; padding: 4px; background: #e4e9f2; border-radius: 10px; flex-wrap: wrap; }
+.seg-control button { font: inherit; font-size: 0.95rem; font-weight: 500; border: 0; background: transparent; color: var(--ink);
+  padding: 7px 14px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+.seg-control button:hover { background: rgba(255, 255, 255, .6); }
+.seg-control button.on { background: var(--surface); font-weight: 600; box-shadow: 0 1px 2px rgba(13, 42, 82, .14); }
+
+/* summary cards: colored dot + label, big value (overdue in red); the active filter gets a blue outline */
+.fin-card { gap: 4px; }
+.fin-card .fin-card-label { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-size: 0.95rem; }
+.fin-card strong { font-size: 1.75rem; line-height: 1.25; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.dot-red { background: var(--danger); }
+.dot-amber { background: #e0951f; }
+.dot-blue { background: var(--accent); }
+.dot-green { background: #1f9d5c; }
+.value-danger { color: var(--danger); }
+.kpi-active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+
+/* the list: toolbar on top, uppercase headers, month groups, selection */
+.panel-table { padding: 0; overflow: hidden; }
+.table-toolbar { display: flex; align-items: center; gap: 12px; padding: 16px 18px; flex-wrap: wrap; min-height: 74px; box-sizing: border-box; }
+.table-toolbar .toolbar-search { flex: 1; min-width: 220px; }
+.table-toolbar select { width: auto; min-width: 190px; }
+.toolbar-summary { margin-left: auto; white-space: nowrap; }
+.link-btn { all: unset; cursor: pointer; color: var(--accent-strong); font-weight: 600; font-size: 0.92rem; }
+.link-btn:hover { text-decoration: underline; }
+/* floating selection bar, bottom center (stays put while the list scrolls) */
+.bulk-bar { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 18; /* under the mobile menu (19+) and modals */
+  display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 20px; max-width: calc(100vw - 32px); box-sizing: border-box;
+  background: var(--ink); color: #fff; border-radius: 12px; box-shadow: 0 8px 24px rgba(13, 42, 82, .28); white-space: nowrap; }
+.bulk-spacer { height: 72px; }
+.bulk-bar .link-btn { color: #fff; opacity: .8; }
+.table-scroll { overflow-x: auto; }
+.table-fin { border: 0; border-radius: 0; border-top: 1px solid var(--line); }
+.table-fin th { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+.table-fin td { vertical-align: middle; }
+.table-fin .cell-check { width: 36px; padding-right: 0; }
+.cell-check input { width: 18px; height: 18px; padding: 0; margin: 0; cursor: pointer; vertical-align: middle; }
+.cell-main { font-weight: 600; }
+.due-overdue { color: var(--danger); }
+.cat-tag { font-size: 0.82rem; background: var(--slate-light); color: var(--ink); padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
+.group-row td { background: var(--surface) !important; padding-top: 14px; padding-bottom: 10px; cursor: default; }
+.group-row td > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.row-selected td { background: var(--accent-light) !important; }
+
+/* Situação badges */
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge-overdue { background: var(--danger-light); color: var(--danger); }
+.badge-soon { background: var(--amber-light); color: var(--amber); }
+.badge-open { background: var(--accent-light); color: var(--accent-strong); }
+.badge-paid { background: #e0f1ea; color: #1c7a52; }
+
+/* phones: cards 2 × 2 so the list isn't pushed far down */
+@media (max-width: 600px) {
+  .orders-kpis.finance-kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .finance-kpis .kpi { padding: 12px 14px; }
+  .finance-kpis .fin-card strong { font-size: 1.1rem; }
+  .revenue-toolbar, .header-actions { align-items: stretch; justify-content: flex-start; }
+  .toolbar-summary { margin-left: 0; }
+  .bulk-bar { left: 16px; right: 16px; bottom: 16px; transform: none; flex-wrap: wrap; gap: 8px 14px; padding: 12px 16px; }
+  .bulk-bar .btn { flex: 1 0 100%; order: 3; }
+  .bulk-spacer { height: 120px; }
+}
+
+/* Sortable list columns (components/useSort.jsx) */
+.th-sort { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font: inherit; color: inherit; white-space: nowrap; }
+.th-sort:hover { color: var(--accent-strong); }
+.th-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.sort-arrow { font-size: 0.9em; opacity: 0; transition: opacity .1s; }
+.th-sort:hover .sort-arrow { opacity: 0.4; }
+th[aria-sort="ascending"] .th-sort, th[aria-sort="descending"] .th-sort { color: var(--accent-strong); }
+th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { opacity: 1; }
+.table-fin a.ref { text-decoration: none; }
+.table-fin a.ref:hover { text-decoration: underline; }

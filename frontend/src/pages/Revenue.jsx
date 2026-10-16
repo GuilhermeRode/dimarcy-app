@@ -5,6 +5,7 @@ import Delta from "../components/Delta";
 import PeriodPicker, { defaultPeriod } from "../components/PeriodPicker";
 import TeamRanking, { SELLER_COLORS } from "../components/TeamRanking";
 import usePeriodData from "../components/usePeriodData";
+import { RevenueHeader } from "../components/RevenueTabs";
 
 function topCities(cities, n = 5) {
   const top = cities.slice(0, n);
@@ -22,13 +23,9 @@ export default function Revenue() {
 
   return (
     <div className="page">
-      <header className="dashboard-header">
-        <div>
-          <h1>Faturamento</h1>
-          <p className="dashboard-greeting muted">Desempenho de vendas no período.</p>
-        </div>
-        <PeriodPicker value={period} onChange={setPeriod} />
-      </header>
+      <RevenueHeader title="Vendas">
+        <PeriodPicker label="Período" value={period} onChange={setPeriod} />
+      </RevenueHeader>
       <ErrorBox msg={error} />
       {d && (
         <>

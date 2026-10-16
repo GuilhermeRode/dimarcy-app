@@ -3,10 +3,10 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import clock
+from .. import clock, finance
 from ..database import get_db
 from ..mailer import send_order_created_emails, send_order_delivered_email
-from ..models import ORDER_STATUSES, AppSettings, Customer, Order, OrderItem, Product, User
+from ..models import ORDER_STATUSES, AppSettings, Customer, FinancialEntry, Order, OrderItem, Product, User
 from ..schemas import OrderIn, StatusIn
 from ..sales import late_filter, visible_orders
 from ..security import get_current_user, require_admin
@@ -92,6 +92,15 @@ def _find(oid: int, db: Session) -> Order:
     return o
 
 
+def _sync_installments(db: Session, o: Order, old_status: str | None) -> None:
+    """Entering "delivered" creates the receivables; leaving it drops the unpaid ones.
+    Runs after a flush and before the single commit, so the order and its installments save together."""
+    if o.status == "delivered" and old_status != "delivered":
+        finance.create_order_installments(db, o, clock.today_br())
+    elif old_status == "delivered" and o.status != "delivered":
+        finance.remove_open_installments(db, o)
+
+
 @router.get("")
 def list_all(status: str = "", customer_id: int | None = None, start: date | None = None,
              end: date | None = None, late: bool = False, db: Session = Depends(get_db),
@@ -136,6 +145,8 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
               payment_method=data.payment_method, payment_terms=data.payment_terms, price_table=price_table,
               discount=data.discount, notes=data.notes, items=items)
     db.add(o)
+    db.flush()  # the installment descriptions need the order id
+    _sync_installments(db, o, old_status=None)
     db.commit()
     db.refresh(o)
     send_order_created_emails(o)
@@ -145,19 +156,21 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
 @router.put("/{oid}", dependencies=[Depends(require_admin)])
 def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o = _find(oid, db)
+    old_status = o.status
     app_settings = get_app_settings(db)
     # The table is fixed when the order is created; editing keeps it.
     items = _build_items(data, db, user, app_settings, existing_order=o, price_table=o.price_table)
     _check_discount(data.discount, items, app_settings)
     o.items = items
-    became_delivered = data.status == "delivered" and o.status != "delivered"
     o.customer_id, o.status, o.discount, o.notes = data.customer_id, data.status, data.discount, data.notes
     o.payment_method, o.payment_terms = data.payment_method, data.payment_terms
     o.date = data.date or o.date
     o.delivery_date = data.delivery_date
+    db.flush()
+    _sync_installments(db, o, old_status)
     db.commit()
     db.refresh(o)
-    if became_delivered:
+    if o.status == "delivered" and old_status != "delivered":
         send_order_delivered_email(o)
     return full(o)
 
@@ -167,11 +180,13 @@ def change_status(oid: int, data: StatusIn, db: Session = Depends(get_db)):
     if data.status not in ORDER_STATUSES:
         raise HTTPException(400, "Invalid status.")
     o = _find(oid, db)
-    became_delivered = data.status == "delivered" and o.status != "delivered"
+    old_status = o.status
     o.status = data.status
+    db.flush()
+    _sync_installments(db, o, old_status)
     db.commit()
     db.refresh(o)
-    if became_delivered:
+    if o.status == "delivered" and old_status != "delivered":
         send_order_delivered_email(o)
     return full(o)
 
@@ -181,5 +196,7 @@ def delete(oid: int, db: Session = Depends(get_db)):
     o = _find(oid, db)
     if o.status != "quote":
         raise HTTPException(400, "Só orçamentos podem ser excluídos. Para os demais, use Cancelar.")
+    if db.query(FinancialEntry).filter(FinancialEntry.order_id == oid).first():
+        raise HTTPException(400, "Este pedido tem parcelas lançadas. Exclua as parcelas antes.")
     db.delete(o)
     db.commit()
