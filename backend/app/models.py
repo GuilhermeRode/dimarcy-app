@@ -11,6 +11,9 @@ ORDER_STATUSES = ["quote", "confirmed", "in_production", "shipped", "delivered",
 SALE_STATUSES = ["confirmed", "in_production", "shipped", "delivered"]  # count as revenue
 LATE_STATUSES = ["confirmed", "in_production"]  # past delivery_date in these = late
 PRICE_TABLES = ["wholesale", "retail"]  # wholesale = registered price; retail = + AppSettings.retail_markup_percent
+ENTRY_KINDS = ["receivable", "payable"]
+# Business content, so in Portuguese; a payable's category must be one of these
+PAYABLE_CATEGORIES = ["Matéria-prima", "Aluguel", "Salários", "Impostos", "Energia", "Manutenção", "Outros"]
 
 # Customer status by days since the last sale (see customer_status)
 ACTIVE_DAYS = 60
@@ -183,3 +186,25 @@ class AppSettings(Base):
     retail_markup_percent: Mapped[float] = mapped_column(Numeric(6, 2), default=50)
     monthly_goal: Mapped[float | None] = mapped_column(Numeric(12, 2), default=0)  # company goal; NULL/0 = none
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class FinancialEntry(Base):
+    """A receivable installment or a payable bill — see finance.py for the rules."""
+    __tablename__ = "financial_entries"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(10), index=True)  # see ENTRY_KINDS
+    description: Mapped[str] = mapped_column(String(200))
+    amount: Mapped[float] = mapped_column(Numeric(12, 2))
+    due_date: Mapped[_dt.date] = mapped_column(Date, index=True)
+    paid_at: Mapped[_dt.date | None] = mapped_column(Date, nullable=True)  # NULL = still open
+    paid_amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    payment_method: Mapped[str | None] = mapped_column(String(40))
+    notes: Mapped[str | None] = mapped_column(Text)
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id"), nullable=True, index=True)
+    supplier: Mapped[str | None] = mapped_column(String(160))  # payables
+    category: Mapped[str | None] = mapped_column(String(40))  # payables, see PAYABLE_CATEGORIES
+    installment: Mapped[int | None] = mapped_column(Integer)  # "2" of "2/3"
+    installments: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    order: Mapped["Order | None"] = relationship()
