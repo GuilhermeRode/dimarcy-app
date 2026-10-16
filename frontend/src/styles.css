@@ -957,3 +957,13 @@ section.item-group { margin-top: 0; }
   .dl-content { padding: 0 16px 40px; }
   .dl-features, .dl-steps ol { grid-template-columns: 1fr; }
 }
+/* Faturamento tabs (NavLinks styled like .segmented buttons) */
+.revenue-tabs { margin-bottom: 16px; }
+.segmented a { padding: 8px 14px; font-size: 14px; color: inherit; text-decoration: none; background: var(--surface); }
+.segmented a + a { border-left: 1px solid var(--line); }
+.segmented a.active { background: #0c2140; color: #fff; }
+
+/* Contas a pagar / receber */
+.finance-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+@media (max-width: 800px) { .finance-cards { grid-template-columns: repeat(2, 1fr); } }
+.filter-bar input[type="date"] { min-width: 0; flex: 0 0 auto; margin-left: 4px; }

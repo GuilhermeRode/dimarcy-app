@@ -14,6 +14,7 @@ import Products from "./pages/Products";
 import Colors from "./pages/Colors";
 import Users from "./pages/Users";
 import Revenue from "./pages/Revenue";
+import Finance from "./pages/Finance";
 import Production from "./pages/Production";
 import ProductionPrint from "./pages/ProductionPrint";
 import ClientPrint from "./pages/ClientPrint";
@@ -54,6 +55,9 @@ const router = createHashRouter(createRoutesFromElements(
       <Route path="orders/:id/edit" element={<Protected admin><OrderForm /></Protected>} />
       <Route path="production" element={<Protected admin><Production /></Protected>} />
       <Route path="revenue" element={<Protected admin><Revenue /></Protected>} />
+      {/* key: both routes render Finance, so switching tabs must start fresh state */}
+      <Route path="revenue/receivables" element={<Protected admin><Finance key="receivable" kind="receivable" /></Protected>} />
+      <Route path="revenue/payables" element={<Protected admin><Finance key="payable" kind="payable" /></Protected>} />
       <Route path="customers" element={<Customers />} />
       {!EXCLUDE_MAP && (
         <Route path="customers-by-city" element={
