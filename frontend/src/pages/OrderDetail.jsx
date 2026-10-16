@@ -137,7 +137,7 @@ export default function OrderDetail() {
                     <td>{x.installments ? `${x.installment}/${x.installments}` : x.description}</td>
                     <td>{dateBR(x.due_date)}</td>
                     <td className="num">{money(x.amount)}</td>
-                    <td><EntryStatus s={x.status} /></td>
+                    <td><EntryStatus entry={x} /></td>
                     <td>{x.paid_at
                       ? <span className="muted">pago em {dateBR(x.paid_at)}</span>
                       : <button className="btn btn-light" onClick={() => setPaying(x)}>Dar baixa</button>}</td>

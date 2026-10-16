@@ -7,8 +7,8 @@ const isEmpty = (v) => v == null || v === "";
 /** Click-to-sort for list tables. `columns` maps a column key to `row => value` (string, number or ISO date).
  *  First click sorts ascending (A→Z, 0→9, oldest first), the next click descending; empty values always go last.
  *  Returns the sorted rows and `sortHeader(key, label, className)` to render each clickable <th>. */
-export function useSort(rows, columns) {
-  const [sort, setSort] = useState(null); // { key, dir: 1 | -1 }; null = the order the rows came in
+export function useSort(rows, columns, initial = null) {
+  const [sort, setSort] = useState(initial); // { key, dir: 1 | -1 }; null = the order the rows came in
 
   let sorted = rows;
   if (sort) {
@@ -28,11 +28,11 @@ export function useSort(rows, columns) {
     return (
       <th key={key} className={className} aria-sort={dir === 1 ? "ascending" : dir === -1 ? "descending" : "none"}>
         <button type="button" className="th-sort" onClick={() => toggle(key)}>
-          {label}<span className="sort-arrow" aria-hidden="true">{dir === 1 ? "▲" : dir === -1 ? "▼" : "↕"}</span>
+          {label}<span className="sort-arrow" aria-hidden="true">{dir === -1 ? "↓" : "↑"}</span>
         </button>
       </th>
     );
   }
 
-  return { sorted, sortHeader };
+  return { sorted, sort, sortHeader };
 }

@@ -16,16 +16,18 @@ export default function PeriodPicker({ value, onChange, presets = PRESETS, label
   const active = custom || !match ? "custom" : match.key;
   return (
     <div className="period-block">
-      <div className="period-chips" role="group" aria-label={label || "Período"}>
+      <div className="period-row">
         {label && <span className="period-label">{label}</span>}
-        {presets.map((p) => (
-          <button key={p.key} type="button" className={`period-chip ${active === p.key ? "on" : ""}`}
-            onClick={() => { setCustom(false); onChange({ start: p.start(), end: p.end() }); }}>
-            {p.label}
-          </button>
-        ))}
-        <button type="button" className={`period-chip ${active === "custom" ? "on" : ""}`}
-          onClick={() => setCustom(true)}>Personalizado</button>
+        <div className="seg-control" role="group" aria-label={label || "Período"}>
+          {presets.map((p) => (
+            <button key={p.key} type="button" className={active === p.key ? "on" : ""} aria-pressed={active === p.key}
+              onClick={() => { setCustom(false); onChange({ start: p.start(), end: p.end() }); }}>
+              {p.label}
+            </button>
+          ))}
+          <button type="button" className={active === "custom" ? "on" : ""} aria-pressed={active === "custom"}
+            onClick={() => setCustom(true)}>Personalizado</button>
+        </div>
       </div>
       {active === "custom" && (
         <div className="period-filter">
