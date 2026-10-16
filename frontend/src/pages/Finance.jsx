@@ -4,12 +4,20 @@ import { api, errorMessage } from "../api";
 import { addDays, dateBR, localDate, money, orderNumber } from "../format";
 import { EmptyState, ErrorBox, Field, Modal, useConfirm } from "../components/ui";
 import RevenueTabs from "../components/RevenueTabs";
+import PeriodPicker from "../components/PeriodPicker";
 
 // Same list as PAYABLE_CATEGORIES in backend/app/models.py
 const PAYABLE_CATEGORIES = ["Matéria-prima", "Aluguel", "Salários", "Impostos", "Energia", "Manutenção", "Outros"];
 const PAYMENT_METHODS = ["Boleto", "Pix", "Transferência", "Cheque", "Dinheiro", "Cartão"];
 const STATUS_LABEL = { open: "Em aberto", overdue: "Vencida", paid: "Paga" };
 const STATUS_FILTERS = [["open", "Em aberto"], ["overdue", "Vencidas"], ["paid", "Pagas"], ["all", "Todas"]];
+// Due-date periods look ahead (unlike the sales ones); "Todos" = no date filter
+const monthEnd = () => { const d = new Date(); return localDate(new Date(d.getFullYear(), d.getMonth() + 1, 0)); };
+const DUE_PRESETS = [
+  { key: "all", label: "Todos", start: () => "", end: () => "" },
+  { key: "7d", label: "Próximos 7 dias", start: localDate, end: () => addDays(localDate(), 7) },
+  { key: "month", label: "Este mês", start: () => `${localDate().slice(0, 8)}01`, end: monthEnd },
+];
 
 export const EntryStatus = ({ s }) => <span className={`tag ${s === "overdue" ? "tag-warning" : ""}`}>{STATUS_LABEL[s]}</span>;
 
@@ -161,12 +169,14 @@ function EntryModal({ kind, entry, onClose, onDone }) {
   );
 }
 
-// Same card shape as the Pedidos KPIs (label + icon, value, caption); `active` marks the card whose filter is on
+// Same card shape as the Pedidos KPIs (label + icon, value, caption) plus a colored top edge per tone;
+// `active` marks the card whose filter is on
 function Card({ label, icon, tone, card, active, onClick }) {
   return (
-    <div className={`kpi kpi-clickable ${active ? "kpi-active" : ""}`} role="button" tabIndex={0} aria-pressed={active}
-      onClick={onClick} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}>
-      <div className="kpi-header"><span>{label}</span><span className={`kpi-icon ${tone}`} aria-hidden="true">{icon}</span></div>
+    <div className={`kpi kpi-clickable kpi-tone tone-${tone} ${active ? "kpi-active" : ""}`} role="button" tabIndex={0}
+      aria-pressed={active} onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}>
+      <div className="kpi-header"><span>{label}</span><span className={`kpi-icon icon-${tone}`} aria-hidden="true">{icon}</span></div>
       <strong>{money(card.total)}</strong>
       <span>{card.count} {card.count === 1 ? "lançamento" : "lançamentos"}</span>
     </div>
@@ -201,54 +211,52 @@ export default function Finance({ kind }) {
 
   return (
     <div className="page">
-      <header className="page-header">
+      {/* Same header as the Vendas tab: title + tabs on the left, the period menu (by due date) on the right */}
+      <header className="dashboard-header">
         <div>
           <h1>{receivable ? "Contas a receber" : "Contas a pagar"}</h1>
           <RevenueTabs />
         </div>
-        <button className="btn btn-primary" onClick={() => setEditing("new")}>Lançar conta</button>
+        <div className="header-actions">
+          <PeriodPicker label="Vencimento" presets={DUE_PRESETS} value={{ start: filters.start, end: filters.end }}
+            onChange={({ start, end }) => setFilters({ ...filters, start, end })} />
+          <button className="btn btn-primary" onClick={() => setEditing("new")}>Lançar conta</button>
+        </div>
       </header>
       <ErrorBox msg={error} />
 
       {summary && (
-        <section className="orders-kpis">
-          <Card label="Vencido" icon="⏰" tone="icon-amber" card={summary.overdue}
+        <section className="orders-kpis finance-kpis">
+          <Card label="Vencido" icon="⏰" tone="amber" card={summary.overdue}
             active={filters.status === "overdue" && noDates} onClick={() => show({ status: "overdue" })} />
-          <Card label="Vence em 7 dias" icon="📅" tone="icon-gold" card={summary.due_soon}
+          <Card label="Vence em 7 dias" icon="📅" tone="gold" card={summary.due_soon}
             active={filters.status === "open" && filters.start === today && filters.end === week}
             onClick={() => show({ status: "open", start: today, end: week })} />
-          <Card label="Em aberto" icon="📋" tone="icon-indigo" card={summary.open}
+          <Card label="Em aberto" icon="📋" tone="indigo" card={summary.open}
             active={filters.status === "open" && noDates} onClick={() => show({ status: "open" })} />
-          <Card label={receivable ? "Recebido no mês" : "Pago no mês"} icon="✅" tone="icon-teal" card={summary.paid_this_month}
+          <Card label={receivable ? "Recebido no mês" : "Pago no mês"} icon="✅" tone="teal" card={summary.paid_this_month}
             active={filters.status === "paid" && noDates} onClick={() => show({ status: "paid" })} />
         </section>
       )}
 
-      {/* Same layout as the Pedidos filters: search on the left, status chips, then the extra filters */}
+      {/* Same layout as the Pedidos filters: search, then the status chips (and the category, for payables) */}
       <div className="filter-bar">
         <input placeholder={receivable ? "Buscar por cliente ou descrição" : "Buscar por fornecedor ou descrição"}
           value={filters.search} onChange={setFilter("search")} />
-        <div className="period-chips">
-          {STATUS_FILTERS.map(([v, l]) => (
-            <button key={v} type="button" className={`period-chip ${filters.status === v ? "on" : ""}`}
-              onClick={() => setFilters({ ...filters, status: v })}>{l}</button>
-          ))}
+        <div className="filter-group">
+          <div className="period-chips" role="group" aria-label="Situação">
+            {STATUS_FILTERS.map(([v, l]) => (
+              <button key={v} type="button" className={`period-chip ${filters.status === v ? "on" : ""}`}
+                onClick={() => setFilters({ ...filters, status: v })}>{l}</button>
+            ))}
+          </div>
+          {!receivable && (
+            <select value={filters.category} onChange={setFilter("category")} aria-label="Categoria">
+              <option value="">Todas as categorias</option>
+              {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+            </select>
+          )}
         </div>
-      </div>
-      <div className="filter-bar filter-bar-secondary">
-        <div className="date-range">
-          <span className="muted">Vencimento</span>
-          <input type="date" aria-label="Vencimento a partir de" value={filters.start} onChange={setFilter("start")} />
-          <span className="muted">até</span>
-          <input type="date" aria-label="Vencimento até" value={filters.end} onChange={setFilter("end")} />
-          {!noDates && <button type="button" className="btn btn-light" onClick={() => setFilters({ ...filters, start: "", end: "" })}>Limpar</button>}
-        </div>
-        {!receivable && (
-          <select value={filters.category} onChange={setFilter("category")} aria-label="Categoria">
-            <option value="">Todas as categorias</option>
-            {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-          </select>
-        )}
       </div>
 
       <section className="panel">

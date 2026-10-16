@@ -252,8 +252,8 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .period-block { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .period-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .period-chip {
-  font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; border: 1px solid var(--line);
-  background: var(--surface); border-radius: 999px; padding: 5px 12px; color: var(--muted);
+  font: inherit; font-size: 0.98rem; font-weight: 600; cursor: pointer; border: 1px solid var(--line);
+  background: var(--surface); border-radius: 999px; padding: 6px 15px; color: var(--muted);
 }
 .period-chip:hover { border-color: var(--accent); color: var(--accent-strong); }
 .period-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -968,8 +968,26 @@ section.item-group { margin-top: 0; }
 
 /* Contas a pagar / receber */
 .kpi-icon.icon-amber { background: var(--amber-light); color: var(--amber); }
-.kpi-active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.filter-bar-secondary { justify-content: flex-start; margin-top: -8px; }
-.date-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.filter-bar .date-range input[type="date"] { min-width: 0; flex: 0 0 auto; max-width: 170px; }
+.period-label { align-self: center; margin-right: 4px; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.header-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.filter-group { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; justify-content: flex-end; }
+.filter-group .period-chips { flex-wrap: nowrap; }
+.filter-bar .filter-group select { width: 200px; }
+@media (max-width: 900px) { .filter-group, .filter-group .period-chips { flex-wrap: wrap; justify-content: flex-start; } }
+/* phones: the four finance cards stay 2 × 2 so the list isn't pushed far down */
+@media (max-width: 600px) {
+  .orders-kpis.finance-kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .finance-kpis .kpi { padding: 12px 14px; }
+  .finance-kpis .kpi-tone strong { font-size: 1.1rem; }
+  .finance-kpis .kpi-icon { display: none; }
+}
+/* summary cards: colored top edge per tone; the overdue value stands out */
+.kpi-tone { border-top: 3px solid var(--tone, var(--line)); }
+.kpi-tone strong { font-size: 1.6rem; }
+.tone-amber { --tone: var(--amber); }
+.tone-amber strong { color: var(--amber); }
+.tone-gold { --tone: var(--gold); }
+.tone-indigo { --tone: var(--indigo); }
+.tone-teal { --tone: #0d6d80; }
+.kpi-active { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
 .row-overdue td { color: var(--amber); }
