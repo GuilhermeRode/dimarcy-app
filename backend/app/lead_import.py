@@ -161,7 +161,10 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
                 if not d["name"]:
                     d["name"] = names.get(d["basico"], "")
     existing_new = db.query(Lead).filter(Lead.status == "new", Lead.state.in_(states)).count()
-    if not found or len(found) < existing_new // 2:  # bad/partial download: don't wipe leads
+    # Bad/partial download: don't wipe leads. The "less than half" check is skipped when the scope changed
+    # (narrowed CNAEs / removed state legitimately shrink the result); an empty result is always refused.
+    shrunk = len(found) < existing_new // 2 and s.last_lead_import_scope == scope
+    if not found or shrunk:
         raise RuntimeError(f"Import looks wrong: {len(found)} leads found vs {existing_new} current new leads; nothing written")
     try:
         added = apply(db, found, month, scope, clock.today_br())

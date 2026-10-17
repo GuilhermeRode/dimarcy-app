@@ -174,6 +174,14 @@ def check_run():
     assert db.query(Lead).count() == n_leads
     assert db.query(AppSettings).first().last_lead_import_month == "2026-10"
 
+    # narrowing the scope may shrink the result below half of the current leads: that is not a bad download
+    only = {"Municipios.zip": towns, "Estabelecimentos0.zip": [estab(basico="70000000", fantasia="NARROW", cnae="4642701")]}
+    s = db.query(AppSettings).first()
+    s.lead_cnaes = "4642701"
+    db.commit()
+    assert li.run(db, lambda: "2026-10", lambda month, name, dest: make_zip(dest, only.get(name, []))).startswith("imported 2026-10")
+    assert lead("70000000000101") is not None and lead("10000000000101") is None
+
     db.query(SellerCity).delete()
     db.commit()
     assert li.run(db, lambda: "2026-11", download) == "no-scope"
