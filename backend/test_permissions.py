@@ -11,6 +11,7 @@ os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.c
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app import clock  # noqa: E402
 from app.main import app  # noqa: E402
 
 TODAY = date.today()
@@ -27,7 +28,7 @@ with TestClient(app) as c:
     ids = {}
     for key, name in (("a", "Ana"), ("b", "Bruno")):
         r = c.post("/api/users", headers=admin, json={"name": name, "email": f"{key}@t.com", "password": "seller-pass-123",
-                                                      "role": "seller", "monthly_goal": 1000 if key == "a" else 2000})
+                                                      "role": "seller", "annual_goal": 1000 if key == "a" else 2000})
         ids[key] = r.json()["id"]
     A, B = login(c, "a@t.com", "seller-pass-123"), login(c, "b@t.com", "seller-pass-123")
 
@@ -90,18 +91,18 @@ with TestClient(app) as c:
     assert [x["name"] for x in d["top_customers"]] == ["Cliente do Bruno"]
     assert sum(m["orders"] for m in d["monthly_sales"]) == 1
     assert d["alerts"]["late_orders"] == 0  # Ana's late order is not Bruno's
-    days = (TODAY - date(TODAY.year, 1, 1)).days + 1  # default period: 1 Jan to today
-    assert d["goal"] == round(2000 * days / 30.4, 2), d["goal"]  # Bruno's own goal, not the company's
+    days = (TODAY - clock.goal_year_start(TODAY)).days + 1  # default period: goal year (from 1 Oct) to today
+    assert d["goal"] == round(2000 * days / 365, 2), d["goal"]  # Bruno's own goal, not the company's
     da = c.get("/api/dashboard", headers=A).json()
     assert da["kpis"]["revenue"] == 100 and da["alerts"]["late_orders"] == 1  # admin's sale excluded
-    assert "60800" not in str(d) and "monthly_goal" not in str(d)
+    assert "60800" not in str(d) and "annual_goal" not in str(d)
 
     # ---- admin-only areas ----
     assert c.get("/api/users", headers=B).status_code == 403
     assert c.post("/api/users", headers=B, json={"name": "X", "email": "x@t.com", "password": "seller-pass-123"}).status_code == 403
     assert c.put(f"/api/users/{ids['b']}", headers=B, json={"name": "Bruno", "email": "b@t.com", "role": "admin"}).status_code == 403
     assert c.put("/api/settings", headers=B, json={"allow_price_override": True, "max_discount_percent": 100}).status_code == 403
-    assert "monthly_goal" not in c.get("/api/settings", headers=B).json()
+    assert "annual_goal" not in c.get("/api/settings", headers=B).json()
 
     # ---- no self-promotion through the profile ----
     r = c.put("/api/auth/me", headers=B, json={"name": "Bruno", "email": "b@t.com", "role": "admin"})

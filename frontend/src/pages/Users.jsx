@@ -13,8 +13,8 @@ export default function Users() {
 
   async function save(e) {
     e.preventDefault();
-    const goal = form.monthly_goal;
-    const body = { ...form, monthly_goal: goal === "" || goal == null ? null : Number(goal) };
+    const goal = form.annual_goal;
+    const body = { ...form, annual_goal: goal === "" || goal == null ? null : Number(goal) };
     try {
       form.id ? await api.put(`/users/${form.id}`, body) : await api.post("/users", body);
       setForm(null);
@@ -35,7 +35,7 @@ export default function Users() {
     <div className="page">
       <header className="page-header">
         <h1>Usuários</h1>
-        <button className="btn btn-primary" onClick={() => { setError(""); setForm({ name: "", email: "", password: "", role: "seller", active: true, monthly_goal: "", price_table: "wholesale" }); }}>Cadastrar usuário</button>
+        <button className="btn btn-primary" onClick={() => { setError(""); setForm({ name: "", email: "", password: "", role: "seller", active: true, annual_goal: "", price_table: "wholesale" }); }}>Cadastrar usuário</button>
       </header>
       <table className="table">
         <thead>
@@ -67,8 +67,8 @@ export default function Users() {
             <Field label="Perfil">
               <select {...f("role")}><option value="seller">Vendedor</option><option value="admin">Administrador</option></select>
             </Field>
-            <Field label="Meta mensal (R$)">
-              <input type="number" min="0" step="0.01" placeholder="Sem meta" {...f("monthly_goal")} />
+            <Field label="Meta anual (R$)">
+              <input type="number" min="0" step="0.01" placeholder="Sem meta" {...f("annual_goal")} />
             </Field>
             <Field label="Tabela de preço">
               <select {...f("price_table")}>

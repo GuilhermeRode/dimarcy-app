@@ -30,14 +30,27 @@ def _ensure_columns(table: str, columns: dict[str, str]):
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
 
+def _monthly_to_annual_goal(table: str):
+    """Goals used to be monthly (monthly_goal); now they're annual. Once, when annual_goal is added to a
+    database that still has monthly_goal, carry the old value over as 12 months' worth."""
+    existing = {c["name"] for c in inspect(engine).get_columns(table)}
+    if "annual_goal" in existing or "monthly_goal" not in existing:
+        return
+    with engine.begin() as conn:
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN annual_goal NUMERIC(12,2)"))
+        conn.execute(text(f"UPDATE {table} SET annual_goal = monthly_goal * 12"))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
+    _monthly_to_annual_goal("users")
+    _monthly_to_annual_goal("app_settings")
     _ensure_columns("users", {"reset_token_hash": "VARCHAR(64)", "reset_token_expires_at": "TIMESTAMP",
-                              "monthly_goal": "NUMERIC(12,2)", "price_table": "VARCHAR(10) DEFAULT 'wholesale'"})
+                              "annual_goal": "NUMERIC(12,2)", "price_table": "VARCHAR(10) DEFAULT 'wholesale'"})
     _ensure_columns("colors", {"hex2": "VARCHAR(7)"})
     _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'"})
-    _ensure_columns("app_settings", {"monthly_goal": "NUMERIC(12,2) DEFAULT 0",
+    _ensure_columns("app_settings", {"annual_goal": "NUMERIC(12,2) DEFAULT 0",
                                      "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50"})
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator

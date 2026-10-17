@@ -24,7 +24,7 @@ def update_settings(data: AppSettingsIn, db: Session = Depends(get_db)):
     s.allow_price_override = data.allow_price_override
     s.max_discount_percent = data.max_discount_percent
     s.retail_markup_percent = data.retail_markup_percent
-    s.monthly_goal = data.monthly_goal
+    s.annual_goal = data.annual_goal
     db.commit()
     db.refresh(s)
     return s

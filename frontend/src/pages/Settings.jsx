@@ -20,7 +20,7 @@ export default function Settings() {
         allow_price_override: form.allow_price_override,
         max_discount_percent: Number(form.max_discount_percent) || 0,
         retail_markup_percent: Number(form.retail_markup_percent) || 0,
-        monthly_goal: form.monthly_goal === "" || form.monthly_goal == null ? null : Number(form.monthly_goal),
+        annual_goal: form.annual_goal === "" || form.annual_goal == null ? null : Number(form.annual_goal),
       });
       setForm(data);
       setOk("Configurações salvas com sucesso.");
@@ -43,10 +43,10 @@ export default function Settings() {
               <label className="check">
                 <input type="checkbox" checked={form.allow_price_override}
                   onChange={(e) => setForm({ ...form, allow_price_override: e.target.checked })} />
-                Permitir alterar o preço unitário no pedido
+                Permitir que administradores alterem o preço unitário no pedido
               </label>
               <p className="muted" style={{ marginTop: 4 }}>
-                Quando desligado, o preço sempre vem do cadastro do produto.
+                Vendedores nunca alteram o preço. Quando desligado, o preço sempre vem do cadastro do produto.
               </p>
             </div>
             <Field label="Desconto máximo por pedido (%)" span={2}>
@@ -60,13 +60,13 @@ export default function Settings() {
             <p className="muted span-2" style={{ marginTop: -8 }}>
               Aplicado sobre o preço de atacado nos pedidos de varejo. A tabela de cada vendedor é definida em Usuários.
             </p>
-            <Field label="Meta mensal da empresa (R$)" span={2}>
+            <Field label="Meta anual da empresa (R$)" span={2}>
               <input type="number" min="0" step="0.01" placeholder="Sem meta"
-                value={form.monthly_goal ?? ""}
-                onChange={(e) => setForm({ ...form, monthly_goal: e.target.value })} />
+                value={form.annual_goal ?? ""}
+                onChange={(e) => setForm({ ...form, annual_goal: e.target.value })} />
             </Field>
             <p className="muted span-2" style={{ marginTop: -8 }}>
-              Usada no Painel e no Faturamento, proporcional ao período escolhido. Deixe em branco para não usar meta.
+              O ano da meta vai de outubro a setembro (a meta de 2027 vale de 01/10/2026 a 30/09/2027). No Painel e no Faturamento ela é proporcional ao período escolhido. Deixe em branco para não usar meta.
             </p>
             <div className="span-2"><ErrorBox msg={error} /></div>
             {ok && <div className="span-2 muted">{ok}</div>}

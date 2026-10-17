@@ -704,10 +704,14 @@ section.item-group { margin-top: 0; }
 .btn { white-space: nowrap; }
 
 /* ---------- clientes ---------- */
-.filters-bar { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-.filters-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.filters-search { flex: 1 1 0; min-width: 140px; max-width: 380px; height: 38px; border-radius: 999px; padding: 0 16px; background: var(--surface-2); }
-.pill-select { display: inline-flex; align-items: center; gap: 2px; height: 38px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.filters-bar { display: flex; flex-direction: column; gap: 10px; }  /* no panel: the controls sit on the page background */
+.filters-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters-search { flex: 1 1 260px; min-width: 180px; max-width: 420px; height: 40px; border-radius: 999px; padding: 0 16px 0 40px;
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 15px center;
+  border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(13, 42, 82, .06); }
+.pill-select { display: inline-flex; align-items: center; gap: 2px; height: 40px; padding: 0 4px 0 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 13px; white-space: nowrap; cursor: pointer; box-shadow: 0 1px 2px rgba(13, 42, 82, .06); }
+.pill-select:hover { border-color: #bcd2fb; }
+.pill-sort { margin-left: auto; }
 .pill-select > span { color: var(--muted); }
 .pill-select select { border: 0; background: transparent; padding: 0 2px; width: auto; max-width: 106px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .pill-select.on { background: var(--accent-light); border-color: #bcd2fb; }
@@ -723,16 +727,19 @@ section.item-group { margin-top: 0; }
   .filters-search { grid-column: 1 / -1; }
   .pill-select { width: 100%; min-width: 0; }
   .pill-select select { flex: 1; min-width: 0; max-width: none; }
-  .pill-sort { grid-column: 1 / -1; }
+  .pill-sort { margin-left: 0; }
+  .filters-row > .pill-sort:nth-child(even) { grid-column: 1 / -1; }  /* full row only when it'd be alone (admins have one more filter) */
+  .filters-search { max-width: none; }
 }
 .filters-chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); }
+.filters-bar .filters-chips { padding-top: 0; border-top: 0; }
 .filter-chip { border: 0; background: var(--accent-light); color: var(--accent-strong); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .link-btn { margin-left: auto; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
 .customers-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .customers-layout.with-panel { grid-template-columns: minmax(0, 1fr) 340px; }
 .customers-table { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-.customers-row { display: grid; grid-template-columns: minmax(220px, 2.6fr) 110px 70px 120px; gap: 14px; align-items: center; width: 100%; padding: 12px 18px; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); text-align: left; font: inherit; color: inherit; cursor: pointer; }
-.customers-row.admin { grid-template-columns: minmax(220px, 2.6fr) minmax(90px, 1fr) 110px 70px 120px; }
+.customers-row { display: grid; grid-template-columns: minmax(220px, 2fr) minmax(100px, 1fr) 80px 110px; gap: 14px; align-items: center; width: 100%; padding: 12px 18px; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.customers-row.admin { grid-template-columns: minmax(220px, 2fr) minmax(90px, 1fr) minmax(100px, 1fr) 80px 110px; }
 .customers-row:hover { background: var(--surface-2); }
 .customers-row.on { background: var(--accent-light); box-shadow: inset 3px 0 0 var(--accent); }
 .customers-row.head { cursor: default; padding: 10px 18px; background: var(--surface-2); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }

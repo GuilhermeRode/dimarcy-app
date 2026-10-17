@@ -37,34 +37,34 @@ with TestClient(app) as c:
 
     # ---- goals: company goal is admin-only, validated ----
     r = c.put("/api/settings", headers=admin, json={
-        "allow_price_override": False, "max_discount_percent": 10, "monthly_goal": 60800})
-    assert r.status_code == 200 and r.json()["monthly_goal"] == 60800, r.text
+        "allow_price_override": False, "max_discount_percent": 10, "annual_goal": 730000})
+    assert r.status_code == 200 and r.json()["annual_goal"] == 730000, r.text
     assert c.put("/api/settings", headers=admin, json={
-        "allow_price_override": False, "max_discount_percent": 10, "monthly_goal": -1}).status_code == 422
+        "allow_price_override": False, "max_discount_percent": 10, "annual_goal": -1}).status_code == 422
 
     def new_user(name, email, goal=None, active=True):
         r = c.post("/api/users", headers=admin, json={
             "name": name, "email": email, "password": "seller-pass-123", "role": "seller",
-            "active": active, "monthly_goal": goal})
+            "active": active, "annual_goal": goal})
         assert r.status_code == 201, r.text
         return r.json()
 
-    a = new_user("Ana Vendas", "a@test.com", goal=30400)
-    assert a["monthly_goal"] == 30400
+    a = new_user("Ana Vendas", "a@test.com", goal=365000)
+    assert a["annual_goal"] == 365000
     b = new_user("Bruno Vendas", "b@test.com")
-    assert b["monthly_goal"] is None
+    assert b["annual_goal"] is None
     seller_a = login(c, "a@test.com", "seller-pass-123")
     seller_b = login(c, "b@test.com", "seller-pass-123")
 
     s = c.get("/api/settings", headers=seller_a).json()
-    assert "monthly_goal" not in s, s  # sellers never see the company goal
-    assert c.get("/api/settings", headers=admin).json()["monthly_goal"] == 60800
+    assert "annual_goal" not in s, s  # sellers never see the company goal
+    assert c.get("/api/settings", headers=admin).json()["annual_goal"] == 730000
 
     # PUT keeps the goal when the client sends it, clears it with null
-    r = c.put(f"/api/users/{b['id']}", headers=admin, json={**b, "password": None, "monthly_goal": 1000})
-    assert r.json()["monthly_goal"] == 1000
-    r = c.put(f"/api/users/{b['id']}", headers=admin, json={**b, "password": None, "monthly_goal": None})
-    assert r.json()["monthly_goal"] is None
+    r = c.put(f"/api/users/{b['id']}", headers=admin, json={**b, "password": None, "annual_goal": 1000})
+    assert r.json()["annual_goal"] == 1000
+    r = c.put(f"/api/users/{b['id']}", headers=admin, json={**b, "password": None, "annual_goal": None})
+    assert r.json()["annual_goal"] is None
 
     # ---- empty database renders ----
     r = c.get("/api/dashboard", headers=admin)
@@ -165,9 +165,9 @@ with TestClient(app) as c:
     assert p["kpis"]["revenue"] == 100 and p["previous_kpis"]["revenue"] == 100  # day 60 vs day 61
 
     # ---- goals: prorated, admin-only company goal, sellers with zero sales listed ----
-    assert s7["goal"] == 14000.0  # 60800 * 7 / 30.4
+    assert s7["goal"] == 14000.0  # 730000 * 7 / 365
     sellers = {s["name"]: s for s in s7["by_seller"]}
-    assert sellers["Ana Vendas"]["goal"] == 7000.0  # 30400 * 7 / 30.4
+    assert sellers["Ana Vendas"]["goal"] == 7000.0  # 365000 * 7 / 365
     assert sellers["Bruno Vendas"]["goal"] is None
     new_user("Carla Nova", "carla@test.com")
     new_user("Davi Inativo", "davi@test.com", active=False)
@@ -207,3 +207,9 @@ with TestClient(app) as c:
     assert round(sum(x["value"] for x in wk["by_city"]), 2) == wk["kpis"]["revenue"], len(wk["by_city"])
 
 print("dashboard checks OK")
+
+# ---- goal year: October -> September ----
+assert clock.goal_year_start(date(2026, 10, 1)) == date(2026, 10, 1)  # the 2027 goal starts here
+assert clock.goal_year_start(date(2027, 9, 30)) == date(2026, 10, 1)
+assert clock.goal_year_start(date(2026, 9, 30)) == date(2025, 10, 1)
+print("goal year ok")

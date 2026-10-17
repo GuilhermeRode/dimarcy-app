@@ -67,7 +67,7 @@ with TestClient(app) as c:
                                              "role": "seller"})
     A = login(c, "a@t.com", "seller-pass-123")
     r = c.put("/api/settings", headers=admin, json={"allow_price_override": False, "max_discount_percent": 100,
-                                                     "retail_markup_percent": 50, "monthly_goal": None})
+                                                     "retail_markup_percent": 50, "annual_goal": None})
     assert r.status_code == 200, r.text
     color = c.post("/api/colors", headers=admin, json={"name": "Preto", "hex": "#111111"}).json()["id"]
     product = c.post("/api/products", headers=admin, json={"reference": "R1", "description": "Blusão", "price": 100,

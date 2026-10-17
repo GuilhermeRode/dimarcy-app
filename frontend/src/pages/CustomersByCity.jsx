@@ -150,7 +150,7 @@ export default function CustomersByCity() {
                     <span className="city-rank-bar"><span style={{ width: `${(c.revenue / maxRevenue) * 100}%` }} /></span>
                     <div className="city-rank-sub">
                       <span>{plural(c.active, "ativo", "ativos")} · {plural(c.registered, "cadastrado", "cadastrados")}</span>
-                      <span>{ago == null ? "Sem pedidos" : ago === 0 ? "Último pedido hoje" : `Último pedido há ${plural(ago, "dia", "dias")}`}</span>
+                      <span>{ago == null ? "A conquistar" : ago === 0 ? "Último pedido hoje" : `Último pedido há ${plural(ago, "dia", "dias")}`}</span>
                     </div>
                     {c.lat == null && <small className="muted">Fora do mapa (endereço não localizado)</small>}
                   </button>

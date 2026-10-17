@@ -21,6 +21,9 @@ export const DEFAULT_SIZES = ["U", "P", "M", "G", "GG"];
 export const localDate = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+// Goals run October -> September (backend: clock.goal_year_start): the 2027 goal starts on 2026-10-01.
+export const goalYearStart = (d = new Date()) => `${d.getMonth() >= 9 ? d.getFullYear() : d.getFullYear() - 1}-10-01`;
+
 export const addDays = (iso, days) => {
   const d = new Date(`${iso}T00:00:00`);
   d.setDate(d.getDate() + days);
@@ -58,5 +61,5 @@ export const CUSTOMER_STATUS = {
   active: { label: "Ativo", tone: "active" },
   at_risk: { label: "Em risco", tone: "risk" },
   inactive: { label: "Inativo", tone: "inactive" },
-  never_ordered: { label: "Nunca comprou", tone: "never" },
+  never_ordered: { label: "A conquistar", tone: "never" },  // history before the app (older collections) is unknown
 };

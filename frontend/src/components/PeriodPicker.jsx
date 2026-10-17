@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { addDays, localDate } from "../format";
+import { addDays, goalYearStart, localDate } from "../format";
 
 const PRESETS = [
   { key: "7d", label: "7 dias", start: () => addDays(localDate(), -6), end: localDate },
   { key: "month", label: "Este mês", start: () => `${localDate().slice(0, 8)}01`, end: localDate },
-  { key: "year", label: "Este ano", start: () => `${new Date().getFullYear()}-01-01`, end: localDate },
+  { key: "year", label: `Ano ${Number(goalYearStart().slice(0, 4)) + 1}`, start: goalYearStart, end: localDate },  // goal year, Oct -> Sep
 ];
 
 export const defaultPeriod = () => ({ start: PRESETS[2].start(), end: localDate() });

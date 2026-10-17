@@ -16,8 +16,8 @@ export default function AlertStrip({ alerts }) {
     },
     alerts.customers_never_ordered > 0 && {
       tone: "info", to: "/customers?status=never_ordered", cta: "Ver cadastros",
-      title: plural(alerts.customers_never_ordered, "cadastro sem compra", "cadastros sem compra"),
-      text: "Oportunidade de primeira venda para a equipe comercial.",
+      title: plural(alerts.customers_never_ordered, "cliente a conquistar", "clientes a conquistar"),
+      text: "Ainda não têm compras registradas no app. Vale um contato.",
     },
   ].filter(Boolean);
   if (!items.length) return null;

@@ -69,11 +69,19 @@ with TestClient(app) as c:
                "payment_method": "Pix", "payment_terms": "À vista", "price_table": "retail"},
                "items": [{"product_id": common, "color_id": color, "size": "P", "quantity": 1, "unit_price": 1}]}).json()
     assert o["items"][0]["unit_price"] == 134.85
+    # even with "alterar preço unitário" on, only an admin's unit_price counts
+    c.put("/api/settings", headers=admin, json={"allow_price_override": True, "max_discount_percent": 0,
+                                                "retail_markup_percent": 50, "annual_goal": None})
+    override = {"customer_id": o["customer_id"], "delivery_date": TODAY, "payment_method": "Pix",
+                "payment_terms": "À vista", "price_table": "retail",
+                "items": [{"product_id": common, "color_id": color, "size": "P", "quantity": 1, "unit_price": 1}]}
+    assert c.post("/api/orders", headers=B, json=override).json()["items"][0]["unit_price"] == 134.85
+    assert c.post("/api/orders", headers=admin, json=override).json()["items"][0]["unit_price"] == 1
 
     # the markup is an admin setting; editing a retail order keeps its table and recorded prices
     s = c.get("/api/settings", headers=admin).json()
     r = c.put("/api/settings", headers=admin, json={"allow_price_override": False, "max_discount_percent": 0,
-                                                     "retail_markup_percent": 100, "monthly_goal": s["monthly_goal"]})
+                                                     "retail_markup_percent": 100, "annual_goal": s["annual_goal"]})
     assert r.json()["retail_markup_percent"] == 100
     edit = {"customer_id": o["customer_id"], "delivery_date": TODAY, "status": "confirmed", "payment_method": "Pix",
             "payment_terms": "À vista", "items": [{"product_id": common, "color_id": color, "size": "P", "quantity": 3},
