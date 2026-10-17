@@ -3,10 +3,16 @@
 A systemd timer runs it daily; it only does real work when the Receita published a new month or
 the scope (states in seller_cities + Configurações' CNAE list) changed. Any error writes nothing.
 Spec: docs/superpowers/specs/2026-10-16-prospeccao-crm-design.md (Importação)"""
+import base64
 import csv
 import io
 import os
+import re
+import shutil
+import sys
 import tempfile
+import urllib.request
+import xml.etree.ElementTree as ET
 import zipfile
 from datetime import date, datetime
 from typing import Callable, Iterator
@@ -14,6 +20,8 @@ from typing import Callable, Iterator
 from sqlalchemy.orm import Session
 
 from . import clock
+from .config import settings
+from .database import SessionLocal
 from .leads import customer_cnpjs, normalize_cnpj
 from .models import Contact, Customer, Lead, SellerCity
 from .sales import _city_key
@@ -158,3 +166,41 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
         db.rollback()
         raise
     return f"imported {month}: {added} new"
+
+
+def _request(path: str, method: str = "GET", headers: dict | None = None) -> urllib.request.Request:
+    token = base64.b64encode(f"{settings.receita_share_token}:".encode()).decode()
+    return urllib.request.Request(f"{settings.receita_webdav_url.rstrip('/')}/{path}", method=method,
+                                  headers={"Authorization": f"Basic {token}", **(headers or {})})
+
+
+def parse_months(xml_text: str) -> list[str]:
+    hrefs = (e.text or "" for e in ET.fromstring(xml_text).iter("{DAV:}href"))
+    return sorted(m.group(1) for m in (re.search(r"/(\d{4}-\d{2})/?$", h) for h in hrefs) if m)
+
+
+def latest_month() -> str:
+    with urllib.request.urlopen(_request("", "PROPFIND", {"Depth": "1"}), timeout=60) as r:
+        months = parse_months(r.read().decode())
+    if not months:
+        raise RuntimeError("No YYYY-MM folder in the Receita share")
+    return months[-1]
+
+
+def download(month: str, name: str, dest: str) -> None:
+    with urllib.request.urlopen(_request(f"{month}/{name}"), timeout=120) as r, open(dest, "wb") as f:
+        shutil.copyfileobj(r, f, 1024 * 1024)
+
+
+def main() -> int:
+    with SessionLocal() as db:
+        try:
+            print(f"[lead_import] {run(db, latest_month, download)}")
+            return 0
+        except Exception as e:  # logged by systemd; tomorrow's run tries again
+            print(f"[lead_import] failed, nothing written: {e!r}", file=sys.stderr)
+            return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

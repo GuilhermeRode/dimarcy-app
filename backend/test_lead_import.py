@@ -68,6 +68,16 @@ def check_parsing():
     assert li.display_city("SAO FELIPE D'OESTE", "RO", spellings) == "Sao Felipe D'oeste"
 
 
+def check_months():
+    xml = """<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">
+      <d:response><d:href>/public.php/webdav/</d:href></d:response>
+      <d:response><d:href>/public.php/webdav/2026-09/</d:href></d:response>
+      <d:response><d:href>/public.php/webdav/2026-10/</d:href></d:response>
+      <d:response><d:href>/public.php/webdav/cnpj.tar.gz</d:href></d:response>
+    </d:multistatus>"""
+    assert li.parse_months(xml) == ["2026-09", "2026-10"]
+
+
 def check_run():
     from datetime import timedelta
 
@@ -159,6 +169,7 @@ def check_run():
 
 
 if __name__ == "__main__":
+    check_months()
     check_parsing()
     check_run()
     print("test_lead_import OK")

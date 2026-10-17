@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     mail_from: str = ""  # must be on a domain verified in Resend, e.g. "Di Marcy <pedidos@dimarcy.com.br>"
     notify_email: str = ""  # who receives it; defaults to admin_email when empty
 
+    # Receita Federal open CNPJ data (lead import). A public Nextcloud share read over WebDAV;
+    # the Receita has moved it before, so both are overridable from .env.
+    receita_webdav_url: str = "https://arquivos.receitafederal.gov.br/public.php/webdav"
+    receita_share_token: str = "YggdBLfdninEJX9"
+
 
 settings = Settings()
 

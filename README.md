@@ -71,3 +71,18 @@ Veja [`CLAUDE.md`](./CLAUDE.md) para essa convenção.
 - Exportar pedido em PDF/Excel
 - Tabela de preços por cliente (atacado/varejo)
 - Estoque e ordem de produção por referência
+
+## Importação de leads (Prospecção)
+
+`python -m app.lead_import` (em `backend/`) baixa os dados abertos de CNPJ da Receita e atualiza a tabela
+`leads`. Só trabalha de verdade quando sai um mês novo ou quando mudam as UFs das regiões / os CNAEs em
+Configurações; nos outros dias sai na hora. Leva 20–40 min e baixa ~7 GB (um arquivo por vez).
+
+Na VM (o backend precisa ter subido uma vez depois da atualização, para criar as tabelas):
+
+    sudo cp /opt/dimarcy/backend/deploy/dimarcy-leads.* /etc/systemd/system/
+    sudo systemctl daemon-reload && sudo systemctl enable --now dimarcy-leads.timer
+    sudo systemctl start dimarcy-leads.service   # primeira importação, sem esperar a madrugada
+    journalctl -u dimarcy-leads -n 20            # resultado
+
+Se a Receita mudar o endereço, ajuste `RECEITA_WEBDAV_URL` / `RECEITA_SHARE_TOKEN` no `.env`.
