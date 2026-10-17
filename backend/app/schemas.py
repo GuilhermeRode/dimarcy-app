@@ -99,6 +99,10 @@ class CustomerOut(CustomerIn):
     lng: float | None = None
 
 
+class DiscardIn(BaseModel):
+    reason: Literal["closed", "not_target", "competitor", "other"]  # models.DISCARD_REASONS
+
+
 # ---------- Colors / products ----------
 class ColorIn(ORM):
     name: str = Field(min_length=1)

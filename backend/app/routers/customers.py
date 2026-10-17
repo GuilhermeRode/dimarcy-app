@@ -49,22 +49,31 @@ def get(cid: int, db: Session = Depends(get_db), user: User = Depends(get_curren
     return _visible(cid, db, user)
 
 
-@router.post("", response_model=CustomerOut, status_code=201)
-def create(data: CustomerIn, background_tasks: BackgroundTasks,
-           db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    payload = data.model_dump(exclude={"owner_id"})
-    # Sellers can only ever own the customers they register; only admins may assign a seller.
-    owner_id = data.owner_id if user.role == "admin" else user.id
-    c = Customer(**payload, owner_id=owner_id)
+def add_customer(db: Session, data: CustomerIn, owner_id: int | None) -> Customer:
+    """Adds (doesn't commit) a new customer, with cached coordinates when the city is known.
+    Callers commit, then call geocode_later."""
+    c = Customer(**data.model_dump(exclude={"owner_id"}), owner_id=owner_id)
     if c.city:
         cached = lookup_cached_city(db, c.city, c.state)
         if cached:
             c.lat, c.lng = cached
     db.add(c)
+    return c
+
+
+def geocode_later(c: Customer, background_tasks: BackgroundTasks):
+    if c.city and c.lat is None:  # not cached — resolve it in the background, doesn't block the response
+        background_tasks.add_task(geocode_and_cache_background, c.id, c.city, c.state)
+
+
+@router.post("", response_model=CustomerOut, status_code=201)
+def create(data: CustomerIn, background_tasks: BackgroundTasks,
+           db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # Sellers can only ever own the customers they register; only admins may assign a seller.
+    c = add_customer(db, data, data.owner_id if user.role == "admin" else user.id)
     db.commit()
     db.refresh(c)
-    if c.city and c.lat is None:  # not cached — resolve it in the background, doesn't block this response
-        background_tasks.add_task(geocode_and_cache_background, c.id, c.city, c.state)
+    geocode_later(c, background_tasks)
     return c
 
 

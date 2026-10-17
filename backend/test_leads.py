@@ -187,6 +187,36 @@ def check_ranking_by_active_customers(ctx):
     assert top[:2] == ["Blu Fashion", "Zz Blumenau"], top
 
 
+def check_convert(ctx):
+    c, admin, ids = ctx["c"], ctx["admin"], ctx["leads"]
+    body = {"name": "Jota Moda Ltda", "document": "10000000000101", "city": "Jaraguá do Sul", "state": "SC",
+            "owner_id": ctx["b_id"]}  # a seller can't pick the owner: ignored
+    assert c.post(f"/api/leads/{ids['corupa']}/convert", headers=ctx["a"], json=body).status_code == 404
+    r = c.post(f"/api/leads/{ids['j_phone_recent']}/convert", headers=ctx["a"], json=body)
+    assert r.status_code == 201, r.text
+    assert r.json()["owner_id"] == ctx["a_id"]
+    assert c.post(f"/api/leads/{ids['j_phone_recent']}/convert", headers=ctx["a"], json=body).status_code == 409
+    with SessionLocal() as db:
+        lead = db.get(Lead, ids["j_phone_recent"])
+        assert lead.status == "converted" and lead.customer_id == r.json()["id"]
+        assert db.query(Customer).filter_by(name="Jota Moda Ltda").count() == 1
+
+    # admin without owner_id -> the region's seller; with owner_id -> that one
+    r = c.post(f"/api/leads/{ids['corupa']}/convert", headers=admin, json={**body, "name": "Corupá", "owner_id": None})
+    assert r.status_code == 201 and r.json()["owner_id"] == ctx["b_id"], r.text
+    r = c.post(f"/api/leads/{ids['blumenau']}/convert", headers=admin, json={**body, "name": "Blu", "owner_id": ctx["a_id"]})
+    assert r.status_code == 201 and r.json()["owner_id"] == ctx["a_id"], r.text
+
+    # discard
+    assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["b"], json={"reason": "closed"}).status_code == 404
+    assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["a"], json={"reason": "x"}).status_code == 422
+    assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["a"], json={"reason": "competitor"}).status_code == 204
+    assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["a"], json={"reason": "closed"}).status_code == 409
+    with SessionLocal() as db:
+        assert db.get(Lead, ids["j_no_contact"]).discard_reason == "competitor"
+    assert [x["name"] for x in c.get("/api/leads", headers=ctx["a"]).json()["items"]] == []
+
+
 # ---- run ----
 with TestClient(app) as c:
     ctx = {"c": c, "admin": login(c, "admin@test.com", "admin-pass-123")}
@@ -201,5 +231,6 @@ with TestClient(app) as c:
     check_regions(ctx)
     check_listing(ctx)
     check_ranking_by_active_customers(ctx)
+    check_convert(ctx)
 
 print("test_leads OK")
