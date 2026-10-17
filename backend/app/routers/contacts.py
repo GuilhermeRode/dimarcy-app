@@ -22,7 +22,8 @@ def _check_target(db: Session, user: User, lead_id: int | None, customer_id: int
     if (lead_id is None) == (customer_id is None):
         raise HTTPException(422, "Informe o lead ou o cliente do contato.")
     if lead_id is not None:
-        visible_lead(db, user, lead_id)
+        if visible_lead(db, user, lead_id).status != "new":
+            raise HTTPException(409, "Este lead já foi tratado.")
     else:
         visible_customer(customer_id, db, user)
 

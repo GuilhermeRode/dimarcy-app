@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../api";
 import { Field, ErrorBox, Modal } from "../components/ui";
 import { useSort } from "../components/useSort";
@@ -68,14 +68,21 @@ export default function Users() {
   const [error, setError] = useState("");
   const [cities, setCities] = useState(null); // null = not loaded / not a seller
 
+  const openId = useRef(null); // which user the form shows, to drop late region responses of another one
+
   const load = () => api.get("/users").then((r) => setList(r.data));
   useEffect(() => { load(); }, []);
 
   function openForm(u) {
     setError("");
     setForm(u);
+    openId.current = u.id ?? "new";
     setCities(u.id ? null : []);
-    if (u.id) api.get(`/users/${u.id}/cities`).then((r) => setCities(r.data)).catch((e) => setError(errorMessage(e)));
+    if (u.id) {
+      api.get(`/users/${u.id}/cities`)
+        .then((r) => { if (openId.current === u.id) setCities(r.data); })
+        .catch((e) => { if (openId.current === u.id) setError(errorMessage(e)); });
+    }
   }
 
   async function save(e) {

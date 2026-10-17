@@ -162,6 +162,18 @@ def check_run():
     assert li.run(db, lambda: "2026-10", download).startswith("imported 2026-10")  # scope changed
     assert db.query(AppSettings).first().last_lead_import_scope == "SC|4642701,4781400"
 
+    # a run that finds nothing is refused: leads and the stamped month stay as they were
+    n_leads = db.query(Lead).count()
+    towns = files["Municipios.zip"]
+    try:
+        li.run(db, lambda: "2026-11", lambda month, name, dest: make_zip(dest, towns if name == "Municipios.zip" else []))
+        raise AssertionError("an empty import must raise")
+    except RuntimeError:
+        pass
+    db.expire_all()
+    assert db.query(Lead).count() == n_leads
+    assert db.query(AppSettings).first().last_lead_import_month == "2026-10"
+
     db.query(SellerCity).delete()
     db.commit()
     assert li.run(db, lambda: "2026-11", download) == "no-scope"

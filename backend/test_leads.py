@@ -254,6 +254,7 @@ def check_contacts(ctx):
     # discarded lead leaves the due list
     contact(ctx["a"], lead_id=jl, next_action_date=yesterday)
     c.post(f"/api/leads/{jl}/discard", headers=ctx["a"], json={"reason": "other"})
+    assert contact(ctx["a"], lead_id=jl).status_code == 409  # a handled lead takes no more contacts
     assert c.get("/api/contacts/due", headers=ctx["a"]).json() == []
 
     # converting moves the history to the customer; customer contacts work the same way
@@ -266,12 +267,31 @@ def check_contacts(ctx):
     assert [(d["name"], d["kind"]) for d in due] == [("Loja Converte", "customer")], due
     assert c.get("/api/contacts", headers=ctx["b"], params={"customer_id": cust["id"]}).status_code == 404
 
-    # deleting the customer removes its contacts and unlinks the converted lead
+    # deleting the customer puts the converted lead back to 'new' with its contact history
     assert c.delete(f"/api/customers/{cust['id']}", headers=ctx["a"]).status_code == 204
     with SessionLocal() as db:
         assert db.query(Contact).filter(Contact.customer_id == cust["id"]).count() == 0
-        assert db.get(Lead, jl2).customer_id is None
-    assert c.get("/api/contacts/due", headers=ctx["a"]).json() == []
+        lead2 = db.get(Lead, jl2)
+        assert (lead2.status, lead2.customer_id) == ("new", None)
+    assert len(c.get("/api/contacts", headers=ctx["a"], params={"lead_id": jl2}).json()) == 1
+    assert len(c.get("/api/contacts/due", headers=ctx["a"]).json()) == 1  # its reminder is live again
+
+
+def check_role_change(ctx):
+    c, admin = ctx["c"], ctx["admin"]
+    r = c.post("/api/users", headers=admin, json={
+        "name": "Caio", "email": "caio@t.com", "password": "seller-pass-123", "role": "seller"})
+    cid = r.json()["id"]
+    assert c.put(f"/api/users/{cid}/cities", headers=admin, json=[{"city": "Guaramirim", "state": "SC"}]).status_code == 200
+    lead = add_lead("70000000000101", "Loja Guaramirim", city="Guaramirim")
+    r = c.put(f"/api/users/{cid}", headers=admin, json={
+        "name": "Caio", "email": "caio@t.com", "role": "admin", "active": True})
+    assert r.status_code == 200, r.text
+    assert c.get(f"/api/users/{cid}/cities", headers=admin).json() == []
+    items = c.get("/api/leads", headers=admin, params={"search": "Guaramirim"}).json()["items"]
+    assert [x["seller_id"] for x in items if x["id"] == lead] == [None], items
+    r = c.put(f"/api/users/{ctx['b_id']}/cities", headers=admin, json=[{"city": "Guaramirim", "state": "SC"}])
+    assert r.status_code == 200, r.text
 
 
 # ---- run ----
@@ -290,5 +310,6 @@ with TestClient(app) as c:
     check_ranking_by_active_customers(ctx)
     check_convert(ctx)
     check_contacts(ctx)
+    check_role_change(ctx)
 
 print("test_leads OK")

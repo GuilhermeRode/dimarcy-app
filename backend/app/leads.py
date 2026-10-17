@@ -24,7 +24,7 @@ def normalize_cnpj(value: str | None) -> str:
 
 def city_owners(db: Session) -> dict[tuple[str, str], User]:
     """(city_key, state) -> the ACTIVE seller whose region has that city."""
-    rows = db.query(SellerCity).join(User, SellerCity.user_id == User.id).filter(User.active.is_(True)).all()
+    rows = db.query(SellerCity).join(User, SellerCity.user_id == User.id).filter(User.active.is_(True), User.role == "seller").all()
     return {(r.city_key, r.state): r.user for r in rows}
 
 

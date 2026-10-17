@@ -160,6 +160,9 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
             for d in found.values():
                 if not d["name"]:
                     d["name"] = names.get(d["basico"], "")
+    existing_new = db.query(Lead).filter(Lead.status == "new", Lead.state.in_(states)).count()
+    if not found or len(found) < existing_new // 2:  # bad/partial download: don't wipe leads
+        raise RuntimeError(f"Import looks wrong: {len(found)} leads found vs {existing_new} current new leads; nothing written")
     try:
         added = apply(db, found, month, scope, clock.today_br())
     except Exception:

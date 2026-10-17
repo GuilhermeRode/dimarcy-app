@@ -45,6 +45,8 @@ def update(uid: int, data: UserIn, db: Session = Depends(get_db)):
         if len(data.password) < MIN_PASSWORD_LENGTH:
             raise HTTPException(400, f"The password must be at least {MIN_PASSWORD_LENGTH} characters long.")
         u.password_hash = hash_password(data.password)
+    if data.role != "seller":  # only sellers have a region
+        db.query(SellerCity).filter(SellerCity.user_id == uid).delete()
     db.commit()
     db.refresh(u)
     return u

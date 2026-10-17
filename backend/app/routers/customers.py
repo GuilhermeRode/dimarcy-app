@@ -102,7 +102,14 @@ def delete(cid: int, db: Session = Depends(get_db), user: User = Depends(get_cur
     if db.query(Order).filter(Order.customer_id == cid).first():
         raise HTTPException(400, "This customer has orders and cannot be deleted.")
     # no FK cascades on SQLite here: clean up dependents by hand
-    db.query(Contact).filter(Contact.customer_id == cid).delete(synchronize_session=False)
-    db.query(Lead).filter(Lead.customer_id == cid).update({"customer_id": None}, synchronize_session=False)
+    # a converted lead goes back to 'new' and gets its contact history back; otherwise contacts are deleted
+    leads = db.query(Lead).filter(Lead.customer_id == cid).all()
+    contacts = db.query(Contact).filter(Contact.customer_id == cid)
+    if leads:
+        contacts.update({"lead_id": leads[0].id, "customer_id": None}, synchronize_session=False)
+    else:
+        contacts.delete(synchronize_session=False)
+    for lead in leads:
+        lead.status, lead.customer_id = "new", None
     db.delete(c)
     db.commit()

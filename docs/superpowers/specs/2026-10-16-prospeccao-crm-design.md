@@ -116,8 +116,9 @@ os campos `last_lead_import_*` só em `AppSettingsAdminOut`. `update_settings` g
 
 ### Remoção de cliente
 
-`DELETE /customers/{id}` (hoje só bloqueia se tem pedidos) passa a apagar os contatos do cliente e a limpar
-`leads.customer_id` que apontem para ele, na mesma transação.
+`DELETE /customers/{id}` (hoje só bloqueia se tem pedidos) passa a tratar os contatos e o lead de origem na mesma
+transação: se o cliente veio de um lead convertido, o lead volta para `new` (`customer_id` nulo) e o histórico de
+contatos do cliente é movido de volta para ele; clientes sem lead de origem têm os contatos apagados.
 
 ## Importação (`backend/app/lead_import.py`)
 
