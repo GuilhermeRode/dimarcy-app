@@ -80,6 +80,7 @@ export default function Users() {
 
   async function save(e) {
     e.preventDefault();
+    if (form.role === "seller" && cities === null) { setError("Não foi possível carregar as cidades da região. Feche e abra o usuário de novo."); return; }
     setError("");
     const goal = form.annual_goal;
     const body = { ...form, annual_goal: goal === "" || goal == null ? null : Number(goal) };
