@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, fileUrl, screenCache } from "../api";
-import { money, DEFAULT_SIZES } from "../format";
+import { useAuth } from "../auth";
+import { money, tablePrice, DEFAULT_SIZES } from "../format";
 import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom, useConfirm } from "../components/ui";
 import { useSort } from "../components/useSort";
 
@@ -11,7 +12,10 @@ const droppedImage = (e) => [...(e.dataTransfer?.files || [])].find(isImage) || 
 
 const EMPTY = { reference: "", description: "", collection: "", price: "", sizes: DEFAULT_SIZES, color_ids: [], seller_ids: [], active: true, image_url: null };
 
+// Admins manage the catalog; sellers only browse the products enabled for them (the API filters and blocks writes).
 export default function Products() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [confirmDialog, ask] = useConfirm();
   const [list, setList] = useState(() => screenCache.get("products") || []);
   const [colors, setColors] = useState([]);
@@ -26,15 +30,21 @@ export default function Products() {
   const [dropTarget, setDropTarget] = useState(null); // product id (or "form") a photo is being dragged over
   const [sendingId, setSendingId] = useState(null); // product whose dropped photo is uploading
   const [listError, setListError] = useState("");
+  // the price columns: admins see the registered price; a seller sees the table(s) they sell with
+  const [pricing, setPricing] = useState({ tables: ["wholesale"], markup: 0 });
 
   const load = () => api.get("/products", { params: { search } }).then((r) => {
     setList(r.data);
     if (!search) screenCache.set("products", r.data); // only the unfiltered list is worth showing on return
   });
   useEffect(() => {
+    if (!isAdmin) {  // the edit form's options aren't needed: sellers never open it
+      api.get("/settings").then((r) => setPricing({ tables: r.data.price_tables, markup: r.data.retail_markup_percent }));
+      return;
+    }
     api.get("/colors").then((r) => setColors(r.data));
     api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller")));
-  }, []);
+  }, [isAdmin]);
   // A photo dropped outside a drop area would make the browser (and the desktop app) navigate to the file
   useEffect(() => {
     const block = (e) => e.preventDefault();
@@ -120,10 +130,10 @@ export default function Products() {
         <h1>Produtos</h1>
         <div className="header-search-group">
           <input className="header-search" placeholder="Buscar por referência, nome ou coleção" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <button className="btn btn-primary" onClick={() => open(null)}>Cadastrar produto</button>
+          {isAdmin && <button className="btn btn-primary" onClick={() => open(null)}>Cadastrar produto</button>}
         </div>
       </header>
-      {list.length > 0 && <p className="muted drop-hint">Dica: arraste uma foto do computador para cima de um produto para adicioná-la.</p>}
+      {isAdmin && list.length > 0 && <p className="muted drop-hint">Dica: arraste uma foto do computador para cima de um produto para adicioná-la.</p>}
       <ErrorBox msg={listError} />
       {!list.length ? <EmptyState text="Nenhum produto cadastrado." /> : (
         <table className="table">
@@ -135,13 +145,15 @@ export default function Products() {
               {sortHeader("collection", "Coleção")}
               {sortHeader("sizes", "Tamanhos")}
               {sortHeader("colors", "Cores")}
-              {sortHeader("price", "Preço", "num")}
+              {pricing.tables.length === 1
+                ? sortHeader("price", "Preço", "num")
+                : pricing.tables.map((t) => <th key={t} className="num">{t === "retail" ? "Varejo" : "Atacado"}</th>)}
             </tr>
           </thead>
           <tbody>
             {sorted.map((p) => (
-              <tr key={p.id} className={`clickable ${p.active ? "" : "inactive"} ${dropTarget === p.id ? "drop-over" : ""}`}
-                onClick={() => open(p)} {...dragProps(p.id, (e) => dropOnRow(e, p))}>
+              <tr key={p.id} className={`${isAdmin ? "clickable" : ""} ${p.active ? "" : "inactive"} ${dropTarget === p.id ? "drop-over" : ""}`}
+                {...(isAdmin && { onClick: () => open(p), ...dragProps(p.id, (e) => dropOnRow(e, p)) })}>
                 <td>
                   {sendingId === p.id
                     ? <span className="product-thumb product-thumb-empty" aria-label="Enviando foto">⏳</span>
@@ -156,7 +168,7 @@ export default function Products() {
                 <td>{p.collection}</td>
                 <td>{p.sizes.join(" ")}</td>
                 <td><span className="swatches">{p.colors.map((c) => <Swatch key={c.id} hex={c.hex} hex2={c.hex2} />)}</span></td>
-                <td className="num">{money(p.price)}</td>
+                {pricing.tables.map((t) => <td key={t} className="num">{money(tablePrice(p.price, t, pricing.markup))}</td>)}
               </tr>
             ))}
           </tbody>
