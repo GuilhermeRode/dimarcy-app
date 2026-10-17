@@ -25,6 +25,8 @@ def update_settings(data: AppSettingsIn, db: Session = Depends(get_db)):
     s.max_discount_percent = data.max_discount_percent
     s.retail_markup_percent = data.retail_markup_percent
     s.annual_goal = data.annual_goal
+    if data.lead_cnaes is not None:
+        s.lead_cnaes = data.lead_cnaes
     db.commit()
     db.refresh(s)
     return s

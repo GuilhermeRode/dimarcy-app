@@ -67,6 +67,21 @@ def check_models(ctx):
         assert db.query(AppSettings).first().lead_cnaes == "4781400"
 
 
+def check_settings(ctx):
+    c, admin = ctx["c"], ctx["admin"]
+    base = {"allow_price_override": False, "max_discount_percent": 0, "retail_markup_percent": 50, "annual_goal": None}
+    r = c.put("/api/settings", headers=admin, json={**base, "lead_cnaes": "4781-4/00, 4642-7/01,4781400"})
+    assert r.status_code == 200, r.text
+    assert r.json()["lead_cnaes"] == "4781400,4642701"
+    assert r.json()["last_lead_import_month"] is None
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_cnaes": "123"}).status_code == 422
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_cnaes": " , "}).status_code == 422
+    r = c.put("/api/settings", headers=admin, json=base)  # omitted: unchanged
+    assert r.json()["lead_cnaes"] == "4781400,4642701"
+    assert "lead_cnaes" not in c.get("/api/settings", headers=ctx["a"]).json()  # sellers don't see it
+    c.put("/api/settings", headers=admin, json={**base, "lead_cnaes": "4781400"})
+
+
 # ---- run ----
 with TestClient(app) as c:
     ctx = {"c": c, "admin": login(c, "admin@test.com", "admin-pass-123")}
@@ -77,5 +92,6 @@ with TestClient(app) as c:
         ctx[key + "_id"] = r.json()["id"]
         ctx[key] = login(c, f"{key}@t.com", "seller-pass-123")
     check_models(ctx)
+    check_settings(ctx)
 
 print("test_leads OK")

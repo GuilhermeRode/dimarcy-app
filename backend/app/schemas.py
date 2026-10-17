@@ -1,4 +1,5 @@
 import datetime as _dt
+import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
@@ -166,6 +167,17 @@ class AppSettingsIn(BaseModel):
     max_discount_percent: float = Field(ge=0, le=100)
     retail_markup_percent: float = Field(default=50, ge=0, le=1000)
     annual_goal: Goal = None
+    lead_cnaes: str | None = None  # None = keep the current list
+
+    @field_validator("lead_cnaes")
+    @classmethod
+    def _cnaes(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        codes = [re.sub(r"\D", "", part) for part in v.split(",") if part.strip()]
+        if not codes or any(len(code) != 7 for code in codes):
+            raise ValueError("Informe códigos CNAE de 7 dígitos, separados por vírgula.")
+        return ",".join(dict.fromkeys(codes))  # dedup, keep order
 
 
 class AppSettingsOut(ORM):
@@ -177,6 +189,9 @@ class AppSettingsOut(ORM):
 
 class AppSettingsAdminOut(AppSettingsOut):
     annual_goal: float | None = None
+    lead_cnaes: str
+    last_lead_import_month: str | None = None
+    last_lead_import_at: datetime | None = None
 
 
 # ---------- Finance ----------
