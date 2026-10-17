@@ -10,6 +10,7 @@ import Orders from "./pages/Orders";
 import OrderForm from "./pages/OrderForm";
 import OrderDetail from "./pages/OrderDetail";
 import Customers from "./pages/Customers";
+import Leads from "./pages/Leads";
 import Products from "./pages/Products";
 import Colors from "./pages/Colors";
 import Users from "./pages/Users";
@@ -59,6 +60,7 @@ const router = createHashRouter(createRoutesFromElements(
       <Route path="revenue/receivables" element={<Protected admin><Finance key="receivable" kind="receivable" /></Protected>} />
       <Route path="revenue/payables" element={<Protected admin><Finance key="payable" kind="payable" /></Protected>} />
       <Route path="customers" element={<Customers />} />
+      <Route path="leads" element={<Leads />} />
       {!EXCLUDE_MAP && (
         <Route path="customers-by-city" element={
           <Protected admin><Suspense fallback={null}><CustomersByCity /></Suspense></Protected>

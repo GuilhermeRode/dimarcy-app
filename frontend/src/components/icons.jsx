@@ -116,3 +116,11 @@ export const WarningIcon = (p) => (
     <line x1="12" y1="17" x2="12.01" y2="17" />
   </svg>
 );
+
+export const LeadsIcon = (p) => (
+  <svg viewBox="0 0 24 24" width={p.size || 18} height={p.size || 18} {...base} {...p}>
+    <circle cx="12" cy="12" r="8" />
+    <circle cx="12" cy="12" r="4" />
+    <circle cx="12" cy="12" r="0.8" />
+  </svg>
+);
