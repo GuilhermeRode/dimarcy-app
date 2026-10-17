@@ -82,6 +82,39 @@ def check_settings(ctx):
     c.put("/api/settings", headers=admin, json={**base, "lead_cnaes": "4781400"})
 
 
+def check_regions(ctx):
+    c, admin, a_id, b_id = ctx["c"], ctx["admin"], ctx["a_id"], ctx["b_id"]
+    with SessionLocal() as db:  # leftovers from check_models
+        db.query(SellerCity).delete()
+        db.query(Lead).delete()
+        db.commit()
+    r = c.put(f"/api/users/{a_id}/cities", headers=admin, json=[
+        {"city": "Jaraguá do Sul", "state": "sc"}, {"city": " jaragua  do sul ", "state": "SC"}])
+    assert r.status_code == 200, r.text
+    assert r.json() == [{"city": "Jaraguá do Sul", "state": "SC"}]  # same key twice -> once
+    r = c.put(f"/api/users/{b_id}/cities", headers=admin, json=[{"city": "JARAGUA DO SUL", "state": "SC"}])
+    assert r.status_code == 409 and r.json()["detail"] == "JARAGUA DO SUL já é da região de Ana.", r.text
+    assert c.put(f"/api/users/{b_id}/cities", headers=admin, json=[{"city": "Corupá", "state": "SC"}]).status_code == 200
+    assert c.get(f"/api/users/{b_id}/cities", headers=admin).json() == [{"city": "Corupá", "state": "SC"}]
+    assert c.put("/api/users/9999/cities", headers=admin, json=[]).status_code == 404
+    assert c.get(f"/api/users/{a_id}/cities", headers=ctx["a"]).status_code == 403  # admin only
+    assert c.put(f"/api/users/{a_id}/cities", headers=admin, json=[{"city": "", "state": "SC"}]).status_code == 422
+
+    # suggestions: Ana's customers' cities, marking the ones another seller has
+    c.post("/api/customers", headers=ctx["a"], json={"name": "Loja Corupá", "document": "1", "city": "Corupa", "state": "SC"})
+    c.post("/api/customers", headers=ctx["a"], json={"name": "Loja Guará", "document": "2", "city": "Guaramirim", "state": "SC"})
+    sug = c.get(f"/api/users/{a_id}/cities/suggestions", headers=admin).json()
+    assert {"city": "Corupa", "state": "SC", "taken_by": "Bruno"} in sug, sug
+    assert {"city": "Guaramirim", "state": "SC", "taken_by": None} in sug, sug
+
+    add_lead("11111111000111", "Lead Blumenau", city="Blumenau")
+    opts = c.get("/api/users/cities/options", headers=admin).json()
+    assert {"city": "Blumenau", "state": "SC"} in opts and {"city": "Guaramirim", "state": "SC"} in opts, opts
+    with SessionLocal() as db:
+        db.query(Lead).delete()
+        db.commit()
+
+
 # ---- run ----
 with TestClient(app) as c:
     ctx = {"c": c, "admin": login(c, "admin@test.com", "admin-pass-123")}
@@ -93,5 +126,6 @@ with TestClient(app) as c:
         ctx[key] = login(c, f"{key}@t.com", "seller-pass-123")
     check_models(ctx)
     check_settings(ctx)
+    check_regions(ctx)
 
 print("test_leads OK")

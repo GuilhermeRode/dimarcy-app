@@ -43,6 +43,16 @@ class UserOut(UserBase):
     id: int
 
 
+class CityIn(BaseModel):
+    city: str = Field(min_length=1, max_length=100)
+    state: str = Field(min_length=2, max_length=2)
+
+
+class CityOut(ORM):
+    city: str
+    state: str
+
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
