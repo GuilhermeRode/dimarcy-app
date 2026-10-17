@@ -14,7 +14,7 @@ from ..settings_store import get_app_settings
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 MAX_PERIOD_DAYS = 731
-DAYS_PER_MONTH = 30.4
+DAYS_PER_YEAR = 365
 SIZE_ORDER = ["U", "PP", "P", "M", "G", "GG", "XG", "XGG"]
 
 
@@ -37,9 +37,10 @@ def _kpis(sales: list[Order]) -> dict:
     }
 
 
-def _period_goal(monthly, days: int) -> float | None:
-    monthly = float(monthly or 0)  # Numeric columns load as Decimal
-    return round(monthly * days / DAYS_PER_MONTH, 2) if monthly > 0 else None
+def _period_goal(annual, days: int) -> float | None:
+    """The annual goal prorated to the period's length."""
+    annual = float(annual or 0)  # Numeric columns load as Decimal
+    return round(annual * days / DAYS_PER_YEAR, 2) if annual > 0 else None
 
 
 def _sales_series(sales: list[Order], start: date, end: date) -> list[dict]:
@@ -57,7 +58,7 @@ def _sales_series(sales: list[Order], start: date, end: date) -> list[dict]:
 
 
 def _seller_row(u: User, days: int) -> dict:
-    return {"id": u.id, "name": u.name, "avatar_url": u.avatar_url, "goal": _period_goal(u.monthly_goal, days),
+    return {"id": u.id, "name": u.name, "avatar_url": u.avatar_url, "goal": _period_goal(u.annual_goal, days),
             "orders": 0, "pieces": 0, "value": 0.0}
 
 
@@ -65,7 +66,7 @@ def _seller_row(u: User, days: int) -> dict:
 def dashboard(start: date | None = None, end: date | None = None, db: Session = Depends(get_db),
               user: User = Depends(get_current_user)):
     today = clock.today_br()
-    start = start or date(today.year, 1, 1)
+    start = start or clock.goal_year_start(today)
     end = end or today
     if start > end or (end - start).days >= MAX_PERIOD_DAYS:
         raise HTTPException(400, "Período inválido.")
@@ -132,7 +133,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
     statuses = Counter(r["status"] for r in customer_overview(db, user, today))
     late = visible_orders(db, user).filter(late_filter(today)).all()
 
-    company_goal = get_app_settings(db).monthly_goal if is_admin else user.monthly_goal
+    company_goal = get_app_settings(db).annual_goal if is_admin else user.annual_goal
     return {
         "period": {"start": start, "end": end},
         "kpis": _kpis(sales),

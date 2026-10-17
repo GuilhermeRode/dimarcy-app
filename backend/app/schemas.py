@@ -28,7 +28,7 @@ class UserBase(ORM):
     active: bool = True
     avatar_url: str | None = None
     theme: str = "light"
-    monthly_goal: Goal = None
+    annual_goal: Goal = None
     price_table: Literal["wholesale", "retail", "both"] = "wholesale"
 
 
@@ -165,7 +165,7 @@ class AppSettingsIn(BaseModel):
     allow_price_override: bool
     max_discount_percent: float = Field(ge=0, le=100)
     retail_markup_percent: float = Field(default=50, ge=0, le=1000)
-    monthly_goal: Goal = None
+    annual_goal: Goal = None
 
 
 class AppSettingsOut(ORM):
@@ -176,7 +176,7 @@ class AppSettingsOut(ORM):
 
 
 class AppSettingsAdminOut(AppSettingsOut):
-    monthly_goal: float | None = None
+    annual_goal: float | None = None
 
 
 # ---------- Finance ----------

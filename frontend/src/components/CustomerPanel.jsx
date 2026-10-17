@@ -45,7 +45,7 @@ export default function CustomerPanel({ customer: c, isAdmin, onClose, onEdit })
             <span><strong>#{orderNumber(o.id)}</strong><small>{dateBR(o.date)} · {o.pieces} peças</small></span>
             <strong>{money(o.total)}</strong>
           </button>
-        )) : <p className="customer-panel-empty">Ainda sem compras. Bom momento para um primeiro contato.</p>}
+        )) : <p className="customer-panel-empty">Sem histórico de compras no app ainda.</p>}
       </div>
     </aside>
   );
