@@ -38,16 +38,17 @@ export function ContactModal({ target, onClose, onSaved }) {
           <textarea rows={3} maxLength={2000} placeholder="Ex.: pediu o catálogo, falar com a dona na segunda"
             value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </Field>
-        <Field label="Retornar em (opcional)" span={2}>
+        <div className="field span-2">
+          <span>Retornar em (opcional)</span>
           <div className="contact-next">
-            <input type="date" min={today} value={form.next_action_date}
+            <input type="date" aria-label="Retornar em" min={today} value={form.next_action_date}
               onChange={(e) => setForm({ ...form, next_action_date: e.target.value })} />
             {[3, 7, 30].map((d) => (
               <button type="button" key={d} className="btn"
                 onClick={() => setForm({ ...form, next_action_date: addDays(today, d) })}>+{d} dias</button>
             ))}
           </div>
-        </Field>
+        </div>
         <div className="span-2"><ErrorBox msg={error} /></div>
         <div className="actions span-2"><button className="btn btn-primary" disabled={busy}>Salvar contato</button></div>
       </form>
@@ -75,7 +76,7 @@ export function ContactHistory({ target }) {
       <ErrorBox msg={error} />
       {list && (list.length ? list.map((ct) => (
         <div key={ct.id} className="contact-item">
-          <small>{contactDate(ct.created_at)} · {CHANNELS[ct.channel]} · {ct.user_name}</small>
+          <small>{contactDate(ct.created_at)} · {CHANNELS[ct.channel] ?? ct.channel} · {ct.user_name}</small>
           {ct.notes && <p>{ct.notes}</p>}
           {ct.next_action_date && <small className="contact-due">Retornar em {dateBR(ct.next_action_date)}</small>}
         </div>

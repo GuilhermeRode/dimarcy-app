@@ -34,7 +34,7 @@ export default function FollowUps() {
                 <span className="customer-avatar">{initials(r.name)}</span>
                 <span>
                   <strong>{r.name}</strong>
-                  <small>{r.kind === "lead" ? "Lead" : "Cliente"} · último: {CHANNELS[r.channel]}{r.notes ? ` — ${r.notes}` : ""}</small>
+                  <small>{r.kind === "lead" ? "Lead" : "Cliente"} · último: {CHANNELS[r.channel] ?? r.channel}{r.notes ? ` — ${r.notes}` : ""}</small>
                 </span>
               </span>
               <span className={r.next_action_date < today ? "followup-late" : "followup-today"}>

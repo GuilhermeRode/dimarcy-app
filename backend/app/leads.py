@@ -44,7 +44,7 @@ def visible_lead(db: Session, user: User, lead_id: int) -> Lead:
         if not owner or owner.id != user.id:
             lead = None
     if not lead:
-        raise HTTPException(404, "Lead not found.")
+        raise HTTPException(404, "Lead não encontrado.")
     return lead
 
 

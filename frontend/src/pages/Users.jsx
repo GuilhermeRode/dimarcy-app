@@ -49,7 +49,7 @@ function RegionCities({ userId, cities, onChange }) {
         {!cities.length && <span className="muted">Nenhuma cidade ainda.</span>}
       </div>
       <div className="region-add">
-        <input list="city-options" placeholder="Cidade - UF" value={text} onChange={(e) => setText(e.target.value)}
+        <input list="city-options" aria-label="Cidade - UF" placeholder="Cidade - UF" value={text} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTyped(); } }} />
         <datalist id="city-options">
           {options.map((o) => <option key={`${o.city}|${o.state}`} value={`${o.city} - ${o.state}`} />)}

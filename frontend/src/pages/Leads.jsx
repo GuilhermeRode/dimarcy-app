@@ -35,7 +35,7 @@ export default function Leads() {
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    if (isAdmin) api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller")));
+    if (isAdmin) api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller" && u.active)));
   }, [isAdmin]);
 
   async function load(offset = 0) {
@@ -48,7 +48,7 @@ export default function Leads() {
       setError("");
     } catch (e) { setError(errorMessage(e)); }
   }
-  useEffect(() => { load(0); }, [filters]);
+  useEffect(() => { setSelectedId(null); load(0); }, [filters]);
 
   const items = data?.items || [];
   const selected = items.find((l) => l.id === selectedId);
@@ -57,14 +57,26 @@ export default function Leads() {
     setSelectedId(null);
   };
 
+  function alreadyHandled(id) {
+    drop(id);
+    setDiscarding(null);
+    setConverting(null);
+    setNotice("Este lead já tinha sido tratado por outra pessoa.");
+  }
+
   async function discard(e) {
     e.preventDefault();
+    if (discarding.busy) return;
+    setDiscarding({ ...discarding, busy: true, error: "" });
     try {
       await api.post(`/leads/${discarding.id}/discard`, { reason: discarding.reason });
       drop(discarding.id);
       setDiscarding(null);
       setNotice("Lead descartado. Ele não volta nas próximas importações.");
-    } catch (err) { setDiscarding({ ...discarding, error: errorMessage(err) }); }
+    } catch (err) {
+      if (err.response?.status === 409) alreadyHandled(discarding.id);
+      else setDiscarding({ ...discarding, busy: false, error: errorMessage(err) });
+    }
   }
 
   const pill = (label, value, onChange, opts) => (
@@ -108,7 +120,7 @@ export default function Leads() {
         <p className="customers-empty">
           {isAdmin
             ? "Nenhum lead ainda. Defina as cidades de cada vendedor em Usuários; a importação da Receita traz as lojas na madrugada seguinte."
-            : "Nenhum lead na sua região ainda. Peça ao administrador para cadastrar as cidades que você atende."}
+            : "Nenhum lead disponível na sua região agora. Se você ainda não tem cidades cadastradas, peça ao administrador."}
         </p>
       ) : (
         <div className={`customers-layout ${selected ? "with-panel" : ""}`}>
@@ -156,7 +168,7 @@ export default function Leads() {
 
       {converting && (
         <CustomerFormModal initial={converting} isAdmin={isAdmin} submitUrl={`/leads/${converting.leadId}/convert`}
-          onClose={() => setConverting(null)}
+          onClose={() => setConverting(null)} onConflict={() => alreadyHandled(converting.leadId)}
           onSaved={() => { drop(converting.leadId); setConverting(null); setNotice("Cliente cadastrado. Ele já aparece em Clientes."); }} />
       )}
 
@@ -169,7 +181,7 @@ export default function Leads() {
               </select>
             </Field>
             <div className="span-2"><ErrorBox msg={discarding.error} /></div>
-            <div className="actions span-2"><button className="btn danger">Descartar lead</button></div>
+            <div className="actions span-2"><button className="btn danger" disabled={discarding.busy}>Descartar lead</button></div>
           </form>
         </Modal>
       )}
