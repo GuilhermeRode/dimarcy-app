@@ -75,7 +75,7 @@ export default function Users() {
     setError("");
     setForm(u);
     setCities(u.id ? null : []);
-    if (u.id && u.role === "seller") api.get(`/users/${u.id}/cities`).then((r) => setCities(r.data));
+    if (u.id) api.get(`/users/${u.id}/cities`).then((r) => setCities(r.data)).catch((e) => setError(errorMessage(e)));
   }
 
   async function save(e) {
@@ -86,6 +86,7 @@ export default function Users() {
     try {
       const { data: saved } = form.id ? await api.put(`/users/${form.id}`, body) : await api.post("/users", body);
       setForm({ ...form, id: saved.id }); // a failing region save below must not create the user twice
+      load();
       if (form.role === "seller" && cities) await api.put(`/users/${saved.id}/cities`, cities);
       setForm(null);
       load();
