@@ -1073,3 +1073,11 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
   .customers-row.leads-row, .customers-row.leads-row.admin { grid-template-columns: minmax(0, 1fr) auto; }
   .customer-panel-actions { flex-wrap: wrap; }
 }
+.followup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.followup-late { color: var(--danger); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.followup-today { color: var(--accent-strong); font-weight: 600; font-size: 13px; }
+.followup-actions { display: flex; gap: 8px; }
+@media (max-width: 860px) {
+  .followup-row { grid-template-columns: minmax(0, 1fr); }
+  .followup-actions .btn { flex: 1; text-align: center; }
+}

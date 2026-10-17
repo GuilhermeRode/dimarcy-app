@@ -4,6 +4,11 @@ import { plural } from "../format";
 export default function AlertStrip({ alerts }) {
   const nav = useNavigate();
   const items = [
+    alerts.follow_ups_due > 0 && {
+      tone: "info", to: "/follow-ups", cta: "Ver retornos",
+      title: plural(alerts.follow_ups_due, "retorno para hoje", "retornos para hoje"),
+      text: "Contatos que você combinou de retomar até hoje.",
+    },
     alerts.customers_at_risk > 0 && {
       tone: "warn", to: "/customers?status=at_risk", cta: "Ver lista",
       title: `${plural(alerts.customers_at_risk, "cliente", "clientes")} em risco`,
