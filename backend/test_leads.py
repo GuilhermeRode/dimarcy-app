@@ -76,6 +76,8 @@ def check_settings(ctx):
     assert r.json()["last_lead_import_month"] is None
     assert c.put("/api/settings", headers=admin, json={**base, "lead_cnaes": "123"}).status_code == 422
     assert c.put("/api/settings", headers=admin, json={**base, "lead_cnaes": " , "}).status_code == 422
+    too_many = ",".join(f"{4000000 + i}" for i in range(26))  # 26 * 8 - 1 = 207 chars > 200
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_cnaes": too_many}).status_code == 422
     r = c.put("/api/settings", headers=admin, json=base)  # omitted: unchanged
     assert r.json()["lead_cnaes"] == "4781400,4642701"
     assert "lead_cnaes" not in c.get("/api/settings", headers=ctx["a"]).json()  # sellers don't see it
@@ -97,6 +99,9 @@ def check_regions(ctx):
     assert c.put(f"/api/users/{b_id}/cities", headers=admin, json=[{"city": "Corupá", "state": "SC"}]).status_code == 200
     assert c.get(f"/api/users/{b_id}/cities", headers=admin).json() == [{"city": "Corupá", "state": "SC"}]
     assert c.put("/api/users/9999/cities", headers=admin, json=[]).status_code == 404
+    with SessionLocal() as db:
+        admin_id = db.query(User).filter(User.email == "admin@test.com").one().id
+    assert c.put(f"/api/users/{admin_id}/cities", headers=admin, json=[]).status_code == 422  # only sellers have a region
     assert c.get(f"/api/users/{a_id}/cities", headers=ctx["a"]).status_code == 403  # admin only
     assert c.put(f"/api/users/{a_id}/cities", headers=admin, json=[{"city": "", "state": "SC"}]).status_code == 422
 
@@ -251,10 +256,26 @@ def check_contacts(ctx):
     assert c.get("/api/contacts", headers=ctx["b"], params={"lead_id": jl}).status_code == 404
     assert c.get("/api/contacts", headers=ctx["a"]).status_code == 422
 
+    # an orphan contact (its lead row is gone) must not break the due list or the dashboard
+    with SessionLocal() as db:
+        ana = db.query(User).filter(User.email == "a@t.com").one()
+        orphan = Contact(user_id=ana.id, lead_id=999999, channel="call", next_action_date=TODAY)
+        db.add(orphan)
+        db.commit()
+        orphan_id = orphan.id
+    try:
+        assert c.get("/api/contacts/due", headers=ctx["a"]).status_code == 200
+        assert c.get("/api/dashboard", headers=ctx["a"]).status_code == 200
+    finally:
+        with SessionLocal() as db:
+            db.query(Contact).filter(Contact.id == orphan_id).delete()
+            db.commit()
+
     # discarded lead leaves the due list
     contact(ctx["a"], lead_id=jl, next_action_date=yesterday)
     c.post(f"/api/leads/{jl}/discard", headers=ctx["a"], json={"reason": "other"})
     assert contact(ctx["a"], lead_id=jl).status_code == 409  # a handled lead takes no more contacts
+    assert c.get("/api/contacts", headers=ctx["a"], params={"lead_id": jl}).status_code == 200  # but its history stays readable
     assert c.get("/api/contacts/due", headers=ctx["a"]).json() == []
 
     # converting moves the history to the customer; customer contacts work the same way

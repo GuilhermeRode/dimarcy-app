@@ -233,7 +233,7 @@ class Lead(Base):
     """A store from the Receita's open CNPJ data that isn't a customer yet. Its seller is never
     stored: it's whoever has the lead's city in seller_cities (see leads.city_owners)."""
     __tablename__ = "leads"
-    __table_args__ = (Index("ix_leads_area", "state", "city_key", "status"),)
+    __table_args__ = (Index("ix_leads_area", "state", "city_key", "status"), {"sqlite_autoincrement": True})
     id: Mapped[int] = mapped_column(primary_key=True)
     cnpj: Mapped[str] = mapped_column(String(14), unique=True)  # leads.normalize_cnpj
     name: Mapped[str] = mapped_column(String(160))
@@ -254,7 +254,7 @@ class Contact(Base):
     """One touch with a lead or a customer (exactly one of them). The latest contact's
     next_action_date is the pending follow-up — see leads.due_follow_ups."""
     __tablename__ = "contacts"
-    __table_args__ = (CheckConstraint("(lead_id IS NULL) <> (customer_id IS NULL)", name="ck_contacts_one_target"),)
+    __table_args__ = (CheckConstraint("(lead_id IS NULL) <> (customer_id IS NULL)", name="ck_contacts_one_target"), {"sqlite_autoincrement": True})
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     lead_id: Mapped[int | None] = mapped_column(ForeignKey("leads.id"), index=True)

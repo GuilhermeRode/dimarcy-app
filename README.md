@@ -82,7 +82,7 @@ Na VM (o backend precisa ter subido uma vez depois da atualização, para criar 
 
     sudo cp /opt/dimarcy/backend/deploy/dimarcy-leads.* /etc/systemd/system/
     sudo systemctl daemon-reload && sudo systemctl enable --now dimarcy-leads.timer
-    sudo systemctl start dimarcy-leads.service   # primeira importação, sem esperar a madrugada
-    journalctl -u dimarcy-leads -n 20            # resultado
+    sudo systemctl start --no-block dimarcy-leads.service   # primeira importação (demora), sem esperar a madrugada
+    journalctl -u dimarcy-leads -f               # acompanhe o progresso e o resultado
 
 Se a Receita mudar o endereço, ajuste `RECEITA_WEBDAV_URL` / `RECEITA_SHARE_TOKEN` no `.env`.

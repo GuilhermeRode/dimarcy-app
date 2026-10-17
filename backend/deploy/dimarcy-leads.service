@@ -1,6 +1,7 @@
 [Unit]
 Description=Di Marcy - importação de leads da Receita Federal
 After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
@@ -8,3 +9,5 @@ User=opc
 WorkingDirectory=/opt/dimarcy/backend
 ExecStart=/opt/dimarcy/backend/.venv/bin/python -m app.lead_import
 Nice=10
+TimeoutStartSec=4h
+Environment=PYTHONUNBUFFERED=1

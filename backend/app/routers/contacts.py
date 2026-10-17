@@ -17,12 +17,12 @@ def _out(ct: Contact) -> dict:
             "next_action_date": ct.next_action_date, "created_at": ct.created_at}
 
 
-def _check_target(db: Session, user: User, lead_id: int | None, customer_id: int | None):
+def _check_target(db: Session, user: User, lead_id: int | None, customer_id: int | None, writing: bool = False):
     """Whoever sees the lead/customer sees and adds to its whole history."""
     if (lead_id is None) == (customer_id is None):
         raise HTTPException(422, "Informe o lead ou o cliente do contato.")
     if lead_id is not None:
-        if visible_lead(db, user, lead_id).status != "new":
+        if visible_lead(db, user, lead_id).status != "new" and writing:  # history of handled leads stays readable
             raise HTTPException(409, "Este lead já foi tratado.")
     else:
         visible_customer(customer_id, db, user)
@@ -43,7 +43,7 @@ def history(lead_id: int | None = None, customer_id: int | None = None,
 
 @router.post("", status_code=201)
 def create(data: ContactIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    _check_target(db, user, data.lead_id, data.customer_id)
+    _check_target(db, user, data.lead_id, data.customer_id, writing=True)
     ct = Contact(user_id=user.id, **data.model_dump())
     db.add(ct)
     db.commit()

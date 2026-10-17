@@ -11,12 +11,14 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
 from datetime import date, datetime
 from typing import Callable, Iterator
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import clock
@@ -35,10 +37,19 @@ CONNECTORS = {"da", "das", "de", "do", "dos", "e"}
 def read_rows(zip_path: str, columns: int) -> Iterator[list[str]]:
     """Rows of the single CSV inside a Receita zip (';', latin-1, quoted, no header)."""
     with zipfile.ZipFile(zip_path) as z, z.open(z.namelist()[0]) as raw:
-        for row in csv.reader(io.TextIOWrapper(raw, encoding="latin-1", newline=""), delimiter=";"):
+        skipped, first_bad = 0, 0
+        reader = csv.reader(io.TextIOWrapper(raw, encoding="latin-1", newline=""), delimiter=";")
+        for row in reader:
             if len(row) != columns:
-                raise ValueError(f"{zip_path}: expected {columns} columns, got {len(row)}")
+                skipped += 1
+                first_bad = first_bad or reader.line_num
+                continue
             yield row
+    if skipped > 1000:
+        raise ValueError(f"{zip_path}: {skipped} rows with the wrong column count (expected {columns})")
+    if skipped:
+        print(f"[lead_import] {os.path.basename(zip_path)}: skipped {skipped} malformed rows, first at line {first_bad}",
+              file=sys.stderr, flush=True)
 
 
 def parse_towns(zip_path: str) -> dict[str, str]:
@@ -101,7 +112,7 @@ def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: da
         if cnpj in known:
             continue
         city = display_city(d["raw_city"], d["state"], spellings)
-        fields = {"name": (d["name"] or cnpj)[:160], "phone": d["phone"], "email": d["email"], "address": d["address"],
+        fields = {"name": (d["name"] or cnpj)[:160], "phone": d["phone"], "email": (d["email"] or "")[:160] or None, "address": d["address"],
                   "city": city, "state": d["state"], "city_key": _city_key(city), "opened_at": d["opened_at"],
                   "seen_at": today}
         lead = existing.get(cnpj)
@@ -115,7 +126,10 @@ def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: da
     gone = [lead.id for cnpj, lead in existing.items()
             if lead.status == "new" and cnpj not in found and lead.id not in with_contacts]
     for i in range(0, len(gone), 500):  # stay under SQLite's bound-parameter limit
-        db.query(Lead).filter(Lead.id.in_(gone[i:i + 500])).delete(synchronize_session=False)
+        batch = gone[i:i + 500]  # re-checked in SQL: a contact may have been added since the read above
+        db.query(Lead).filter(Lead.id.in_(batch), Lead.status == "new",
+                              ~Lead.id.in_(select(Contact.lead_id).where(Contact.lead_id.isnot(None)))
+                              ).delete(synchronize_session=False)
     s = get_app_settings(db)
     s.last_lead_import_month, s.last_lead_import_scope, s.last_lead_import_at = month, scope, datetime.now()
     db.commit()
@@ -147,6 +161,7 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
                 lead = pick(row, cnaes, states, towns)
                 if lead:
                     found[lead["cnpj"]] = lead
+            print(f"[lead_import] Estabelecimentos{i}.zip: {len(found)} leads so far", flush=True)
             os.remove(path)  # ~350 MB each (the first one ~2.3 GB): one on disk at a time
         unnamed = {d["basico"] for d in found.values() if not d["name"]}
         if unnamed:
@@ -156,6 +171,7 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
                 for row in read_rows(path, COMPANY_COLUMNS):
                     if row[0] in unnamed:
                         names[row[0]] = row[1].strip()
+                print(f"[lead_import] Empresas{i}.zip: {len(names)} names so far", flush=True)
                 os.remove(path)
             for d in found.values():
                 if not d["name"]:
@@ -193,9 +209,16 @@ def latest_month() -> str:
     return months[-1]
 
 
-def download(month: str, name: str, dest: str) -> None:
-    with urllib.request.urlopen(_request(f"{month}/{name}"), timeout=120) as r, open(dest, "wb") as f:
-        shutil.copyfileobj(r, f, 1024 * 1024)
+def download(month: str, name: str, dest: str, attempts: int = 3, sleep: Callable[[float], None] = time.sleep) -> None:
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(_request(f"{month}/{name}"), timeout=120) as r, open(dest, "wb") as f:
+                shutil.copyfileobj(r, f, 1024 * 1024)
+            return
+        except Exception as e:
+            if attempt == attempts:
+                raise RuntimeError(f"{month}/{name}: {e!r}") from e
+            sleep(30)
 
 
 def main() -> int:

@@ -41,12 +41,31 @@ def check_parsing():
     z = make_zip(os.path.join(tmp, "e.zip"), [estab()])
     rows = list(li.read_rows(z, 30))
     assert rows[0][14] == "QUADRA 11;LOTE 04"  # ';' inside quotes stays in its column
-    bad = make_zip(os.path.join(tmp, "bad.zip"), [["1", "2"]])
+    few = make_zip(os.path.join(tmp, "few.zip"), [["1", "2"], estab(), ["3"]])
+    assert list(li.read_rows(few, 30)) == [estab()]  # a few malformed rows are skipped (warning on stderr)
+    bad = make_zip(os.path.join(tmp, "bad.zip"), [["1", "2"]] * 1001)
     try:
         list(li.read_rows(bad, 30))
-        raise AssertionError("wrong column count must raise")
+        raise AssertionError("more than 1000 malformed rows must raise")
     except ValueError:
         pass
+
+    attempts, naps = [], []
+    class Boom(Exception):
+        pass
+    orig = li.urllib.request.urlopen
+    def failing(*a, **k):
+        attempts.append(1)
+        raise Boom("down")
+    li.urllib.request.urlopen = failing
+    try:
+        li.download("2026-10", "x.zip", os.path.join(tmp, "x.zip"), sleep=naps.append)
+        raise AssertionError("download must give up")
+    except RuntimeError as e:
+        assert "2026-10/x.zip" in str(e) and isinstance(e.__cause__, Boom)
+    finally:
+        li.urllib.request.urlopen = orig
+    assert len(attempts) == 3 and naps == [30, 30]
 
     cn, st = {"4781400"}, {"SC"}
     lead = li.pick(estab(), cn, st, towns)

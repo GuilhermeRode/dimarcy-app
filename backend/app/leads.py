@@ -90,7 +90,7 @@ def ranked_leads(db: Session, user: User, today: date, city: str = "", search: s
         lead = row[0]
         recent = lead.opened_at is not None and (today - lead.opened_at).days <= NEW_STORE_DAYS
         return (not (lead.phone or lead.email), not recent, -active[(lead.city_key, lead.state)],
-                -(lead.opened_at.toordinal() if lead.opened_at else 0), lead.name)
+                -(lead.opened_at.toordinal() if lead.opened_at else 0), lead.name, lead.id)
     return sorted(rows, key=rank)
 
 
@@ -116,12 +116,14 @@ def due_follow_ups(db: Session, user: User, today: date) -> list[dict]:
             continue
         if ct.lead_id:
             target, kind = ct.lead, "lead"
-            if target.status != "new":
+            if target is None or target.status != "new":
                 continue
             if user.role != "admin" and getattr(lead_owner(owners, target), "id", None) != user.id:
                 continue
         else:
             target, kind = ct.customer, "customer"
+            if target is None:
+                continue
             if user.role != "admin" and target.owner_id != user.id:
                 continue
         rows.append({"contact_id": ct.id, "lead_id": ct.lead_id, "customer_id": ct.customer_id,

@@ -205,7 +205,10 @@ class AppSettingsIn(BaseModel):
         codes = [re.sub(r"\D", "", part) for part in v.split(",") if part.strip()]
         if not codes or any(len(code) != 7 for code in codes):
             raise ValueError("Informe códigos CNAE de 7 dígitos, separados por vírgula.")
-        return ",".join(dict.fromkeys(codes))  # dedup, keep order
+        joined = ",".join(dict.fromkeys(codes))  # dedup, keep order
+        if len(joined) > 200:  # column size
+            raise ValueError("No máximo 25 códigos CNAE.")
+        return joined
 
 
 class AppSettingsOut(ORM):
