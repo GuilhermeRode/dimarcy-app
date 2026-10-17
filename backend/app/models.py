@@ -1,8 +1,8 @@
 import datetime as _dt
 from datetime import date, datetime
 
-from sqlalchemy import (Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric,
-                        String, Table, Text, func)
+from sqlalchemy import (Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric,
+                        String, Table, Text, UniqueConstraint, func)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -14,6 +14,9 @@ PRICE_TABLES = ["wholesale", "retail"]  # wholesale = registered price; retail =
 ENTRY_KINDS = ["receivable", "payable"]
 # Business content, so in Portuguese; a payable's category must be one of these
 PAYABLE_CATEGORIES = ["Matéria-prima", "Aluguel", "Salários", "Impostos", "Energia", "Manutenção", "Outros"]
+LEAD_STATUSES = ["new", "converted", "discarded"]
+DISCARD_REASONS = ["closed", "not_target", "competitor", "other"]
+CONTACT_CHANNELS = ["whatsapp", "call", "visit", "email"]
 
 # Customer status by days since the last sale (see customer_status)
 ACTIVE_DAYS = 60
@@ -185,6 +188,10 @@ class AppSettings(Base):
     max_discount_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
     retail_markup_percent: Mapped[float] = mapped_column(Numeric(6, 2), default=50)
     annual_goal: Mapped[float | None] = mapped_column(Numeric(12, 2), default=0)  # company goal; NULL/0 = none
+    lead_cnaes: Mapped[str] = mapped_column(String(200), default="4781400", server_default="4781400")  # CNAE codes, comma-separated
+    last_lead_import_month: Mapped[str | None] = mapped_column(String(7))  # e.g. "2026-10"
+    last_lead_import_scope: Mapped[str | None] = mapped_column(String(300))  # e.g. "PR,SC|4781400"
+    last_lead_import_at: Mapped[datetime | None] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
@@ -208,3 +215,54 @@ class FinancialEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     order: Mapped["Order | None"] = relationship()
+
+
+class SellerCity(Base):
+    """A city in a seller's region. A city belongs to at most one seller (see leads.py)."""
+    __tablename__ = "seller_cities"
+    __table_args__ = (UniqueConstraint("city_key", "state", name="uq_seller_cities_city"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    city: Mapped[str] = mapped_column(String(100))
+    state: Mapped[str] = mapped_column(String(2))
+    city_key: Mapped[str] = mapped_column(String(100))  # sales._city_key(city)
+    user: Mapped[User] = relationship()
+
+
+class Lead(Base):
+    """A store from the Receita's open CNPJ data that isn't a customer yet. Its seller is never
+    stored: it's whoever has the lead's city in seller_cities (see leads.city_owners)."""
+    __tablename__ = "leads"
+    __table_args__ = (Index("ix_leads_area", "state", "city_key", "status"), {"sqlite_autoincrement": True})
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cnpj: Mapped[str] = mapped_column(String(14), unique=True)  # leads.normalize_cnpj
+    name: Mapped[str] = mapped_column(String(160))
+    phone: Mapped[str | None] = mapped_column(String(30))
+    email: Mapped[str | None] = mapped_column(String(160))
+    address: Mapped[str | None] = mapped_column(String(250))
+    city: Mapped[str] = mapped_column(String(100))
+    state: Mapped[str] = mapped_column(String(2))
+    city_key: Mapped[str] = mapped_column(String(100))
+    opened_at: Mapped[_dt.date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(10), default="new", server_default="new")  # see LEAD_STATUSES
+    discard_reason: Mapped[str | None] = mapped_column(String(30))  # see DISCARD_REASONS
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"))
+    seen_at: Mapped[_dt.date] = mapped_column(Date)  # last import that listed this CNPJ
+
+
+class Contact(Base):
+    """One touch with a lead or a customer (exactly one of them). The latest contact's
+    next_action_date is the pending follow-up — see leads.due_follow_ups."""
+    __tablename__ = "contacts"
+    __table_args__ = (CheckConstraint("(lead_id IS NULL) <> (customer_id IS NULL)", name="ck_contacts_one_target"), {"sqlite_autoincrement": True})
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    lead_id: Mapped[int | None] = mapped_column(ForeignKey("leads.id"), index=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(10))  # see CONTACT_CHANNELS
+    notes: Mapped[str | None] = mapped_column(Text)
+    next_action_date: Mapped[_dt.date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    user: Mapped[User] = relationship()
+    lead: Mapped[Lead | None] = relationship()
+    customer: Mapped[Customer | None] = relationship()

@@ -10,7 +10,7 @@ from sqlalchemy import inspect, text
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .models import User
-from .routers import auth, colors, customers, dashboard, finance, orders, products, settings as settings_router, users
+from .routers import auth, colors, contacts, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
 from .uploads import backfill_thumbs
@@ -51,7 +51,11 @@ async def lifespan(app: FastAPI):
     _ensure_columns("colors", {"hex2": "VARCHAR(7)"})
     _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'"})
     _ensure_columns("app_settings", {"annual_goal": "NUMERIC(12,2) DEFAULT 0",
-                                     "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50"})
+                                     "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50",
+                                     "lead_cnaes": "VARCHAR(200) DEFAULT '4781400'",
+                                     "last_lead_import_month": "VARCHAR(7)",
+                                     "last_lead_import_scope": "VARCHAR(300)",
+                                     "last_lead_import_at": "TIMESTAMP"})
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator
             db.add(User(name="Administrador", email=settings.admin_email,
@@ -121,7 +125,7 @@ app.add_middleware(
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-for r in (auth, users, customers, colors, products, orders, dashboard, finance, settings_router):
+for r in (auth, users, customers, colors, products, orders, dashboard, finance, leads, contacts, settings_router):
     app.include_router(r.router, prefix="/api")
 
 

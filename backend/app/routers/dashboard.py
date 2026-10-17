@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..database import get_db
+from ..leads import due_follow_ups
 from ..models import SALE_STATUSES, Order, User
 from ..sales import customer_overview, late_filter, visible_orders
 from ..security import get_current_user
@@ -156,5 +157,6 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
             "customers_never_ordered": statuses["never_ordered"],
             "late_orders": len(late),
             "oldest_late_days": max(((today - o.delivery_date).days for o in late), default=None),
+            "follow_ups_due": len(due_follow_ups(db, user, today)),
         },
     }

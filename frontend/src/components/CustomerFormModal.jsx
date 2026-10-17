@@ -4,7 +4,7 @@ import { Field, ErrorBox, Modal, useConfirm } from "./ui";
 
 export const EMPTY_CUSTOMER = { name: "", document: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
 
-export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved }) {
+export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved, onConflict, submitUrl = "/customers" }) {
   const [confirmDialog, ask] = useConfirm();
   const [form, setForm] = useState({ ...initial, owner_id: initial.owner_id || "" });
   const [sellers, setSellers] = useState([]);
@@ -17,9 +17,11 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved }
     setError("");
     const body = { ...form, state: form.state ? form.state.toUpperCase() : null, owner_id: form.owner_id ? Number(form.owner_id) : null };
     try {
-      form.id ? await api.put(`/customers/${form.id}`, body) : await api.post("/customers", body);
+      form.id ? await api.put(`/customers/${form.id}`, body) : await api.post(submitUrl, body);
       onSaved();
-    } catch (err) { setError(errorMessage(err)); }
+    } catch (err) {
+      if (onConflict && err.response?.status === 409) onConflict(); else setError(errorMessage(err));
+    }
   }
 
   async function remove() {

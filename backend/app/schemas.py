@@ -1,8 +1,9 @@
 import datetime as _dt
+import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from .uploads import thumb_name
 
@@ -40,6 +41,16 @@ class UserIn(UserBase):
 
 class UserOut(UserBase):
     id: int
+
+
+class CityIn(BaseModel):
+    city: str = Field(min_length=1, max_length=100)
+    state: str = Field(min_length=2, max_length=2)
+
+
+class CityOut(ORM):
+    city: str
+    state: str
 
 
 class TokenOut(BaseModel):
@@ -86,6 +97,24 @@ class CustomerOut(CustomerIn):
     created_at: datetime | None = None
     lat: float | None = None
     lng: float | None = None
+
+
+class DiscardIn(BaseModel):
+    reason: Literal["closed", "not_target", "competitor", "other"]  # models.DISCARD_REASONS
+
+
+class ContactIn(BaseModel):
+    lead_id: int | None = None
+    customer_id: int | None = None
+    channel: Literal["whatsapp", "call", "visit", "email"]  # models.CONTACT_CHANNELS
+    notes: str | None = Field(default=None, max_length=2000)
+    next_action_date: _dt.date | None = None
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        if (self.lead_id is None) == (self.customer_id is None):
+            raise ValueError("Informe o lead ou o cliente do contato.")
+        return self
 
 
 # ---------- Colors / products ----------
@@ -166,6 +195,20 @@ class AppSettingsIn(BaseModel):
     max_discount_percent: float = Field(ge=0, le=100)
     retail_markup_percent: float = Field(default=50, ge=0, le=1000)
     annual_goal: Goal = None
+    lead_cnaes: str | None = None  # None = keep the current list
+
+    @field_validator("lead_cnaes")
+    @classmethod
+    def _cnaes(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        codes = [re.sub(r"\D", "", part) for part in v.split(",") if part.strip()]
+        if not codes or any(len(code) != 7 for code in codes):
+            raise ValueError("Informe códigos CNAE de 7 dígitos, separados por vírgula.")
+        joined = ",".join(dict.fromkeys(codes))  # dedup, keep order
+        if len(joined) > 200:  # column size
+            raise ValueError("No máximo 25 códigos CNAE.")
+        return joined
 
 
 class AppSettingsOut(ORM):
@@ -177,6 +220,9 @@ class AppSettingsOut(ORM):
 
 class AppSettingsAdminOut(AppSettingsOut):
     annual_goal: float | None = None
+    lead_cnaes: str
+    last_lead_import_month: str | None = None
+    last_lead_import_at: datetime | None = None
 
 
 # ---------- Finance ----------

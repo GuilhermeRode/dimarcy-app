@@ -21,6 +21,7 @@ export default function Settings() {
         max_discount_percent: Number(form.max_discount_percent) || 0,
         retail_markup_percent: Number(form.retail_markup_percent) || 0,
         annual_goal: form.annual_goal === "" || form.annual_goal == null ? null : Number(form.annual_goal),
+        lead_cnaes: form.lead_cnaes,
       });
       setForm(data);
       setOk("Configurações salvas com sucesso.");
@@ -67,6 +68,17 @@ export default function Settings() {
             </Field>
             <p className="muted span-2" style={{ marginTop: -8 }}>
               O ano da meta vai de outubro a setembro (a meta de 2027 vale de 01/10/2026 a 30/09/2027). No Painel e no Faturamento ela é proporcional ao período escolhido. Deixe em branco para não usar meta.
+            </p>
+            <Field label="CNAEs da prospecção" span={2}>
+              <input placeholder="4781-4/00" value={form.lead_cnaes || ""}
+                onChange={(e) => setForm({ ...form, lead_cnaes: e.target.value })} />
+            </Field>
+            <p className="muted span-2" style={{ marginTop: -8 }}>
+              Atividade principal das lojas trazidas da Receita Federal (separe por vírgula). Padrão: 4781-4/00,
+              comércio varejista de artigos do vestuário e acessórios.{" "}
+              {form.last_lead_import_at
+                ? `Última importação: dados de ${new Date(`${form.last_lead_import_month}-01T00:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}, em ${new Date(`${form.last_lead_import_at}Z`).toLocaleDateString("pt-BR")}.`
+                : "Ainda não houve importação."}
             </p>
             <div className="span-2"><ErrorBox msg={error} /></div>
             {ok && <div className="span-2 muted">{ok}</div>}

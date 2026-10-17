@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { CUSTOMER_STATUS, compactMoney, dateBR, initials, money, orderNumber, whatsappUrl } from "../format";
+import { ContactHistory } from "./Contacts";
 
 export default function CustomerPanel({ customer: c, isAdmin, onClose, onEdit }) {
   const nav = useNavigate();
@@ -47,6 +48,7 @@ export default function CustomerPanel({ customer: c, isAdmin, onClose, onEdit })
           </button>
         )) : <p className="customer-panel-empty">Sem histórico de compras no app ainda.</p>}
       </div>
+      <ContactHistory target={{ customer_id: c.id }} />
     </aside>
   );
 }
