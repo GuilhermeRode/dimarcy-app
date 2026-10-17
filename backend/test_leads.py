@@ -115,6 +115,76 @@ def check_regions(ctx):
         db.commit()
 
 
+def check_listing(ctx):
+    c, admin = ctx["c"], ctx["admin"]
+    old, recent = TODAY - timedelta(days=2000), TODAY - timedelta(days=100)
+    ids = {
+        "j_phone_recent": add_lead("10000000000101", "Jota Moda", phone="47 3333-0001", opened_at=recent),
+        "j_no_contact": add_lead("10000000000102", "Jaraguá Sem Fone", opened_at=recent),
+        "j_phone_old": add_lead("10000000000103", "Antiga Modas", phone="47 3333-0003", opened_at=old),
+        "corupa": add_lead("10000000000104", "Corupá Store", city="Corupá", phone="1", opened_at=recent),
+        "blumenau": add_lead("10000000000105", "Blu Fashion", city="Blumenau", phone="1", opened_at=recent),
+        "gone": add_lead("10000000000106", "Descartada", status="discarded"),
+    }
+    names = lambda r: [x["name"] for x in r.json()["items"]]  # noqa: E731
+
+    r = c.get("/api/leads", headers=ctx["a"])
+    assert r.status_code == 200, r.text
+    assert names(r) == ["Jota Moda", "Antiga Modas", "Jaraguá Sem Fone"], names(r)  # contact, then new store
+    assert r.json()["total"] == 3 and r.json()["cities"] == ["Jaraguá do Sul"]
+    assert names(c.get("/api/leads", headers=ctx["b"])) == ["Corupá Store"]
+    assert names(c.get("/api/leads", headers=ctx["a"], params={"limit": 1, "offset": 1})) == ["Antiga Modas"]
+    assert names(c.get("/api/leads", headers=ctx["a"], params={"search": "antiga"})) == ["Antiga Modas"]
+    assert names(c.get("/api/leads", headers=ctx["a"], params={"search": "0000000000103"})) == ["Antiga Modas"]
+
+    r = c.get("/api/leads", headers=admin)
+    assert r.json()["total"] == 5  # every new lead, discarded left out
+    blu = next(x for x in r.json()["items"] if x["name"] == "Blu Fashion")
+    assert blu["seller_id"] is None and blu["seller_name"] is None
+    assert names(c.get("/api/leads", headers=admin, params={"seller_id": 0})) == ["Blu Fashion"]
+    assert names(c.get("/api/leads", headers=admin, params={"seller_id": ctx["b_id"], "city": "corupa"})) == ["Corupá Store"]
+
+    # detail: visible to the region's seller and the admin only
+    assert c.get(f"/api/leads/{ids['corupa']}", headers=ctx["b"]).json()["seller_name"] == "Bruno"
+    assert c.get(f"/api/leads/{ids['corupa']}", headers=ctx["a"]).status_code == 404
+    assert c.get(f"/api/leads/{ids['blumenau']}", headers=ctx["a"]).status_code == 404
+    assert c.get(f"/api/leads/{ids['blumenau']}", headers=admin).status_code == 200
+
+    # a customer typed by hand with the lead's CNPJ (formatted) hides the lead at once
+    c.post("/api/customers", headers=ctx["a"], json={"name": "Antiga", "document": "10.000.000/0001-03"})
+    assert names(c.get("/api/leads", headers=ctx["a"])) == ["Jota Moda", "Jaraguá Sem Fone"]
+
+    # moving Corupá to Ana moves its leads; a deactivated seller's cities show as "sem vendedor"
+    c.put(f"/api/users/{ctx['b_id']}/cities", headers=admin, json=[])
+    c.put(f"/api/users/{ctx['a_id']}/cities", headers=admin, json=[
+        {"city": "Jaraguá do Sul", "state": "SC"}, {"city": "Corupá", "state": "SC"}])
+    assert "Corupá Store" in names(c.get("/api/leads", headers=ctx["a"]))
+    assert names(c.get("/api/leads", headers=ctx["b"])) == []
+    c.put(f"/api/users/{ctx['a_id']}", headers=admin, json={"name": "Ana", "email": "a@t.com", "role": "seller", "active": False})
+    assert sorted(names(c.get("/api/leads", headers=admin, params={"seller_id": 0}))) == \
+        ["Blu Fashion", "Corupá Store", "Jaraguá Sem Fone", "Jota Moda"]
+    c.put(f"/api/users/{ctx['a_id']}", headers=admin, json={"name": "Ana", "email": "a@t.com", "role": "seller", "active": True})
+    c.put(f"/api/users/{ctx['a_id']}/cities", headers=admin, json=[{"city": "Jaraguá do Sul", "state": "SC"}])
+    c.put(f"/api/users/{ctx['b_id']}/cities", headers=admin, json=[{"city": "Corupá", "state": "SC"}])
+    ctx["leads"] = ids
+
+
+def check_ranking_by_active_customers(ctx):
+    """Same contact/new-store tier: the city with more active Di Marcy customers comes first."""
+    c, admin = ctx["c"], ctx["admin"]
+    color = c.post("/api/colors", headers=admin, json={"name": "Preto", "hex": "#111111"}).json()["id"]
+    product = c.post("/api/products", headers=admin, json={"reference": "R1", "description": "Blusão", "price": 100,
+                                                           "color_ids": [color]}).json()["id"]
+    cust = c.post("/api/customers", headers=admin, json={"name": "Cliente Blu", "document": "77", "city": "Blumenau",
+                                                         "state": "SC", "owner_id": None}).json()["id"]
+    r = c.post("/api/orders", headers=admin, json={
+        "customer_id": cust, "date": TODAY.isoformat(), "delivery_date": TODAY.isoformat(), "status": "delivered", "payment_method": "PIX",
+        "payment_terms": "À vista", "items": [{"product_id": product, "color_id": color, "size": "P", "quantity": 1}]})
+    assert r.status_code == 201, r.text
+    top = [x["name"] for x in c.get("/api/leads", headers=admin).json()["items"]][:3]
+    assert top[0] == "Blu Fashion", top
+
+
 # ---- run ----
 with TestClient(app) as c:
     ctx = {"c": c, "admin": login(c, "admin@test.com", "admin-pass-123")}
@@ -127,5 +197,7 @@ with TestClient(app) as c:
     check_models(ctx)
     check_settings(ctx)
     check_regions(ctx)
+    check_listing(ctx)
+    check_ranking_by_active_customers(ctx)
 
 print("test_leads OK")

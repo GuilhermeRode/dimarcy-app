@@ -10,7 +10,7 @@ from sqlalchemy import inspect, text
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .models import User
-from .routers import auth, colors, customers, dashboard, finance, orders, products, settings as settings_router, users
+from .routers import auth, colors, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
 from .uploads import backfill_thumbs
@@ -125,7 +125,7 @@ app.add_middleware(
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-for r in (auth, users, customers, colors, products, orders, dashboard, finance, settings_router):
+for r in (auth, users, customers, colors, products, orders, dashboard, finance, leads, settings_router):
     app.include_router(r.router, prefix="/api")
 
 
