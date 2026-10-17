@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from .. import clock
 from ..database import get_db
 from ..geocoding import geocode_and_cache_background, lookup_cached_city
-from ..models import Customer, Order, User
+from ..models import Contact, Customer, Lead, Order, User
 from ..schemas import CustomerIn, CustomerOut
 from ..sales import customer_overview, customers_by_city
 from ..security import get_current_user, require_admin
@@ -101,5 +101,8 @@ def delete(cid: int, db: Session = Depends(get_db), user: User = Depends(get_cur
     c = _visible(cid, db, user)
     if db.query(Order).filter(Order.customer_id == cid).first():
         raise HTTPException(400, "This customer has orders and cannot be deleted.")
+    # no FK cascades on SQLite here: clean up dependents by hand
+    db.query(Contact).filter(Contact.customer_id == cid).delete(synchronize_session=False)
+    db.query(Lead).filter(Lead.customer_id == cid).update({"customer_id": None}, synchronize_session=False)
     db.delete(c)
     db.commit()

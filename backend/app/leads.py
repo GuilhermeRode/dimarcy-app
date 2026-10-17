@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from .models import SALE_STATUSES, Customer, Lead, Order, SellerCity, User, customer_status
+from .models import SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
 from .sales import _city_key
 
 NEW_STORE_DAYS = 730  # "abriu recentemente": a new store is still choosing its suppliers
@@ -99,3 +99,32 @@ def lead_out(lead: Lead, owner: User | None) -> dict:
             "address": lead.address, "city": lead.city, "state": lead.state, "opened_at": lead.opened_at,
             "status": lead.status, "seller_id": owner.id if owner else None,
             "seller_name": owner.name if owner else None}
+
+
+def due_follow_ups(db: Session, user: User, today: date) -> list[dict]:
+    """The user's pending follow-ups: for each lead/customer, its LATEST contact, when that contact
+    was registered by this user and its next_action_date is today or earlier. Discarded/converted
+    leads and anything the user can no longer see are left out."""
+    latest: dict[tuple, Contact] = {}
+    # ponytail: every contact in Python; a "latest per target" subquery if this grows past ~50k contacts
+    for ct in db.query(Contact).order_by(Contact.id):
+        latest[(ct.lead_id, ct.customer_id)] = ct
+    owners = city_owners(db) if user.role != "admin" else {}
+    rows = []
+    for ct in latest.values():
+        if ct.user_id != user.id or ct.next_action_date is None or ct.next_action_date > today:
+            continue
+        if ct.lead_id:
+            target, kind = ct.lead, "lead"
+            if target.status != "new":
+                continue
+            if user.role != "admin" and getattr(lead_owner(owners, target), "id", None) != user.id:
+                continue
+        else:
+            target, kind = ct.customer, "customer"
+            if user.role != "admin" and target.owner_id != user.id:
+                continue
+        rows.append({"contact_id": ct.id, "lead_id": ct.lead_id, "customer_id": ct.customer_id,
+                     "name": target.name, "kind": kind, "phone": target.phone, "channel": ct.channel,
+                     "notes": ct.notes, "next_action_date": ct.next_action_date, "last_contact_at": ct.created_at})
+    return sorted(rows, key=lambda r: (r["next_action_date"], r["name"]))

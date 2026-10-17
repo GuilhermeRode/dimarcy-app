@@ -3,7 +3,7 @@ import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from .uploads import thumb_name
 
@@ -101,6 +101,20 @@ class CustomerOut(CustomerIn):
 
 class DiscardIn(BaseModel):
     reason: Literal["closed", "not_target", "competitor", "other"]  # models.DISCARD_REASONS
+
+
+class ContactIn(BaseModel):
+    lead_id: int | None = None
+    customer_id: int | None = None
+    channel: Literal["whatsapp", "call", "visit", "email"]  # models.CONTACT_CHANNELS
+    notes: str | None = Field(default=None, max_length=2000)
+    next_action_date: _dt.date | None = None
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        if (self.lead_id is None) == (self.customer_id is None):
+            raise ValueError("Informe o lead ou o cliente do contato.")
+        return self
 
 
 # ---------- Colors / products ----------

@@ -217,6 +217,63 @@ def check_convert(ctx):
     assert [x["name"] for x in c.get("/api/leads", headers=ctx["a"]).json()["items"]] == []
 
 
+def check_contacts(ctx):
+    c, admin = ctx["c"], ctx["admin"]
+    jl = add_lead("20000000000101", "Loja Contato", phone="47 99999-0000")
+    yesterday, tomorrow = (TODAY - timedelta(days=1)).isoformat(), (TODAY + timedelta(days=1)).isoformat()
+
+    def contact(h, **body):
+        return c.post("/api/contacts", headers=h, json={"channel": "call", **body})
+
+    assert contact(ctx["a"], lead_id=jl, customer_id=1).status_code == 422  # exactly one target
+    assert contact(ctx["a"]).status_code == 422
+    assert contact(ctx["a"], lead_id=jl, channel="fax").status_code == 422
+    assert contact(ctx["b"], lead_id=jl).status_code == 404  # not Bruno's region
+    r = contact(ctx["a"], lead_id=jl, notes="Pediu catálogo", next_action_date=yesterday)
+    assert r.status_code == 201 and r.json()["user_name"] == "Ana", r.text
+
+    due = c.get("/api/contacts/due", headers=ctx["a"]).json()
+    assert [(d["name"], d["kind"], d["notes"]) for d in due] == [("Loja Contato", "lead", "Pediu catálogo")], due
+    assert c.get("/api/contacts/due", headers=admin).json() == []  # reminders belong to who set them
+    assert c.get("/api/dashboard", headers=ctx["a"]).json()["alerts"]["follow_ups_due"] == 1
+
+    # the latest contact replaces the reminder: future date -> not due; no date -> no reminder
+    contact(ctx["a"], lead_id=jl, next_action_date=tomorrow)
+    assert c.get("/api/contacts/due", headers=ctx["a"]).json() == []
+    contact(ctx["a"], lead_id=jl, next_action_date=yesterday)
+    assert len(c.get("/api/contacts/due", headers=ctx["a"]).json()) == 1
+    contact(ctx["a"], lead_id=jl)
+    assert c.get("/api/contacts/due", headers=ctx["a"]).json() == []
+
+    # history: newest first, visible to whoever sees the lead (admin too), not to Bruno
+    hist = c.get("/api/contacts", headers=admin, params={"lead_id": jl}).json()
+    assert len(hist) == 4 and hist[0]["next_action_date"] is None
+    assert c.get("/api/contacts", headers=ctx["b"], params={"lead_id": jl}).status_code == 404
+    assert c.get("/api/contacts", headers=ctx["a"]).status_code == 422
+
+    # discarded lead leaves the due list
+    contact(ctx["a"], lead_id=jl, next_action_date=yesterday)
+    c.post(f"/api/leads/{jl}/discard", headers=ctx["a"], json={"reason": "other"})
+    assert c.get("/api/contacts/due", headers=ctx["a"]).json() == []
+
+    # converting moves the history to the customer; customer contacts work the same way
+    jl2 = add_lead("20000000000102", "Loja Converte")
+    contact(ctx["a"], lead_id=jl2, next_action_date=yesterday)
+    cust = c.post(f"/api/leads/{jl2}/convert", headers=ctx["a"], json={"name": "Loja Converte", "document": "20000000000102"}).json()
+    hist = c.get("/api/contacts", headers=ctx["a"], params={"customer_id": cust["id"]}).json()
+    assert len(hist) == 1
+    due = c.get("/api/contacts/due", headers=ctx["a"]).json()
+    assert [(d["name"], d["kind"]) for d in due] == [("Loja Converte", "customer")], due
+    assert c.get("/api/contacts", headers=ctx["b"], params={"customer_id": cust["id"]}).status_code == 404
+
+    # deleting the customer removes its contacts and unlinks the converted lead
+    assert c.delete(f"/api/customers/{cust['id']}", headers=ctx["a"]).status_code == 204
+    with SessionLocal() as db:
+        assert db.query(Contact).filter(Contact.customer_id == cust["id"]).count() == 0
+        assert db.get(Lead, jl2).customer_id is None
+    assert c.get("/api/contacts/due", headers=ctx["a"]).json() == []
+
+
 # ---- run ----
 with TestClient(app) as c:
     ctx = {"c": c, "admin": login(c, "admin@test.com", "admin-pass-123")}
@@ -232,5 +289,6 @@ with TestClient(app) as c:
     check_listing(ctx)
     check_ranking_by_active_customers(ctx)
     check_convert(ctx)
+    check_contacts(ctx)
 
 print("test_leads OK")
