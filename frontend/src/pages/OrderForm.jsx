@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, errorMessage, fileUrl } from "../api";
 import { useAuth } from "../auth";
-import { localDate, money, orderNumber } from "../format";
+import { localDate, money, orderNumber, tablePrice } from "../format";
 import { Field, ErrorBox, Modal, Swatch, PhotoZoom, ConfirmDialog } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
 
@@ -19,9 +19,6 @@ function ColorLabel({ name, hex, hex2, size }) {
 }
 
 const key = (i) => `${i.color_id}|${i.size}`;
-// Integer cents, half up — same as the server's retail_price; the server prices the order again on save.
-const tablePrice = (price, table, markup) =>
-  table === "retail" ? Math.round(Math.round(price * 100) * Math.round((100 + Number(markup)) * 100) / 10000) / 100 : price;
 const customerLabel = (c) => `${c.name}${c.city ? ` — ${c.city}/${c.state || ""}` : ""}`;
 
 const EMPTY_CUSTOMER = { name: "", document: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };

@@ -38,6 +38,12 @@ with TestClient(app) as c:
     assert c.post("/api/colors", headers=seller, json={"name": "Bordô"}).status_code == 403
     assert c.get("/api/users", headers=seller).status_code == 403
     pid = c.post("/api/products", headers=admin, json=product).json()["id"]
+    # sellers browse products read-only: no edit, delete or photo changes
+    assert c.get(f"/api/products/{pid}", headers=seller).status_code == 200
+    assert c.put(f"/api/products/{pid}", headers=seller, json=product).status_code == 403
+    assert c.delete(f"/api/products/{pid}", headers=seller).status_code == 403
+    assert c.post(f"/api/products/{pid}/image", headers=seller, files={"file": ("x.jpg", b"x", "image/jpeg")}).status_code == 403
+    assert c.delete(f"/api/products/{pid}/image", headers=seller).status_code == 403
 
     # two-tone colors keep their second tone; a bad one is rejected
     duo = c.post("/api/colors", headers=admin, json={"name": "09/37", "hex": "#f0f7de", "hex2": "#6b4a32"}).json()

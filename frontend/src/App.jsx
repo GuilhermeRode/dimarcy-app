@@ -64,7 +64,7 @@ const router = createHashRouter(createRoutesFromElements(
           <Protected admin><Suspense fallback={null}><CustomersByCity /></Suspense></Protected>
         } />
       )}
-      <Route path="products" element={<Protected admin><Products /></Protected>} />
+      <Route path="products" element={<Protected><Products /></Protected>} />
       <Route path="colors" element={<Protected admin><Colors /></Protected>} />
       <Route path="users" element={<Protected admin><Users /></Protected>} />
       <Route path="settings" element={<Protected admin><Settings /></Protected>} />
