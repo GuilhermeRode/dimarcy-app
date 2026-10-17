@@ -172,6 +172,8 @@ def check_listing(ctx):
 def check_ranking_by_active_customers(ctx):
     """Same contact/new-store tier: the city with more active Di Marcy customers comes first."""
     c, admin = ctx["c"], ctx["admin"]
+    # sorts after Corupá and Jota by name, so only the active-customers criterion can put it second
+    add_lead("10000000000107", "Zz Blumenau", city="Blumenau", phone="1", opened_at=TODAY - timedelta(days=100))
     color = c.post("/api/colors", headers=admin, json={"name": "Preto", "hex": "#111111"}).json()["id"]
     product = c.post("/api/products", headers=admin, json={"reference": "R1", "description": "Blusão", "price": 100,
                                                            "color_ids": [color]}).json()["id"]
@@ -182,7 +184,7 @@ def check_ranking_by_active_customers(ctx):
         "payment_terms": "À vista", "items": [{"product_id": product, "color_id": color, "size": "P", "quantity": 1}]})
     assert r.status_code == 201, r.text
     top = [x["name"] for x in c.get("/api/leads", headers=admin).json()["items"]][:3]
-    assert top[0] == "Blu Fashion", top
+    assert top[:2] == ["Blu Fashion", "Zz Blumenau"], top
 
 
 # ---- run ----
