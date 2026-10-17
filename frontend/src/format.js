@@ -48,13 +48,18 @@ export function initials(name) {
 export const normalize = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 // Only digits ever reach the URL. Brazilian numbers: 10-11 digits (DDD + number) after an
-// optional country code 55 and an optional trunk 0 ("047 ...", "0xx47 ...").
-export function whatsappUrl(phone) {
+// optional country code 55 and an optional trunk 0 ("047 ...", "0xx47 ..."). `text` pre-fills the message.
+export function whatsappUrl(phone, text) {
   let digits = (phone || "").replace(/\D/g, "");
   if (digits.length >= 12 && digits.startsWith("55")) digits = digits.slice(2); // DDD 55 alone is 10-11 digits
   if (digits.startsWith("0")) digits = digits.slice(1);
-  return digits.length === 10 || digits.length === 11 ? `https://wa.me/55${digits}` : null;
+  if (digits.length !== 10 && digits.length !== 11) return null;
+  return `https://wa.me/55${digits}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 }
+
+// 14 characters (digits, or letters since 2026) -> 12.ABC.345/0001-99
+export const formatCnpj = (c) =>
+  c && c.length === 14 ? `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}` : c || "";
 
 // Keys match the backend's customer_status(); tone picks the CSS color (.cstatus-<tone>).
 export const CUSTOMER_STATUS = {

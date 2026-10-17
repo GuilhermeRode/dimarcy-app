@@ -1056,3 +1056,13 @@ th[aria-sort="ascending"] .th-sort, th[aria-sort="descending"] .th-sort { color:
 th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { opacity: 1; }
 .table-fin a.ref { text-decoration: none; }
 .table-fin a.ref:hover { text-decoration: underline; }
+
+/* ---------- prospecção / contatos ---------- */
+.contacts-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
+.contacts-head h3 { margin: 0; }
+.contact-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.contact-item p { margin: 0; white-space: pre-wrap; }
+.contact-item small { color: var(--muted); }
+.contact-item .contact-due { color: var(--accent-strong); font-weight: 600; }
+.contact-next { display: flex; gap: 8px; flex-wrap: wrap; }
+.contact-next input { flex: 1 1 150px; }
