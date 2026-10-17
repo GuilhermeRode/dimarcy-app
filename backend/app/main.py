@@ -51,7 +51,11 @@ async def lifespan(app: FastAPI):
     _ensure_columns("colors", {"hex2": "VARCHAR(7)"})
     _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'"})
     _ensure_columns("app_settings", {"annual_goal": "NUMERIC(12,2) DEFAULT 0",
-                                     "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50"})
+                                     "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50",
+                                     "lead_cnaes": "VARCHAR(200) DEFAULT '4781400'",
+                                     "last_lead_import_month": "VARCHAR(7)",
+                                     "last_lead_import_scope": "VARCHAR(300)",
+                                     "last_lead_import_at": "TIMESTAMP"})
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator
             db.add(User(name="Administrador", email=settings.admin_email,
