@@ -68,6 +68,97 @@ def check_parsing():
     assert li.display_city("SAO FELIPE D'OESTE", "RO", spellings) == "Sao Felipe D'oeste"
 
 
+def check_run():
+    from datetime import timedelta
+
+    from fastapi.testclient import TestClient
+
+    from app import clock
+    from app.database import SessionLocal
+    from app.main import app
+    from app.models import AppSettings, Contact, Customer, Lead, SellerCity, User
+
+    today = date(2026, 10, 16)
+    clock.today_br = lambda: today
+    with TestClient(app):  # runs the startup: tables + settings row
+        pass
+    db = SessionLocal()
+    ana = User(name="Ana", email="a@t.com", password_hash="x", role="seller")
+    db.add(ana)
+    db.flush()
+    db.add(SellerCity(user_id=ana.id, city="Jaraguá do Sul", state="SC", city_key="jaragua do sul"))
+    db.add(Customer(name="Já cliente", document="11.111.111/0001-11", city="Jaraguá do Sul", state="SC"))
+    for cnpj, status in (("30000000000101", "discarded"), ("40000000000101", "new"), ("50000000000101", "new")):
+        db.add(Lead(cnpj=cnpj, name=cnpj, city="Jaraguá do Sul", state="SC", city_key="jaragua do sul",
+                    status=status, seen_at=today - timedelta(days=40)))
+    db.flush()
+    with_contact = db.query(Lead).filter_by(cnpj="50000000000101").one()
+    db.add(Contact(user_id=ana.id, lead_id=with_contact.id, channel="call"))
+    db.commit()
+
+    files = {
+        "Municipios.zip": [["8175", "JARAGUA DO SUL"], ["8047", "BLUMENAU"]],
+        "Estabelecimentos0.zip": [
+            estab(),                                             # Loja A
+            estab(basico="20000000", fantasia=""),               # name from Empresas
+            estab(basico="11111111", ordem="0001", dv="11"),     # already a customer
+            estab(basico="30000000", fantasia="VOLTOU"),         # discarded before: stays discarded
+            estab(basico="60000000", town="8047", situacao="08"),  # closed
+        ],
+        "Estabelecimentos3.zip": [estab(basico="12ABC345", fantasia="ALFA", town="8047")],  # Blumenau
+        "Empresas2.zip": [["20000000", "LOJA B COMERCIO LTDA", "2062", "49", "1000,00", "01", ""]],
+    }
+    calls = []
+
+    def download(month, name, dest):
+        calls.append(name)
+        if name == broken[0]:
+            raise OSError("connection reset")
+        make_zip(dest, files.get(name, []))
+
+    def lead(cnpj):
+        db.expire_all()
+        return db.query(Lead).filter_by(cnpj=cnpj).one_or_none()
+
+    # a failure mid-way writes nothing
+    broken = ["Estabelecimentos5.zip"]
+    try:
+        li.run(db, lambda: "2026-10", download)
+        raise AssertionError("download error must propagate")
+    except OSError:
+        pass
+    assert lead("10000000000101") is None and lead("40000000000101") is not None
+    assert db.query(AppSettings).first().last_lead_import_month is None
+
+    broken = [""]
+    assert li.run(db, lambda: "2026-10", download) == "imported 2026-10: 3 new"
+    a = lead("10000000000101")
+    assert (a.name, a.city, a.city_key, a.state, a.status) == ("LOJA A", "Jaraguá do Sul", "jaragua do sul", "SC", "new")
+    assert lead("20000000000101").name == "LOJA B COMERCIO LTDA"
+    assert lead("12ABC345000101").city == "Blumenau"
+    assert lead("11111111000111") is None  # already a customer
+    assert lead("30000000000101").status == "discarded" and lead("30000000000101").seen_at == today
+    assert lead("40000000000101") is None  # gone from the Receita, no contacts
+    assert lead("50000000000101") is not None  # gone, but has contacts: kept
+    s = db.query(AppSettings).first()
+    assert (s.last_lead_import_month, s.last_lead_import_scope) == ("2026-10", "SC|4781400")
+
+    calls.clear()
+    assert li.run(db, lambda: "2026-10", download) == "up-to-date"
+    assert calls == []  # nothing downloaded
+
+    s.lead_cnaes = "4781400,4642701"
+    db.commit()
+    assert li.run(db, lambda: "2026-10", download).startswith("imported 2026-10")  # scope changed
+    assert db.query(AppSettings).first().last_lead_import_scope == "SC|4642701,4781400"
+
+    db.query(SellerCity).delete()
+    db.commit()
+    assert li.run(db, lambda: "2026-11", download) == "no-scope"
+    db.close()
+
+
 if __name__ == "__main__":
     check_parsing()
+    check_run()
     print("test_lead_import OK")

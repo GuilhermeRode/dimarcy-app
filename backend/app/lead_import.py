@@ -5,12 +5,19 @@ the scope (states in seller_cities + Configurações' CNAE list) changed. Any er
 Spec: docs/superpowers/specs/2026-10-16-prospeccao-crm-design.md (Importação)"""
 import csv
 import io
+import os
+import tempfile
 import zipfile
-from datetime import date
-from typing import Iterator
+from datetime import date, datetime
+from typing import Callable, Iterator
 
-from .leads import normalize_cnpj
+from sqlalchemy.orm import Session
+
+from . import clock
+from .leads import customer_cnpjs, normalize_cnpj
+from .models import Contact, Customer, Lead, SellerCity
 from .sales import _city_key
+from .settings_store import get_app_settings
 
 ESTAB_COLUMNS, COMPANY_COLUMNS, TOWN_COLUMNS = 30, 7, 2
 ACTIVE = "02"
@@ -65,3 +72,89 @@ def display_city(raw: str, state: str, spellings: dict[tuple[str, str], str]) ->
         return known
     return " ".join(w if w in CONNECTORS else "-".join(p.capitalize() for p in w.split("-"))
                     for w in raw.lower().split())
+
+
+def current_scope(db: Session) -> tuple[set[str], set[str], str]:
+    """States that have at least one seller city, the CNAE list, and both as text for comparison."""
+    states = {s for (s,) in db.query(SellerCity.state).distinct()}
+    cnaes = {c for c in get_app_settings(db).lead_cnaes.split(",") if c}
+    return states, cnaes, f"{','.join(sorted(states))}|{','.join(sorted(cnaes))}"
+
+
+def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: date) -> int:
+    """Writes one import in a single transaction: insert new CNPJs, refresh known ones (status kept),
+    drop 'new' leads that left the Receita unless they have contacts. Returns how many are new."""
+    known = customer_cnpjs(db)
+    spellings = {(_city_key(c), (s or "").strip().upper()): " ".join(c.split())
+                 for c, s in db.query(Customer.city, Customer.state).filter(Customer.city.isnot(None)) if c.strip()}
+    existing = {lead.cnpj: lead for lead in db.query(Lead)}
+    added = 0
+    for cnpj, d in found.items():
+        if cnpj in known:
+            continue
+        city = display_city(d["raw_city"], d["state"], spellings)
+        fields = {"name": (d["name"] or cnpj)[:160], "phone": d["phone"], "email": d["email"], "address": d["address"],
+                  "city": city, "state": d["state"], "city_key": _city_key(city), "opened_at": d["opened_at"],
+                  "seen_at": today}
+        lead = existing.get(cnpj)
+        if lead:
+            for k, v in fields.items():
+                setattr(lead, k, v)
+        else:
+            db.add(Lead(cnpj=cnpj, status="new", **fields))
+            added += 1
+    with_contacts = {lid for (lid,) in db.query(Contact.lead_id).filter(Contact.lead_id.isnot(None)).distinct()}
+    gone = [lead.id for cnpj, lead in existing.items()
+            if lead.status == "new" and cnpj not in found and lead.id not in with_contacts]
+    for i in range(0, len(gone), 500):  # stay under SQLite's bound-parameter limit
+        db.query(Lead).filter(Lead.id.in_(gone[i:i + 500])).delete(synchronize_session=False)
+    s = get_app_settings(db)
+    s.last_lead_import_month, s.last_lead_import_scope, s.last_lead_import_at = month, scope, datetime.now()
+    db.commit()
+    return added
+
+
+def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, str, str], None],
+        parts: int = 10) -> str:
+    states, cnaes, scope = current_scope(db)
+    if not states or not cnaes:
+        return "no-scope"
+    month = latest_month()
+    s = get_app_settings(db)
+    if (s.last_lead_import_month, s.last_lead_import_scope) == (month, scope):
+        return "up-to-date"
+
+    found: dict[str, dict] = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        def fetch(name: str) -> str:
+            path = os.path.join(tmp, name)
+            download(month, name, path)
+            return path
+
+        towns_zip = fetch("Municipios.zip")
+        towns = parse_towns(towns_zip)
+        for i in range(parts):
+            path = fetch(f"Estabelecimentos{i}.zip")
+            for row in read_rows(path, ESTAB_COLUMNS):
+                lead = pick(row, cnaes, states, towns)
+                if lead:
+                    found[lead["cnpj"]] = lead
+            os.remove(path)  # ~350 MB each (the first one ~2.3 GB): one on disk at a time
+        unnamed = {d["basico"] for d in found.values() if not d["name"]}
+        if unnamed:
+            names: dict[str, str] = {}
+            for i in range(parts):
+                path = fetch(f"Empresas{i}.zip")
+                for row in read_rows(path, COMPANY_COLUMNS):
+                    if row[0] in unnamed:
+                        names[row[0]] = row[1].strip()
+                os.remove(path)
+            for d in found.values():
+                if not d["name"]:
+                    d["name"] = names.get(d["basico"], "")
+    try:
+        added = apply(db, found, month, scope, clock.today_br())
+    except Exception:
+        db.rollback()
+        raise
+    return f"imported {month}: {added} new"
