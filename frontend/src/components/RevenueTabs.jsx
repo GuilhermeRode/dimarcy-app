@@ -10,16 +10,18 @@ export default function RevenueTabs() {
   );
 }
 
-// Shared header of the three Faturamento tabs: breadcrumb, tab title, then tabs (left) and the tab's actions (right)
-export function RevenueHeader({ title, children }) {
+// Shared header of the three Faturamento tabs, same pattern as every page (title + subtitle | actions), tabs below
+export function RevenueHeader({ subtitle, children }) {
   return (
-    <header className="revenue-header">
-      <span className="breadcrumb">Faturamento</span>
-      <h1>{title}</h1>
-      <div className="revenue-toolbar">
-        <RevenueTabs />
+    <>
+      <header className="page-header">
+        <div>
+          <h1>Faturamento</h1>
+          <p className="muted">{subtitle}</p>
+        </div>
         <div className="header-actions">{children}</div>
-      </div>
-    </header>
+      </header>
+      <RevenueTabs />
+    </>
   );
 }

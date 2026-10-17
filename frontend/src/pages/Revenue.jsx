@@ -23,8 +23,8 @@ export default function Revenue() {
 
   return (
     <div className="page">
-      <RevenueHeader title="Vendas">
-        <PeriodPicker label="Período" value={period} onChange={setPeriod} />
+      <RevenueHeader subtitle="Acompanhe as vendas e o faturamento do período.">
+        <PeriodPicker value={period} onChange={setPeriod} />
       </RevenueHeader>
       <ErrorBox msg={error} />
       {d && (
