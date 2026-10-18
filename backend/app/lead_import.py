@@ -15,7 +15,7 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Callable, Iterator
 
 from sqlalchemy import select
@@ -31,6 +31,7 @@ from .settings_store import get_app_settings
 
 ESTAB_COLUMNS, COMPANY_COLUMNS, TOWN_COLUMNS = 30, 7, 2
 ACTIVE = "02"
+SIZES = {"01": "me", "03": "epp", "05": "large"}  # Empresas porte -> leads.size
 CONNECTORS = {"da", "das", "de", "do", "dos", "e"}
 
 
@@ -64,9 +65,18 @@ def _date(yyyymmdd: str) -> date | None:
         return None
 
 
-def pick(row: list[str], cnaes: set[str], states: set[str], towns: dict[str, str]) -> dict | None:
-    """The lead fields of an establishment row, or None when it's out of scope."""
+def pick(row: list[str], cnaes: set[str], states: set[str], towns: dict[str, str], filters: dict,
+         today: date) -> dict | None:
+    """The lead fields of an establishment row, or None when it's out of scope or fails a quality filter."""
     if row[5] != ACTIVE or row[11] not in cnaes or row[19] not in states or row[20] not in towns:
+        return None
+    if filters["head_office_only"] and row[3] != "1":
+        return None
+    opened_at = _date(row[10])
+    age = filters["min_age_months"]
+    if age and (opened_at is None or opened_at > today - timedelta(days=30 * age)):
+        return None
+    if filters["require_contact"] and not (row[22].strip() or row[27].strip()):
         return None
     street = " ".join(p for p in (row[13].strip(), row[14].strip()) if p)
     address = ", ".join(p for p in (street, row[15].strip(), row[16].strip(), row[17].strip(), row[18].strip()) if p)
@@ -79,7 +89,7 @@ def pick(row: list[str], cnaes: set[str], states: set[str], towns: dict[str, str
         "address": address[:250] or None,
         "raw_city": towns[row[20]],
         "state": row[19],
-        "opened_at": _date(row[10]),
+        "opened_at": opened_at,
     }
 
 
@@ -93,16 +103,23 @@ def display_city(raw: str, state: str, spellings: dict[tuple[str, str], str]) ->
                     for w in raw.lower().split())
 
 
-def current_scope(db: Session) -> tuple[set[str], set[str], str]:
-    """States that have at least one seller city, the CNAE list, and both as text for comparison."""
+def current_scope(db: Session) -> tuple[set[str], set[str], dict, str]:
+    """States that have a seller city, the CNAE list, the quality filters, and all of it as text for comparison."""
     states = {s for (s,) in db.query(SellerCity.state).distinct()}
-    cnaes = {c for c in get_app_settings(db).lead_cnaes.split(",") if c}
-    return states, cnaes, f"{','.join(sorted(states))}|{','.join(sorted(cnaes))}"
+    cfg = get_app_settings(db)
+    cnaes = {c for c in cfg.lead_cnaes.split(",") if c}
+    filters = {"sizes": {c for c in cfg.lead_sizes.split(",") if c}, "exclude_mei": bool(cfg.lead_exclude_mei),
+               "head_office_only": bool(cfg.lead_head_office_only), "require_contact": bool(cfg.lead_require_contact),
+               "min_age_months": int(cfg.lead_min_age_months)}
+    text = (f"{','.join(sorted(states))}|{','.join(sorted(cnaes))}|{','.join(sorted(filters['sizes']))}"
+            f"|mei{int(filters['exclude_mei'])}|ho{int(filters['head_office_only'])}"
+            f"|ct{int(filters['require_contact'])}|age{filters['min_age_months']}")
+    return states, cnaes, filters, text
 
 
 def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: date) -> int:
     """Writes one import in a single transaction: insert new CNPJs, refresh known ones (status kept),
-    drop 'new' leads that left the Receita unless they have contacts. Returns how many are new."""
+    drop 'pending'/'new' leads that left the Receita unless they have contacts. Returns how many are new."""
     known = customer_cnpjs(db)
     spellings = {(_city_key(c), (s or "").strip().upper()): " ".join(c.split())
                  for c, s in db.query(Customer.city, Customer.state).filter(Customer.city.isnot(None)) if c.strip()}
@@ -114,20 +131,20 @@ def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: da
         city = display_city(d["raw_city"], d["state"], spellings)
         fields = {"name": (d["name"] or cnpj)[:160], "phone": d["phone"], "email": (d["email"] or "")[:160] or None, "address": d["address"],
                   "city": city, "state": d["state"], "city_key": _city_key(city), "opened_at": d["opened_at"],
-                  "seen_at": today}
+                  "size": d["size"], "seen_at": today}
         lead = existing.get(cnpj)
         if lead:
             for k, v in fields.items():
                 setattr(lead, k, v)
         else:
-            db.add(Lead(cnpj=cnpj, status="new", **fields))
+            db.add(Lead(cnpj=cnpj, status="pending", **fields))
             added += 1
     with_contacts = {lid for (lid,) in db.query(Contact.lead_id).filter(Contact.lead_id.isnot(None)).distinct()}
     gone = [lead.id for cnpj, lead in existing.items()
-            if lead.status == "new" and cnpj not in found and lead.id not in with_contacts]
+            if lead.status in ("pending", "new") and cnpj not in found and lead.id not in with_contacts]
     for i in range(0, len(gone), 500):  # stay under SQLite's bound-parameter limit
         batch = gone[i:i + 500]  # re-checked in SQL: a contact may have been added since the read above
-        db.query(Lead).filter(Lead.id.in_(batch), Lead.status == "new",
+        db.query(Lead).filter(Lead.id.in_(batch), Lead.status.in_(("pending", "new")),
                               ~Lead.id.in_(select(Contact.lead_id).where(Contact.lead_id.isnot(None)))
                               ).delete(synchronize_session=False)
     s = get_app_settings(db)
@@ -137,13 +154,13 @@ def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: da
 
 
 def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, str, str], None],
-        parts: int = 10) -> str:
-    states, cnaes, scope = current_scope(db)
+        parts: int = 10, force: bool = False) -> str:
+    states, cnaes, filters, scope = current_scope(db)
     if not states or not cnaes:
         return "no-scope"
     month = latest_month()
     s = get_app_settings(db)
-    if (s.last_lead_import_month, s.last_lead_import_scope) == (month, scope):
+    if not force and (s.last_lead_import_month, s.last_lead_import_scope) == (month, scope):
         return "up-to-date"
 
     found: dict[str, dict] = {}
@@ -158,25 +175,36 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
         for i in range(parts):
             path = fetch(f"Estabelecimentos{i}.zip")
             for row in read_rows(path, ESTAB_COLUMNS):
-                lead = pick(row, cnaes, states, towns)
+                lead = pick(row, cnaes, states, towns, filters, clock.today_br())
                 if lead:
                     found[lead["cnpj"]] = lead
             print(f"[lead_import] Estabelecimentos{i}.zip: {len(found)} leads so far", flush=True)
             os.remove(path)  # ~350 MB each (the first one ~2.3 GB): one on disk at a time
+        wanted = {d["basico"] for d in found.values()}
         unnamed = {d["basico"] for d in found.values() if not d["name"]}
-        if unnamed:
-            names: dict[str, str] = {}
-            for i in range(parts):
-                path = fetch(f"Empresas{i}.zip")
-                for row in read_rows(path, COMPANY_COLUMNS):
+        names: dict[str, str] = {}
+        portes: dict[str, str] = {}
+        for i in range(parts):
+            path = fetch(f"Empresas{i}.zip")
+            for row in read_rows(path, COMPANY_COLUMNS):
+                if row[0] in wanted:
+                    portes[row[0]] = row[5]
                     if row[0] in unnamed:
                         names[row[0]] = row[1].strip()
-                print(f"[lead_import] Empresas{i}.zip: {len(names)} names so far", flush=True)
-                os.remove(path)
-            for d in found.values():
-                if not d["name"]:
-                    d["name"] = names.get(d["basico"], "")
-    existing_new = db.query(Lead).filter(Lead.status == "new", Lead.state.in_(states)).count()
+            print(f"[lead_import] Empresas{i}.zip: {len(portes)} sizes so far", flush=True)
+            os.remove(path)
+        path = fetch("Simples.zip")
+        mei = {row[0] for row in read_rows(path, COMPANY_COLUMNS) if row[4] == "S" and row[0] in wanted}
+        print(f"[lead_import] Simples.zip: {len(mei)} MEI", flush=True)
+        os.remove(path)
+        for cnpj, d in list(found.items()):
+            if not d["name"]:
+                d["name"] = names.get(d["basico"], "")
+            porte = portes.get(d["basico"], "00")
+            d["size"] = "mei" if d["basico"] in mei else SIZES.get(porte, "")
+            if (filters["exclude_mei"] and d["size"] == "mei") or (d["size"] != "mei" and porte not in filters["sizes"]):
+                del found[cnpj]
+    existing_new = db.query(Lead).filter(Lead.status.in_(("pending", "new")), Lead.state.in_(states)).count()
     # Bad/partial download: don't wipe leads. The "less than half" check is skipped when the scope changed
     # (narrowed CNAEs / removed state legitimately shrink the result); an empty result is always refused.
     shrunk = len(found) < existing_new // 2 and s.last_lead_import_scope == scope
@@ -221,13 +249,30 @@ def download(month: str, name: str, dest: str, attempts: int = 3, sleep: Callabl
             sleep(30)
 
 
-def main() -> int:
+def run_and_record(db: Session, latest_month, download, force: bool = False) -> str:
+    """run() plus the status the Prospecção screen shows: started_at while running, last error."""
+    s = get_app_settings(db)
+    s.lead_import_started_at, s.lead_import_error = datetime.now(), None
+    db.commit()
+    try:
+        return run(db, latest_month, download, force=force)
+    except Exception as e:
+        db.rollback()
+        get_app_settings(db).lead_import_error = repr(e)[:300]
+        raise
+    finally:
+        get_app_settings(db).lead_import_started_at = None
+        db.commit()
+
+
+def main(argv: list[str] | None = None) -> int:
+    force = "--force" in (sys.argv[1:] if argv is None else argv)
     with SessionLocal() as db:
         try:
-            print(f"[lead_import] {run(db, latest_month, download)}")
+            print(f"[lead_import] {run_and_record(db, latest_month, download, force)}", flush=True)
             return 0
         except Exception as e:  # logged by systemd; tomorrow's run tries again
-            print(f"[lead_import] failed, nothing written: {e!r}", file=sys.stderr)
+            print(f"[lead_import] failed, nothing written: {e!r}", file=sys.stderr, flush=True)
             return 1
 
 
