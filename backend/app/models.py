@@ -14,7 +14,7 @@ PRICE_TABLES = ["wholesale", "retail"]  # wholesale = registered price; retail =
 ENTRY_KINDS = ["receivable", "payable"]
 # Business content, so in Portuguese; a payable's category must be one of these
 PAYABLE_CATEGORIES = ["Matéria-prima", "Aluguel", "Salários", "Impostos", "Energia", "Manutenção", "Outros"]
-LEAD_STATUSES = ["new", "converted", "discarded"]
+LEAD_STATUSES = ["pending", "new", "converted", "discarded"]  # pending = aguardando liberação (admin only)
 DISCARD_REASONS = ["closed", "not_target", "competitor", "other"]
 CONTACT_CHANNELS = ["whatsapp", "call", "visit", "email"]
 
@@ -192,6 +192,13 @@ class AppSettings(Base):
     last_lead_import_month: Mapped[str | None] = mapped_column(String(7))  # e.g. "2026-10"
     last_lead_import_scope: Mapped[str | None] = mapped_column(String(300))  # e.g. "PR,SC|4781400"
     last_lead_import_at: Mapped[datetime | None] = mapped_column(DateTime)
+    lead_sizes: Mapped[str] = mapped_column(String(20), default="01,03", server_default="01,03")  # Receita porte codes
+    lead_exclude_mei: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    lead_head_office_only: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    lead_require_contact: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    lead_min_age_months: Mapped[int] = mapped_column(Integer, default=6, server_default="6")
+    lead_import_started_at: Mapped[datetime | None] = mapped_column(DateTime)  # set while an import runs
+    lead_import_error: Mapped[str | None] = mapped_column(String(300))  # last failure, cleared on success
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
@@ -245,6 +252,7 @@ class Lead(Base):
     city_key: Mapped[str] = mapped_column(String(100))
     opened_at: Mapped[_dt.date | None] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(10), default="new", server_default="new")  # see LEAD_STATUSES
+    size: Mapped[str] = mapped_column(String(5), default="", server_default="")  # mei | me | epp | large | ""
     discard_reason: Mapped[str | None] = mapped_column(String(30))  # see DISCARD_REASONS
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"))
     seen_at: Mapped[_dt.date] = mapped_column(Date)  # last import that listed this CNPJ

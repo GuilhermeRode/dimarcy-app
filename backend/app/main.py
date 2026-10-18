@@ -55,7 +55,15 @@ async def lifespan(app: FastAPI):
                                      "lead_cnaes": "VARCHAR(200) DEFAULT '4781400'",
                                      "last_lead_import_month": "VARCHAR(7)",
                                      "last_lead_import_scope": "VARCHAR(300)",
-                                     "last_lead_import_at": "TIMESTAMP"})
+                                     "last_lead_import_at": "TIMESTAMP",
+                                     "lead_sizes": "VARCHAR(20) DEFAULT '01,03'",
+                                     "lead_exclude_mei": "BOOLEAN DEFAULT 1",
+                                     "lead_head_office_only": "BOOLEAN DEFAULT 1",
+                                     "lead_require_contact": "BOOLEAN DEFAULT 1",
+                                     "lead_min_age_months": "INTEGER DEFAULT 6",
+                                     "lead_import_started_at": "TIMESTAMP",
+                                     "lead_import_error": "VARCHAR(300)"})
+    _ensure_columns("leads", {"size": "VARCHAR(5) DEFAULT ''"})
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator
             db.add(User(name="Administrador", email=settings.admin_email,

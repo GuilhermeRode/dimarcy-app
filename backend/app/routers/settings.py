@@ -27,6 +27,10 @@ def update_settings(data: AppSettingsIn, db: Session = Depends(get_db)):
     s.annual_goal = data.annual_goal
     if data.lead_cnaes is not None:
         s.lead_cnaes = data.lead_cnaes
+    for field in ("lead_sizes", "lead_exclude_mei", "lead_head_office_only", "lead_require_contact", "lead_min_age_months"):
+        value = getattr(data, field)
+        if value is not None:
+            setattr(s, field, value)
     db.commit()
     db.refresh(s)
     return s

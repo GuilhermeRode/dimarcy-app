@@ -196,6 +196,11 @@ class AppSettingsIn(BaseModel):
     retail_markup_percent: float = Field(default=50, ge=0, le=1000)
     annual_goal: Goal = None
     lead_cnaes: str | None = None  # None = keep the current list
+    lead_sizes: str | None = None  # None = keep the current filters below
+    lead_exclude_mei: bool | None = None
+    lead_head_office_only: bool | None = None
+    lead_require_contact: bool | None = None
+    lead_min_age_months: int | None = Field(default=None, ge=0, le=120)
 
     @field_validator("lead_cnaes")
     @classmethod
@@ -210,6 +215,16 @@ class AppSettingsIn(BaseModel):
             raise ValueError("No máximo 25 códigos CNAE.")
         return joined
 
+    @field_validator("lead_sizes")
+    @classmethod
+    def _sizes(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        codes = sorted({p.strip() for p in v.split(",") if p.strip()})
+        if not codes or any(c not in ("00", "01", "03", "05") for c in codes):
+            raise ValueError("Escolha pelo menos um porte de empresa.")
+        return ",".join(codes)
+
 
 class AppSettingsOut(ORM):
     """What every logged-in user may read (the order form needs these rules)."""
@@ -223,6 +238,13 @@ class AppSettingsAdminOut(AppSettingsOut):
     lead_cnaes: str
     last_lead_import_month: str | None = None
     last_lead_import_at: datetime | None = None
+    lead_sizes: str
+    lead_exclude_mei: bool
+    lead_head_office_only: bool
+    lead_require_contact: bool
+    lead_min_age_months: int
+    lead_import_started_at: datetime | None = None
+    lead_import_error: str | None = None
 
 
 # ---------- Finance ----------

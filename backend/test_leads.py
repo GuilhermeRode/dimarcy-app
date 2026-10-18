@@ -81,6 +81,24 @@ def check_settings(ctx):
     r = c.put("/api/settings", headers=admin, json=base)  # omitted: unchanged
     assert r.json()["lead_cnaes"] == "4781400,4642701"
     assert "lead_cnaes" not in c.get("/api/settings", headers=ctx["a"]).json()  # sellers don't see it
+    r = c.get("/api/settings", headers=admin).json()
+    assert (r["lead_sizes"], r["lead_exclude_mei"], r["lead_head_office_only"], r["lead_require_contact"],
+            r["lead_min_age_months"]) == ("01,03", True, True, True, 6), r
+    assert r["lead_import_started_at"] is None and r["lead_import_error"] is None
+    r = c.put("/api/settings", headers=admin, json={**base, "lead_sizes": "03, 01,05", "lead_exclude_mei": False,
+                                                    "lead_head_office_only": False, "lead_require_contact": False,
+                                                    "lead_min_age_months": 0})
+    assert r.status_code == 200, r.text
+    assert (r.json()["lead_sizes"], r.json()["lead_min_age_months"]) == ("01,03,05", 0)
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_sizes": "02"}).status_code == 422
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_sizes": ""}).status_code == 422
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_min_age_months": 121}).status_code == 422
+    r = c.put("/api/settings", headers=admin, json=base)  # omitted: unchanged
+    assert r.json()["lead_sizes"] == "01,03,05" and r.json()["lead_exclude_mei"] is False
+    assert "lead_sizes" not in c.get("/api/settings", headers=ctx["a"]).json()
+    c.put("/api/settings", headers=admin, json={**base, "lead_sizes": "01,03", "lead_exclude_mei": True,
+                                                "lead_head_office_only": True, "lead_require_contact": True,
+                                                "lead_min_age_months": 6})
     c.put("/api/settings", headers=admin, json={**base, "lead_cnaes": "4781400"})
 
 
