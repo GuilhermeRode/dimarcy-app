@@ -57,9 +57,9 @@ async def lifespan(app: FastAPI):
                                      "last_lead_import_scope": "VARCHAR(300)",
                                      "last_lead_import_at": "TIMESTAMP",
                                      "lead_sizes": "VARCHAR(20) DEFAULT '01,03'",
-                                     "lead_exclude_mei": "BOOLEAN DEFAULT 1",
-                                     "lead_head_office_only": "BOOLEAN DEFAULT 1",
-                                     "lead_require_contact": "BOOLEAN DEFAULT 1",
+                                     "lead_exclude_mei": "BOOLEAN DEFAULT TRUE",
+                                     "lead_head_office_only": "BOOLEAN DEFAULT TRUE",
+                                     "lead_require_contact": "BOOLEAN DEFAULT TRUE",
                                      "lead_min_age_months": "INTEGER DEFAULT 6",
                                      "lead_import_started_at": "TIMESTAMP",
                                      "lead_import_error": "VARCHAR(300)"})
