@@ -271,3 +271,42 @@ cliente (`customer_id` preenchido, `lead_id` nulo).
 
 Verificação manual: rodar a importação real uma vez localmente (SC) e conferir quantidade (~50–60 mil) e
 amostra de Jaraguá do Sul antes de ligar o timer na VM.
+
+## Revisão 2 (2026-10-18): filtros de qualidade e liberação pelo admin
+
+Motivo: só em SC há ~55 mil lojas com o CNAE 4781-4/00 (incluindo MEIs). Jogar isso direto para o vendedor
+é ruído. Decisões aprovadas:
+
+### Filtros de qualidade (na importação, editáveis em Configurações)
+
+| Filtro | Padrão | Coluna da Receita |
+|---|---|---|
+| Porte | ME e EPP (`lead_sizes = "01,03"`) | Empresas col. 5: `00` não informado, `01` ME, `03` EPP, `05` demais |
+| Excluir MEI | sim (`lead_exclude_mei`) | Simples.zip (310 MB, 7 colunas: básico, opção Simples, datas, **opção MEI = col. 4 `S`**, datas) |
+| Só matriz | sim (`lead_head_office_only`) | Estabelecimentos col. 3: `1` matriz, `2` filial |
+| Só com telefone ou e-mail | sim (`lead_require_contact`) | Estabelecimentos col. 21-22, 27 |
+| Aberta há pelo menos N meses | 6 (`lead_min_age_months`, 0–120) | Estabelecimentos col. 10 |
+
+- O porte gravado no lead (`leads.size`): `mei`, `me`, `epp`, `large` ou `""` (não informado). MEI vem do
+  Simples e vale mais que o porte da tabela Empresas (MEI aparece como `01` lá).
+- Os filtros entram no texto do escopo (`last_lead_import_scope`): mudou um filtro → reimporta.
+- A passada pelos arquivos Empresas passa a ser feita sempre (porte de todos os candidatos), e entra o Simples.zip.
+
+### Liberação pelo admin
+
+- Lead novo da importação entra com status **`pending`** ("Aguardando liberação"). `new` passa a significar
+  "liberado para o vendedor". Leads que já existiam continuam como estão.
+- Vendedor nunca vê `pending` (lista, detalhe, contatos → 404).
+- Admin, em Prospecção, tem duas abas: **Aguardando liberação** (`pending`, padrão) e **Liberados** (`new`). Na
+  primeira: marcar lojas (ou "Selecionar os 20 primeiros" do ranking) e **Liberar**. Só são liberadas lojas cuja
+  cidade tem vendedor; as outras são contadas e informadas ("cadastre a cidade em Usuários").
+- Admin pode descartar ou virar cliente direto de `pending`.
+- Importação remove `pending` e `new` que saíram da Receita (sem contatos); a checagem "menos da metade" conta os dois.
+
+### Importação pela tela
+
+- Em Prospecção (admin): "Última importação: …", status ("importando desde 14:02", "falhou: …") e botão
+  **Atualizar agora**. O botão inicia `python -m app.lead_import --force` como **processo separado** (não dentro
+  do backend) e retorna na hora; `--force` ignora o "já está atualizado".
+- `app_settings.lead_import_started_at` (marca início; limpa no fim) e `lead_import_error` (última falha).
+  Pedido com importação iniciada há menos de 4 h → 409 "Já existe uma importação em andamento.".
