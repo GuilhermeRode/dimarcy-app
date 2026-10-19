@@ -287,6 +287,11 @@ def check_filters():
     got = leads()
     assert set(got) == {"ME", "EPP", "MEI"} and got["MEI"].size == "mei" and got["MEI"].status == "pending"
 
+    # a refreshed lead whose porte changed gets its size updated
+    files["Empresas0.zip"][0][5] = "03"
+    assert li.run(db, lambda: "2026-10", download, force=True).startswith("imported 2026-10")
+    assert leads()["ME"].size == "epp"
+
     # run status: started_at cleared, error kept after a failure and cleared by the next success
     def failing(month, name, dest):
         raise OSError("boom")
@@ -303,13 +308,50 @@ def check_filters():
     s = db.query(AppSettings).first()
     assert s.lead_import_started_at is None and s.lead_import_error is None
     # a non-forced (scheduled) run leaves a fresh UI run's lock alone; --force goes ahead
-    stamp = datetime.now()
+    stamp = li.utcnow()
     s.lead_import_started_at = stamp
     db.commit()
     assert li.run_and_record(db, lambda: "2026-12", download) == "already-running"
     db.expire_all()
     assert db.query(AppSettings).first().lead_import_started_at == stamp
     assert li.run_and_record(db, lambda: "2026-12", download, force=True).startswith("imported 2026-12")
+
+    # a lock held by a dead process does not block a scheduled run; startup clears it with a message
+    real_alive = li.pid_alive
+    db.expire_all()
+    s = db.query(AppSettings).first()
+    s.lead_import_started_at, s.lead_import_pid = li.utcnow(), 99999999
+    db.commit()
+    li.pid_alive = lambda pid: False
+    try:
+        assert not li.import_running(s)
+        li.clear_interrupted(db)
+        db.expire_all()
+        s = db.query(AppSettings).first()
+        assert s.lead_import_started_at is None and s.lead_import_pid is None and "reiniciou" in s.lead_import_error
+        s.lead_import_started_at, s.lead_import_pid = li.utcnow(), 99999999
+        db.commit()
+        li.pid_alive = lambda pid: True
+        assert li.import_running(s)
+        li.clear_interrupted(db)
+        assert db.query(AppSettings).first().lead_import_started_at is not None
+    finally:
+        li.pid_alive = real_alive
+    s = db.query(AppSettings).first()
+    s.lead_import_started_at, s.lead_import_pid = None, None
+    db.commit()
+
+    # main(["--force"]) runs a forced import and returns 0; a failure returns 1
+    real_months, real_dl = li.latest_month, li.download
+    li.latest_month, li.download = (lambda: "2027-01"), download
+    try:
+        assert li.main(["--force"]) == 0
+        li.download = failing
+        assert li.main(["--force"]) == 1
+    finally:
+        li.latest_month, li.download = real_months, real_dl
+    db.expire_all()
+    assert db.query(AppSettings).first().last_lead_import_month == "2027-01"
     db.close()
 
 

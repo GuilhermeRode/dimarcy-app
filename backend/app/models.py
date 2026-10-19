@@ -190,14 +190,15 @@ class AppSettings(Base):
     annual_goal: Mapped[float | None] = mapped_column(Numeric(12, 2), default=0)  # company goal; NULL/0 = none
     lead_cnaes: Mapped[str] = mapped_column(String(200), default="4781400", server_default="4781400")  # CNAE codes, comma-separated
     last_lead_import_month: Mapped[str | None] = mapped_column(String(7))  # e.g. "2026-10"
-    last_lead_import_scope: Mapped[str | None] = mapped_column(String(300))  # e.g. "PR,SC|4781400"
-    last_lead_import_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_lead_import_scope: Mapped[str | None] = mapped_column(String(500))  # e.g. "PR,SC|4781400"
+    last_lead_import_at: Mapped[datetime | None] = mapped_column(DateTime)  # naive UTC (the UI appends "Z")
     lead_sizes: Mapped[str] = mapped_column(String(20), default="01,03", server_default="01,03")  # Receita porte codes
     lead_exclude_mei: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     lead_head_office_only: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     lead_require_contact: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     lead_min_age_months: Mapped[int] = mapped_column(Integer, default=6, server_default="6")
-    lead_import_started_at: Mapped[datetime | None] = mapped_column(DateTime)  # set while an import runs
+    lead_import_started_at: Mapped[datetime | None] = mapped_column(DateTime)  # naive UTC (the UI appends "Z"); set while an import runs
+    lead_import_pid: Mapped[int | None] = mapped_column(Integer)  # the running importer's process id
     lead_import_error: Mapped[str | None] = mapped_column(String(300))  # last failure, cleared on success
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

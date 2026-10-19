@@ -1,12 +1,13 @@
 import subprocess
 import sys
-from datetime import datetime, timedelta
+import threading
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from .. import lead_import
 from ..database import get_db
 from ..models import AppSettings, User
 from ..schemas import AppSettingsAdminOut, AppSettingsIn, AppSettingsOut
@@ -15,7 +16,7 @@ from ..settings_store import allowed_price_tables, get_app_settings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-IMPORT_STALE = timedelta(hours=4)  # a run older than this is considered dead
+IMPORT_STALE = lead_import.IMPORT_STALE
 
 
 def _spawn_import() -> None:
@@ -23,8 +24,9 @@ def _spawn_import() -> None:
     flags = ({"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
              if sys.platform == "win32" else {"start_new_session": True})
     with open(BACKEND_DIR / "lead_import.log", "ab") as log:
-        subprocess.Popen([sys.executable, "-m", "app.lead_import", "--force"], cwd=BACKEND_DIR,
-                         stdin=subprocess.DEVNULL, stdout=log, stderr=log, **flags)
+        proc = subprocess.Popen([sys.executable, "-m", "app.lead_import", "--force"], cwd=BACKEND_DIR,
+                                stdin=subprocess.DEVNULL, stdout=log, stderr=log, **flags)
+    threading.Thread(target=proc.wait, daemon=True).start()  # reap the child (no zombie)
 
 
 @router.get("")
@@ -55,11 +57,15 @@ def update_settings(data: AppSettingsIn, db: Session = Depends(get_db)):
 
 @router.post("/lead-import", status_code=202, dependencies=[Depends(require_admin)])
 def start_lead_import(db: Session = Depends(get_db)):
-    now = datetime.now()
+    now = lead_import.utcnow()
     s = get_app_settings(db)
+    free = [AppSettings.lead_import_started_at.is_(None), AppSettings.lead_import_started_at < now - IMPORT_STALE]
+    if s.lead_import_pid is not None and not lead_import.pid_alive(s.lead_import_pid):
+        free.append(AppSettings.lead_import_pid == s.lead_import_pid)  # its process died (e.g. server restart)
     # atomic claim: a second click gets 409 even before the child starts
-    won = db.query(AppSettings).filter(AppSettings.id == s.id, or_(
-        AppSettings.lead_import_started_at.is_(None), AppSettings.lead_import_started_at < now - IMPORT_STALE))         .update({"lead_import_started_at": now}, synchronize_session=False)
+    won = (db.query(AppSettings)
+           .filter(AppSettings.id == s.id, or_(*free))
+           .update({"lead_import_started_at": now, "lead_import_pid": None}, synchronize_session=False))
     db.commit()
     if not won:
         raise HTTPException(409, "Já existe uma importação em andamento.")
@@ -67,7 +73,7 @@ def start_lead_import(db: Session = Depends(get_db)):
         _spawn_import()
     except Exception:
         db.query(AppSettings).filter(AppSettings.id == s.id).update(
-            {"lead_import_started_at": None}, synchronize_session=False)
+            {"lead_import_started_at": None, "lead_import_pid": None}, synchronize_session=False)
         db.commit()
         raise HTTPException(500, "Não foi possível iniciar a importação.")
     return {"started": True}

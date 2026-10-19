@@ -395,6 +395,19 @@ def _check_import_now(ctx, calls, settings_router):
         db.query(AppSettings).update({"lead_import_started_at": datetime.now() - timedelta(hours=5)})
         db.commit()
     assert c.post("/api/settings/lead-import", headers=admin).status_code == 202 and len(calls) == 2
+    # a lock held by a dead process counts as free; by a live one it does not
+    from app import lead_import
+    real_alive = lead_import.pid_alive
+    with SessionLocal() as db:
+        db.query(AppSettings).update({"lead_import_started_at": lead_import.utcnow(), "lead_import_pid": 424242})
+        db.commit()
+    lead_import.pid_alive = lambda pid: True
+    try:
+        assert c.post("/api/settings/lead-import", headers=admin).status_code == 409 and len(calls) == 2
+        lead_import.pid_alive = lambda pid: False
+        assert c.post("/api/settings/lead-import", headers=admin).status_code == 202 and len(calls) == 3
+    finally:
+        lead_import.pid_alive = real_alive
     def boom():
         raise OSError("no spawn")
     settings_router._spawn_import = boom

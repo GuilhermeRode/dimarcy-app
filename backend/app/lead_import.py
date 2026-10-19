@@ -15,7 +15,7 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Iterator
 
 from sqlalchemy import select
@@ -29,10 +29,44 @@ from .models import Contact, Customer, Lead, SellerCity
 from .sales import _city_key
 from .settings_store import get_app_settings
 
-ESTAB_COLUMNS, COMPANY_COLUMNS, TOWN_COLUMNS = 30, 7, 2
+ESTAB_COLUMNS, COMPANY_COLUMNS, TOWN_COLUMNS, SIMPLES_COLUMNS = 30, 7, 2, 7
 ACTIVE = "02"
 SIZES = {"01": "me", "03": "epp", "05": "large"}  # Empresas porte -> leads.size
 CONNECTORS = {"da", "das", "de", "do", "dos", "e"}
+
+
+IMPORT_STALE = timedelta(hours=4)  # a run older than this is considered dead
+
+
+def utcnow() -> datetime:
+    """Naive UTC, how import timestamps are stored (the UI appends "Z")."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def pid_alive(pid: int) -> bool:
+    if os.name == "nt":  # os.kill would terminate the process there; can't tell, assume alive
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    return True
+
+
+def import_running(s) -> bool:
+    return bool(s.lead_import_started_at and utcnow() - s.lead_import_started_at < IMPORT_STALE
+                and (s.lead_import_pid is None or pid_alive(s.lead_import_pid)))
+
+
+def clear_interrupted(db: Session) -> None:
+    """Startup: an import whose process died with the server must not hold the lock for hours."""
+    s = get_app_settings(db)
+    if s.lead_import_started_at and s.lead_import_pid is not None and not pid_alive(s.lead_import_pid):
+        s.lead_import_started_at, s.lead_import_pid = None, None
+        s.lead_import_error = "Importação interrompida (o servidor reiniciou). Clique em Atualizar agora."
+        db.commit()
 
 
 def read_rows(zip_path: str, columns: int) -> Iterator[list[str]]:
@@ -148,7 +182,7 @@ def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: da
                               ~Lead.id.in_(select(Contact.lead_id).where(Contact.lead_id.isnot(None)))
                               ).delete(synchronize_session=False)
     s = get_app_settings(db)
-    s.last_lead_import_month, s.last_lead_import_scope, s.last_lead_import_at = month, scope, datetime.now()
+    s.last_lead_import_month, s.last_lead_import_scope, s.last_lead_import_at = month, scope, utcnow()
     db.commit()
     return added
 
@@ -163,6 +197,7 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
     if not force and (s.last_lead_import_month, s.last_lead_import_scope) == (month, scope):
         return "up-to-date"
 
+    today = clock.today_br()
     found: dict[str, dict] = {}
     with tempfile.TemporaryDirectory() as tmp:
         def fetch(name: str) -> str:
@@ -175,7 +210,7 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
         for i in range(parts):
             path = fetch(f"Estabelecimentos{i}.zip")
             for row in read_rows(path, ESTAB_COLUMNS):
-                lead = pick(row, cnaes, states, towns, filters, clock.today_br())
+                lead = pick(row, cnaes, states, towns, filters, today)
                 if lead:
                     found[lead["cnpj"]] = lead
             print(f"[lead_import] Estabelecimentos{i}.zip: {len(found)} leads so far", flush=True)
@@ -194,7 +229,7 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
             print(f"[lead_import] Empresas{i}.zip: {len(portes)} sizes so far", flush=True)
             os.remove(path)
         path = fetch("Simples.zip")
-        mei = {row[0] for row in read_rows(path, COMPANY_COLUMNS) if row[4] == "S" and row[0] in wanted}
+        mei = {row[0] for row in read_rows(path, SIMPLES_COLUMNS) if row[4] == "S" and row[0] in wanted}
         print(f"[lead_import] Simples.zip: {len(mei)} MEI", flush=True)
         os.remove(path)
         for cnpj, d in list(found.items()):
@@ -211,7 +246,7 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
     if not found or shrunk:
         raise RuntimeError(f"Import looks wrong: {len(found)} leads found vs {existing_new} current new leads; nothing written")
     try:
-        added = apply(db, found, month, scope, clock.today_br())
+        added = apply(db, found, month, scope, today)
     except Exception:
         db.rollback()
         raise
@@ -252,9 +287,9 @@ def download(month: str, name: str, dest: str, attempts: int = 3, sleep: Callabl
 def run_and_record(db: Session, latest_month, download, force: bool = False) -> str:
     """run() plus the status the Prospecção screen shows: started_at while running, last error."""
     s = get_app_settings(db)
-    if not force and s.lead_import_started_at and datetime.now() - s.lead_import_started_at < timedelta(hours=4):
+    if not force and import_running(s):
         return "already-running"  # a UI run holds the lock; don't touch its status
-    s.lead_import_started_at, s.lead_import_error = datetime.now(), None
+    s.lead_import_started_at, s.lead_import_pid, s.lead_import_error = utcnow(), os.getpid(), None
     db.commit()
     try:
         return run(db, latest_month, download, force=force)
@@ -263,7 +298,8 @@ def run_and_record(db: Session, latest_month, download, force: bool = False) -> 
         get_app_settings(db).lead_import_error = repr(e)[:300]
         raise
     finally:
-        get_app_settings(db).lead_import_started_at = None
+        s = get_app_settings(db)
+        s.lead_import_started_at, s.lead_import_pid = None, None
         db.commit()
 
 

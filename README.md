@@ -86,3 +86,8 @@ Na VM (o backend precisa ter subido uma vez depois da atualização, para criar 
     journalctl -u dimarcy-leads -f               # acompanhe o progresso e o resultado
 
 Se a Receita mudar o endereço, ajuste `RECEITA_WEBDAV_URL` / `RECEITA_SHARE_TOKEN` no `.env`.
+
+**Atenção no primeiro deploy:** a primeira importação depois desta atualização aplica os novos filtros e remove os
+leads liberados que não passam neles (filiais, MEI, sem contato, abertas há menos de 6 meses), a não ser que já
+tenham contatos. Depois disso, o administrador libera os leads por cidade em Prospecção → Aguardando liberação.
+O botão "Atualizar agora" roda a importação em segundo plano e a tela mostra o andamento/status.

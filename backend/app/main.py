@@ -9,6 +9,7 @@ from sqlalchemy import inspect, text
 
 from .config import settings
 from .database import Base, SessionLocal, engine
+from .lead_import import clear_interrupted
 from .models import User
 from .routers import auth, colors, contacts, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
 from .security import hash_password
@@ -54,7 +55,7 @@ async def lifespan(app: FastAPI):
                                      "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50",
                                      "lead_cnaes": "VARCHAR(200) DEFAULT '4781400'",
                                      "last_lead_import_month": "VARCHAR(7)",
-                                     "last_lead_import_scope": "VARCHAR(300)",
+                                     "last_lead_import_scope": "VARCHAR(500)",
                                      "last_lead_import_at": "TIMESTAMP",
                                      "lead_sizes": "VARCHAR(20) DEFAULT '01,03'",
                                      "lead_exclude_mei": "BOOLEAN DEFAULT TRUE",
@@ -62,13 +63,18 @@ async def lifespan(app: FastAPI):
                                      "lead_require_contact": "BOOLEAN DEFAULT TRUE",
                                      "lead_min_age_months": "INTEGER DEFAULT 6",
                                      "lead_import_started_at": "TIMESTAMP",
+                                     "lead_import_pid": "INTEGER",
                                      "lead_import_error": "VARCHAR(300)"})
+    if engine.dialect.name == "postgresql":  # the scope column was created as VARCHAR(300)
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE app_settings ALTER COLUMN last_lead_import_scope TYPE VARCHAR(500)"))
     _ensure_columns("leads", {"size": "VARCHAR(5) DEFAULT ''"})
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator
             db.add(User(name="Administrador", email=settings.admin_email,
                         password_hash=hash_password(settings.admin_password), role="admin"))
             db.commit()
+        clear_interrupted(db)  # an import killed by the last restart
         get_app_settings(db)  # first run: create the single settings row with its defaults
     backfill_thumbs(products.UPLOAD_DIR)  # photos uploaded before thumbnails existed
     yield
