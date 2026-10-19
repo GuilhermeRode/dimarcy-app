@@ -5,7 +5,7 @@ import io
 import os
 import tempfile
 import zipfile
-from datetime import date
+from datetime import date, datetime
 
 tmp = tempfile.mkdtemp()
 db_file = os.path.join(tmp, "test.db")
@@ -302,6 +302,14 @@ def check_filters():
     db.expire_all()
     s = db.query(AppSettings).first()
     assert s.lead_import_started_at is None and s.lead_import_error is None
+    # a non-forced (scheduled) run leaves a fresh UI run's lock alone; --force goes ahead
+    stamp = datetime.now()
+    s.lead_import_started_at = stamp
+    db.commit()
+    assert li.run_and_record(db, lambda: "2026-12", download) == "already-running"
+    db.expire_all()
+    assert db.query(AppSettings).first().lead_import_started_at == stamp
+    assert li.run_and_record(db, lambda: "2026-12", download, force=True).startswith("imported 2026-12")
     db.close()
 
 

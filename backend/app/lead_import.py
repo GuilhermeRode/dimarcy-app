@@ -252,6 +252,8 @@ def download(month: str, name: str, dest: str, attempts: int = 3, sleep: Callabl
 def run_and_record(db: Session, latest_month, download, force: bool = False) -> str:
     """run() plus the status the Prospecção screen shows: started_at while running, last error."""
     s = get_app_settings(db)
+    if not force and s.lead_import_started_at and datetime.now() - s.lead_import_started_at < timedelta(hours=4):
+        return "already-running"  # a UI run holds the lock; don't touch its status
     s.lead_import_started_at, s.lead_import_error = datetime.now(), None
     db.commit()
     try:

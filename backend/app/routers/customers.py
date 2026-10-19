@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from .. import clock
 from ..database import get_db
 from ..geocoding import geocode_and_cache_background, lookup_cached_city
+from ..leads import city_owners, lead_owner
 from ..models import Contact, Customer, Lead, Order, User
 from ..schemas import CustomerIn, CustomerOut
 from ..sales import customer_overview, customers_by_city
@@ -104,12 +105,13 @@ def delete(cid: int, db: Session = Depends(get_db), user: User = Depends(get_cur
     # no FK cascades on SQLite here: clean up dependents by hand
     # a converted lead goes back to 'new' and gets its contact history back; otherwise contacts are deleted
     leads = db.query(Lead).filter(Lead.customer_id == cid).all()
+    owners = city_owners(db)
     contacts = db.query(Contact).filter(Contact.customer_id == cid)
     if leads:
         contacts.update({"lead_id": leads[0].id, "customer_id": None}, synchronize_session=False)
     else:
         contacts.delete(synchronize_session=False)
     for lead in leads:
-        lead.status, lead.customer_id = "new", None
+        lead.status, lead.customer_id = ("new" if lead_owner(owners, lead) else "pending"), None
     db.delete(c)
     db.commit()

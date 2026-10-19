@@ -118,7 +118,7 @@ def due_follow_ups(db: Session, user: User, today: date) -> list[dict]:
             continue
         if ct.lead_id:
             target, kind = ct.lead, "lead"
-            if target is None or target.status != "new":
+            if target is None or target.status not in (("pending", "new") if user.role == "admin" else ("new",)):
                 continue
             if user.role != "admin" and getattr(lead_owner(owners, target), "id", None) != user.id:
                 continue

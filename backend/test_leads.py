@@ -366,7 +366,28 @@ def check_pending_release(ctx):
 
     import app.routers.settings as settings_router
     calls = []
+    real_spawn = settings_router._spawn_import
     settings_router._spawn_import = lambda: calls.append(1)
+    try:
+        _check_import_now(ctx, calls, settings_router)
+    finally:
+        settings_router._spawn_import = real_spawn
+
+    # admin follow-ups include pending leads; a seller-less lead goes back to pending when its customer is deleted
+    pf = add_lead("80000000000104", "Pend Follow", city="Cidade Sem Vendedor", status="pending")
+    r = c.post("/api/contacts", headers=admin, json={"lead_id": pf, "channel": "call", "notes": "x",
+                                                      "next_action_date": (TODAY - timedelta(days=1)).isoformat()})
+    assert r.status_code == 201, r.text
+    assert "Pend Follow" in [d["name"] for d in c.get("/api/contacts/due", headers=admin).json()]
+    lo = add_lead("80000000000105", "Sem Dono", city="Cidade Sem Vendedor", status="new")
+    cu = c.post(f"/api/leads/{lo}/convert", headers=admin, json={"name": "Sem Dono", "document": "80000000000105"}).json()
+    assert c.delete(f"/api/customers/{cu['id']}", headers=admin).status_code == 204
+    with SessionLocal() as db:
+        assert db.get(Lead, lo).status == "pending"
+
+
+def _check_import_now(ctx, calls, settings_router):
+    c, admin, a = ctx["c"], ctx["admin"], ctx["a"]
     assert c.post("/api/settings/lead-import", headers=a).status_code == 403
     assert c.post("/api/settings/lead-import", headers=admin).status_code == 202 and len(calls) == 1
     assert c.post("/api/settings/lead-import", headers=admin).status_code == 409 and len(calls) == 1
@@ -374,6 +395,15 @@ def check_pending_release(ctx):
         db.query(AppSettings).update({"lead_import_started_at": datetime.now() - timedelta(hours=5)})
         db.commit()
     assert c.post("/api/settings/lead-import", headers=admin).status_code == 202 and len(calls) == 2
+    def boom():
+        raise OSError("no spawn")
+    settings_router._spawn_import = boom
+    with SessionLocal() as db:
+        db.query(AppSettings).update({"lead_import_started_at": None})
+        db.commit()
+    assert c.post("/api/settings/lead-import", headers=admin).status_code == 500
+    with SessionLocal() as db:
+        assert db.query(AppSettings).first().lead_import_started_at is None
 
 
 # ---- run ----

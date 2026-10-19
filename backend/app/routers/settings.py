@@ -4,10 +4,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import User
+from ..models import AppSettings, User
 from ..schemas import AppSettingsAdminOut, AppSettingsIn, AppSettingsOut
 from ..security import get_current_user, require_admin
 from ..settings_store import allowed_price_tables, get_app_settings
@@ -54,10 +55,19 @@ def update_settings(data: AppSettingsIn, db: Session = Depends(get_db)):
 
 @router.post("/lead-import", status_code=202, dependencies=[Depends(require_admin)])
 def start_lead_import(db: Session = Depends(get_db)):
+    now = datetime.now()
     s = get_app_settings(db)
-    if s.lead_import_started_at and datetime.now() - s.lead_import_started_at < IMPORT_STALE:
-        raise HTTPException(409, "Já existe uma importação em andamento.")
-    s.lead_import_started_at = datetime.now()  # a second click gets 409 even before the child starts
+    # atomic claim: a second click gets 409 even before the child starts
+    won = db.query(AppSettings).filter(AppSettings.id == s.id, or_(
+        AppSettings.lead_import_started_at.is_(None), AppSettings.lead_import_started_at < now - IMPORT_STALE))         .update({"lead_import_started_at": now}, synchronize_session=False)
     db.commit()
-    _spawn_import()
+    if not won:
+        raise HTTPException(409, "Já existe uma importação em andamento.")
+    try:
+        _spawn_import()
+    except Exception:
+        db.query(AppSettings).filter(AppSettings.id == s.id).update(
+            {"lead_import_started_at": None}, synchronize_session=False)
+        db.commit()
+        raise HTTPException(500, "Não foi possível iniciar a importação.")
     return {"started": True}
