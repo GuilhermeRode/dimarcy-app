@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
 import { ErrorBox, Field } from "../components/ui";
 
+const LEAD_SIZES = [["01", "ME"], ["03", "EPP"], ["05", "Grande"], ["00", "Não informado"]];
+
 export default function Settings() {
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
@@ -11,6 +13,12 @@ export default function Settings() {
   useEffect(() => {
     api.get("/settings").then((r) => setForm(r.data)).catch((e) => setError(errorMessage(e)));
   }, []);
+
+  function toggleSize(code) {
+    const current = (form.lead_sizes || "").split(",").filter(Boolean);
+    const next = current.includes(code) ? current.filter((c) => c !== code) : [...current, code];
+    setForm({ ...form, lead_sizes: next.join(",") });
+  }
 
   async function save(e) {
     e.preventDefault();
@@ -22,6 +30,11 @@ export default function Settings() {
         retail_markup_percent: Number(form.retail_markup_percent) || 0,
         annual_goal: form.annual_goal === "" || form.annual_goal == null ? null : Number(form.annual_goal),
         lead_cnaes: form.lead_cnaes,
+        lead_sizes: form.lead_sizes,
+        lead_exclude_mei: form.lead_exclude_mei,
+        lead_head_office_only: form.lead_head_office_only,
+        lead_require_contact: form.lead_require_contact,
+        lead_min_age_months: Number(form.lead_min_age_months) || 0,
       });
       setForm(data);
       setOk("Configurações salvas com sucesso.");
@@ -75,10 +88,44 @@ export default function Settings() {
             </Field>
             <p className="muted span-2" style={{ marginTop: -8 }}>
               Atividade principal das lojas trazidas da Receita Federal (separe por vírgula). Padrão: 4781-4/00,
-              comércio varejista de artigos do vestuário e acessórios.{" "}
-              {form.last_lead_import_at
-                ? `Última importação: dados de ${new Date(`${form.last_lead_import_month}-01T00:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}, em ${new Date(`${form.last_lead_import_at}Z`).toLocaleDateString("pt-BR")}.`
-                : "Ainda não houve importação."}
+              comércio varejista de artigos do vestuário e acessórios.
+            </p>
+            <strong className="span-2" style={{ marginTop: 8 }}>Filtros da prospecção</strong>
+            <div className="span-2">
+              <span>Porte da empresa</span>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 6 }}>
+                {LEAD_SIZES.map(([code, label]) => (
+                  <label className="check" key={code}>
+                    <input type="checkbox" checked={(form.lead_sizes || "").split(",").includes(code)}
+                      onChange={() => toggleSize(code)} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="span-2">
+              <label className="check">
+                <input type="checkbox" checked={form.lead_exclude_mei}
+                  onChange={(e) => setForm({ ...form, lead_exclude_mei: e.target.checked })} />
+                Excluir MEI
+              </label>
+              <label className="check" style={{ marginTop: 6 }}>
+                <input type="checkbox" checked={form.lead_head_office_only}
+                  onChange={(e) => setForm({ ...form, lead_head_office_only: e.target.checked })} />
+                Só a matriz (sem filiais)
+              </label>
+              <label className="check" style={{ marginTop: 6 }}>
+                <input type="checkbox" checked={form.lead_require_contact}
+                  onChange={(e) => setForm({ ...form, lead_require_contact: e.target.checked })} />
+                Só lojas com telefone ou e-mail
+              </label>
+            </div>
+            <Field label="Abertas há pelo menos (meses)" span={2}>
+              <input type="number" min="0" max="120" step="1" value={form.lead_min_age_months ?? ""}
+                onChange={(e) => setForm({ ...form, lead_min_age_months: e.target.value })} />
+            </Field>
+            <p className="muted span-2" style={{ marginTop: -8 }}>
+              Mudar um filtro faz a próxima importação buscar as lojas de novo.
             </p>
             <div className="span-2"><ErrorBox msg={error} /></div>
             {ok && <div className="span-2 muted">{ok}</div>}
