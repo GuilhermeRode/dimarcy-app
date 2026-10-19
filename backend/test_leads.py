@@ -2,7 +2,7 @@
 Uses a throwaway SQLite file, never dimarcy.db."""
 import os
 import tempfile
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 db_file = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.com",
@@ -333,6 +333,49 @@ def check_role_change(ctx):
     assert r.status_code == 200, r.text
 
 
+def check_pending_release(ctx):
+    c, admin, a, b = ctx["c"], ctx["admin"], ctx["a"], ctx["b"]
+    pa = add_lead("80000000000101", "Pend Jaragua", status="pending", size="me")
+    pb = add_lead("80000000000102", "Pend Guaramirim", city="Guaramirim", status="pending")
+    pn = add_lead("80000000000103", "Pend Sem Vendedor", city="Cidade Sem Vendedor", status="pending")
+    for h in (a, b):
+        r = c.get("/api/leads", headers=h, params={"limit": 200})
+        assert not [x for x in r.json()["items"] if x["name"].startswith("Pend")]
+        assert not [x for x in c.get("/api/leads", headers=h, params={"status": "pending"}).json()["items"]
+                    if x["name"].startswith("Pend")]
+    assert c.get(f"/api/leads/{pa}", headers=a).status_code == 404
+    assert c.get("/api/contacts", headers=a, params={"lead_id": pa}).status_code == 404
+    r = c.post("/api/contacts", headers=a, json={"lead_id": pa, "channel": "call", "notes": "x"})
+    assert r.status_code == 404, r.text
+    assert c.post(f"/api/leads/{pa}/discard", headers=a, json={"reason": "other"}).status_code == 404
+    r = c.post(f"/api/leads/{pa}/convert", headers=a, json={"name": "Xx", "document": "80000000000101", "city": "Jaraguá do Sul", "state": "SC"})
+    assert r.status_code == 404, r.text
+    assert c.get("/api/leads", headers=admin, params={"status": "foo"}).status_code == 422
+    r = c.get("/api/leads", headers=admin, params={"status": "pending", "limit": 200})
+    got = {x["id"]: x for x in r.json()["items"]}
+    assert set(got) == {pa, pb, pn} and got[pa]["size"] == "me", got
+    assert c.post("/api/leads/release", headers=a, json={"ids": [pa]}).status_code == 403
+    assert c.post("/api/leads/release", headers=admin, json={"ids": []}).status_code == 422
+    r = c.post("/api/leads/release", headers=admin, json={"ids": [pa, pb, pn]})
+    assert r.json() == {"released": 2, "skipped_no_seller": 1}, r.text
+    assert c.get(f"/api/leads/{pa}", headers=a).status_code == 200
+    assert c.get(f"/api/leads/{pb}", headers=b).status_code == 200
+    r = c.post("/api/leads/release", headers=admin, json={"ids": [pa, pb, pn]})
+    assert r.json()["released"] == 0, r.text
+    assert c.post(f"/api/leads/{pn}/discard", headers=admin, json={"reason": "other"}).status_code == 204
+
+    import app.routers.settings as settings_router
+    calls = []
+    settings_router._spawn_import = lambda: calls.append(1)
+    assert c.post("/api/settings/lead-import", headers=a).status_code == 403
+    assert c.post("/api/settings/lead-import", headers=admin).status_code == 202 and len(calls) == 1
+    assert c.post("/api/settings/lead-import", headers=admin).status_code == 409 and len(calls) == 1
+    with SessionLocal() as db:
+        db.query(AppSettings).update({"lead_import_started_at": datetime.now() - timedelta(hours=5)})
+        db.commit()
+    assert c.post("/api/settings/lead-import", headers=admin).status_code == 202 and len(calls) == 2
+
+
 # ---- run ----
 with TestClient(app) as c:
     ctx = {"c": c, "admin": login(c, "admin@test.com", "admin-pass-123")}
@@ -350,5 +393,6 @@ with TestClient(app) as c:
     check_convert(ctx)
     check_contacts(ctx)
     check_role_change(ctx)
+    check_pending_release(ctx)
 
 print("test_leads OK")

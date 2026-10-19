@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
@@ -5,8 +7,8 @@ from .. import clock
 from ..database import get_db
 from ..leads import city_owners, lead_out, lead_owner, ranked_leads, visible_lead
 from ..models import Contact, Lead, User
-from ..schemas import CustomerIn, CustomerOut, DiscardIn
-from ..security import get_current_user
+from ..schemas import CustomerIn, CustomerOut, DiscardIn, ReleaseIn
+from ..security import get_current_user, require_admin
 from .customers import add_customer, geocode_later
 
 router = APIRouter(prefix="/leads", tags=["leads"])
@@ -15,12 +17,27 @@ ALREADY_HANDLED = "Este lead já foi tratado."
 
 @router.get("")
 def list_leads(city: str = "", search: str = "", seller_id: int | None = None,
+               status: Literal["pending", "new"] = "new",
                limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
                db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    rows = ranked_leads(db, user, clock.today_br(), city, search,
-                        seller_id if user.role == "admin" else None)
+    admin = user.role == "admin"  # only the admin may list pending leads
+    rows = ranked_leads(db, user, clock.today_br(), city, search, seller_id if admin else None,
+                        status if admin else "new")
     return {"items": [lead_out(lead, owner) for lead, owner in rows[offset:offset + limit]], "total": len(rows),
             "cities": sorted({lead.city for lead, _ in rows})}  # for the screen's city filter
+
+
+@router.post("/release", dependencies=[Depends(require_admin)])
+def release(data: ReleaseIn, db: Session = Depends(get_db)):
+    """Pending -> new, only for leads whose city has an active seller."""
+    owners = city_owners(db)
+    leads = db.query(Lead).filter(Lead.id.in_(data.ids), Lead.status == "pending").all()
+    ok = [lead.id for lead in leads if lead_owner(owners, lead)]
+    if ok:
+        db.query(Lead).filter(Lead.id.in_(ok), Lead.status == "pending").update(
+            {"status": "new"}, synchronize_session=False)
+        db.commit()
+    return {"released": len(ok), "skipped_no_seller": len(leads) - len(ok)}
 
 
 @router.get("/{lid}")
@@ -42,7 +59,7 @@ def convert(lid: int, data: CustomerIn, background_tasks: BackgroundTasks,
     c = add_customer(db, data, owner_id)
     db.flush()
     # conditional UPDATE: a double click converts once, the second request gets 409
-    done = db.query(Lead).filter(Lead.id == lid, Lead.status == "new") \
+    done = db.query(Lead).filter(Lead.id == lid, Lead.status.in_(("pending", "new"))) \
              .update({"status": "converted", "customer_id": c.id}, synchronize_session=False)
     if not done:
         db.rollback()
@@ -58,7 +75,7 @@ def convert(lid: int, data: CustomerIn, background_tasks: BackgroundTasks,
 @router.post("/{lid}/discard", status_code=204)
 def discard(lid: int, data: DiscardIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     visible_lead(db, user, lid)
-    done = db.query(Lead).filter(Lead.id == lid, Lead.status == "new") \
+    done = db.query(Lead).filter(Lead.id == lid, Lead.status.in_(("pending", "new"))) \
              .update({"status": "discarded", "discard_reason": data.reason}, synchronize_session=False)
     if not done:
         raise HTTPException(409, ALREADY_HANDLED)

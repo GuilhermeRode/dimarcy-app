@@ -40,6 +40,8 @@ def visible_lead(db: Session, user: User, lead_id: int) -> Lead:
     """A seller only reaches leads of their region; an admin reaches every lead."""
     lead = db.get(Lead, lead_id)
     if lead and user.role != "admin":
+        if lead.status == "pending":  # awaiting admin release: invisible to sellers
+            raise HTTPException(404, "Lead não encontrado.")
         owner = lead_owner(city_owners(db), lead)
         if not owner or owner.id != user.id:
             lead = None
@@ -60,10 +62,10 @@ def active_customers_by_city(db: Session, today: date) -> Counter:
 
 
 def ranked_leads(db: Session, user: User, today: date, city: str = "", search: str = "",
-                 seller_id: int | None = None) -> list[tuple[Lead, User | None]]:
+                 seller_id: int | None = None, status: str = "new") -> list[tuple[Lead, User | None]]:
     """New leads the user may see, best first: has phone/e-mail, opened within NEW_STORE_DAYS,
     more active customers in the city, opened most recently, name. `seller_id` (admin) 0 = no seller."""
-    q = db.query(Lead).filter(Lead.status == "new")
+    q = db.query(Lead).filter(Lead.status == status)
     if user.role != "admin":
         q = q.join(SellerCity, and_(SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state)) \
              .filter(SellerCity.user_id == user.id)
@@ -96,7 +98,7 @@ def ranked_leads(db: Session, user: User, today: date, city: str = "", search: s
 
 def lead_out(lead: Lead, owner: User | None) -> dict:
     return {"id": lead.id, "cnpj": lead.cnpj, "name": lead.name, "phone": lead.phone, "email": lead.email,
-            "address": lead.address, "city": lead.city, "state": lead.state, "opened_at": lead.opened_at,
+            "address": lead.address, "city": lead.city, "state": lead.state, "opened_at": lead.opened_at, "size": lead.size,
             "status": lead.status, "seller_id": owner.id if owner else None,
             "seller_name": owner.name if owner else None}
 

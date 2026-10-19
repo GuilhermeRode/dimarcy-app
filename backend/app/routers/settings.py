@@ -1,4 +1,9 @@
-from fastapi import APIRouter, Depends
+import subprocess
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -8,6 +13,17 @@ from ..security import get_current_user, require_admin
 from ..settings_store import allowed_price_tables, get_app_settings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+IMPORT_STALE = timedelta(hours=4)  # a run older than this is considered dead
+
+
+def _spawn_import() -> None:
+    """Detached importer; its own main() records started_at/error in the settings."""
+    flags = ({"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+             if sys.platform == "win32" else {"start_new_session": True})
+    with open(BACKEND_DIR / "lead_import.log", "ab") as log:
+        subprocess.Popen([sys.executable, "-m", "app.lead_import", "--force"], cwd=BACKEND_DIR,
+                         stdin=subprocess.DEVNULL, stdout=log, stderr=log, **flags)
 
 
 @router.get("")
@@ -34,3 +50,14 @@ def update_settings(data: AppSettingsIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(s)
     return s
+
+
+@router.post("/lead-import", status_code=202, dependencies=[Depends(require_admin)])
+def start_lead_import(db: Session = Depends(get_db)):
+    s = get_app_settings(db)
+    if s.lead_import_started_at and datetime.now() - s.lead_import_started_at < IMPORT_STALE:
+        raise HTTPException(409, "Já existe uma importação em andamento.")
+    s.lead_import_started_at = datetime.now()  # a second click gets 409 even before the child starts
+    db.commit()
+    _spawn_import()
+    return {"started": True}

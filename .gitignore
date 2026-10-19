@@ -18,6 +18,7 @@ backend/app/routers/__pycache__/
 backend/*.db
 backend/*.db-journal
 backend/*.db.bak
+backend/lead_import.log
 
 # --- frontend (Node) ---
 frontend/node_modules/

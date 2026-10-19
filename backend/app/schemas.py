@@ -103,6 +103,10 @@ class DiscardIn(BaseModel):
     reason: Literal["closed", "not_target", "competitor", "other"]  # models.DISCARD_REASONS
 
 
+class ReleaseIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+
+
 class ContactIn(BaseModel):
     lead_id: int | None = None
     customer_id: int | None = None
