@@ -38,8 +38,22 @@ export default function Leads() {
   const [importCfg, setImportCfg] = useState(null);
   const pending = isAdmin && filters.tab === "pending";
 
-  const loadStatus = () => api.get("/settings").then((r) => setImportCfg(r.data)).catch(() => {});
+  const [statusError, setStatusError] = useState(false);
+  const loadStatus = () => api.get("/settings")
+    .then((r) => { setImportCfg(r.data); setStatusError(false); return r.data; })
+    .catch(() => { setStatusError(true); return null; });
   useEffect(() => { if (isAdmin) loadStatus(); }, [isAdmin]);
+
+  // While an import runs, poll every 15 s; when it finishes, reload the list so new pending leads show up.
+  const importing = !!importCfg?.lead_import_started_at;
+  useEffect(() => {
+    if (!importing) return;
+    const timer = setInterval(async () => {
+      const cfg = await loadStatus();
+      if (cfg && !cfg.lead_import_started_at) load(0);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [importing]);
 
   async function importNow() {
     try {
@@ -49,13 +63,14 @@ export default function Leads() {
     } catch (e) { setNotice(errorMessage(e)); }
   }
 
-  // Server timestamps are naive local datetimes (datetime.now()), so new Date(value) shows them as local.
-  const hhmm = (v) => new Date(v).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  // Server timestamps are naive UTC, so append "Z" before parsing to display them in local time.
+  const utc = (v) => new Date(`${v}Z`);
+  const hhmm = (v) => utc(v).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   function importStatus() {
     if (importCfg.lead_import_started_at) return `Importando desde ${hhmm(importCfg.lead_import_started_at)}…`;
     const [y, m] = (importCfg.last_lead_import_month || "").split("-");
     if (!y) return "Ainda não houve importação.";
-    return `Última importação: dados de ${m}/${y} (${new Date(importCfg.last_lead_import_at).toLocaleDateString("pt-BR")})`;
+    return `Última importação: dados de ${m}/${y} (${utc(importCfg.last_lead_import_at).toLocaleDateString("pt-BR")})`;
   }
 
   useEffect(() => {
@@ -138,12 +153,14 @@ export default function Leads() {
         <div>
           <h1>Prospecção</h1>
           <p className="muted">Lojas de roupa da sua região que ainda não compram da Di Marcy.</p>
+          {isAdmin && statusError && !importCfg && <p className="muted import-status">Não foi possível carregar o status da importação.</p>}
           {isAdmin && importCfg && (
             <p className="muted import-status">
               {importStatus()}
               {importCfg.lead_import_error && !importCfg.lead_import_started_at && (
                 <span style={{ color: "var(--danger)" }}> · Última tentativa falhou: {importCfg.lead_import_error}</span>
               )}
+              {statusError && <span> · Não foi possível carregar o status da importação.</span>}
             </p>
           )}
         </div>
@@ -191,7 +208,7 @@ export default function Leads() {
       ) : (
         <div className={`customers-layout ${selected ? "with-panel" : ""}`}>
           <section className="customers-table">
-            <div className={`customers-row leads-row head ${isAdmin ? "admin" : ""}`}>
+            <div className={`customers-row leads-row head ${isAdmin ? "admin" : ""} ${pending ? "picking" : ""}`}>
               <span>Loja</span><span>Telefone</span>{isAdmin && <span>Vendedor</span>}<span>Abertura</span>
             </div>
             {pending && (
@@ -231,7 +248,7 @@ export default function Leads() {
           </section>
 
           {selected && (
-            <LeadPanel lead={selected} isAdmin={isAdmin} onClose={() => setSelectedId(null)}
+            <LeadPanel key={selected.id} lead={selected} isAdmin={isAdmin} onClose={() => setSelectedId(null)}
               onReleased={(r) => afterRelease([selected.id], r)}
               onDiscard={() => setDiscarding({ id: selected.id, name: selected.name, reason: "closed" })}
               onConvert={() => setConverting({

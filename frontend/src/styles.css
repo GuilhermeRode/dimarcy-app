@@ -966,7 +966,7 @@ section.item-group { margin-top: 0; }
 }
 /* ---------- Faturamento: Vendas · Contas a receber · Contas a pagar ---------- */
 .tabs-underline { display: flex; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
-.tabs-underline a, .tabs-underline button { padding: 10px 16px; color: var(--muted); text-decoration: none; font-weight: 500; white-space: nowrap;
+.tabs-underline a, .tabs-underline button { padding: 10px 16px; color: var(--muted); text-decoration: none; white-space: nowrap;
   border-bottom: 2px solid transparent; background: none; border-top: 0; border-left: 0; border-right: 0; font: inherit; font-weight: 500; cursor: pointer; }
 .tabs-underline a:hover, .tabs-underline button:hover { color: var(--ink); }
 .tabs-underline a.active, .tabs-underline button.active { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
@@ -1072,6 +1072,7 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
 .lead-pick { display: flex; align-items: center; background: var(--surface); }
 .lead-pick > input { margin: 0 0 0 14px; flex: none; }
 .lead-pick > .leads-row { flex: 1; min-width: 0; }
+.customers-row.leads-row.head.picking { padding-left: 45px; } /* 14 margin + 13 checkbox + 18 row padding */
 .leads-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 18px; border-bottom: 1px solid var(--line); }
 .import-status { margin: 4px 0 0; font-size: 13px; }
 @media (max-width: 860px) {
