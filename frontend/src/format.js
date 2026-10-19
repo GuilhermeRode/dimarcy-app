@@ -61,6 +61,8 @@ export function whatsappUrl(phone, text) {
 export const formatCnpj = (c) =>
   c && c.length === 14 ? `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}` : c || "";
 
+export const LEAD_SIZES = { mei: "MEI", me: "ME", epp: "EPP", large: "Grande" };
+
 // Keys match the backend's customer_status(); tone picks the CSS color (.cstatus-<tone>).
 export const CUSTOMER_STATUS = {
   active: { label: "Ativo", tone: "active" },

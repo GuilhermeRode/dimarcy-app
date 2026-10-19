@@ -1,11 +1,23 @@
+import { useState } from "react";
+import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
-import { dateBR, formatCnpj, initials, whatsappUrl } from "../format";
+import { LEAD_SIZES, dateBR, formatCnpj, initials, whatsappUrl } from "../format";
 import { ContactHistory } from "./Contacts";
 
 export const isNewStore = (openedAt) =>
   !!openedAt && (Date.now() - new Date(`${openedAt}T00:00:00`)) / 86400000 <= 730; // backend NEW_STORE_DAYS
 
-export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard }) {
+export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard, onReleased }) {
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState("");
+  async function release() {
+    setReleasing(true);
+    try {
+      const { data } = await api.post("/leads/release", { ids: [lead.id] });
+      onReleased?.(data);
+    } catch (e) { setReleaseError(errorMessage(e)); }
+    setReleasing(false);
+  }
   const { user } = useAuth();
   const firstName = (user?.name || "").split(" ")[0];
   const wa = whatsappUrl(lead.phone, `Olá, tudo bem? Sou ${firstName} da Di Marcy. Gostaria de apresentar nossa `
@@ -25,12 +37,17 @@ export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard
         {wa
           ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">WhatsApp</a>
           : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
+        {isAdmin && lead.status === "pending" && (
+          <button type="button" className="btn btn-primary" disabled={releasing} onClick={release}>Liberar</button>
+        )}
         <button type="button" className="btn btn-primary" onClick={onConvert}>Virar cliente</button>
         <button type="button" className="btn" onClick={onDiscard}>Descartar</button>
       </div>
+      {releaseError && <p className="muted" style={{ color: "var(--danger)" }}>{releaseError}</p>}
       <dl className="customer-panel-info">
         <dt>CNPJ</dt><dd>{formatCnpj(lead.cnpj)}</dd>
         <dt>Aberta em</dt><dd>{lead.opened_at ? dateBR(lead.opened_at) : "—"}</dd>
+        <dt>Porte</dt><dd>{LEAD_SIZES[lead.size] || "—"}</dd>
         <dt>E-mail</dt><dd>{lead.email || "—"}</dd>
         <dt>Endereço</dt><dd>{lead.address || "—"}</dd>
         {isAdmin && <><dt>Vendedor</dt><dd>{lead.seller_name || "Sem vendedor"}</dd></>}
