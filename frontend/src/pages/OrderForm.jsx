@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, errorMessage, fileUrl } from "../api";
 import { useAuth } from "../auth";
-import { localDate, money, orderNumber, tablePrice } from "../format";
+import { customerFieldError, localDate, maskDocument, maskPhone, money, orderNumber, tablePrice } from "../format";
 import { Field, ErrorBox, Modal, Swatch, PhotoZoom, ConfirmDialog } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
 
@@ -115,6 +115,8 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
   async function save(e) {
     e.preventDefault();
     setError("");
+    const invalid = customerFieldError(f, customer);
+    if (invalid) return setError(invalid);
     const body = { ...f, state: f.state ? f.state.toUpperCase() : null, owner_id: f.owner_id ? Number(f.owner_id) : null };
     try {
       const { data } = editing
@@ -130,7 +132,8 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
     <Modal title={editing ? `Editar cliente — ${customer.name}` : "Cadastrar cliente"} onClose={onClose} wide>
       <form onSubmit={save} className="form-grid">
         <Field label="Nome / razão social" span={2}><input required autoFocus {...field("name")} /></Field>
-        <Field label="CPF/CNPJ" span={2}><input required {...field("document")} /></Field>
+        <Field label="CPF/CNPJ" span={2}><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...field("document")}
+          onChange={(e) => setF({ ...f, document: maskDocument(e.target.value) })} /></Field>
         {isAdmin && (
           <Field label="Vendedor responsável" span={2}>
             <select required {...field("owner_id")}>
@@ -139,16 +142,17 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
             </select>
           </Field>
         )}
-        <Field label="Telefone"><input {...field("phone")} /></Field>
-        <Field label="E-mail"><input type="email" {...field("email")} /></Field>
+        <Field label="Telefone"><input required type="tel" inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" {...field("phone")}
+          onChange={(e) => setF({ ...f, phone: maskPhone(e.target.value) })} /></Field>
+        <Field label="E-mail"><input required type="email" placeholder="nome@empresa.com.br" {...field("email")} /></Field>
         <Field label="Cidade / UF" span={2}>
           <div className="city-row">
-            <input placeholder="Cidade" {...field("city")} />
-            <input placeholder="UF" maxLength={2} className="uf-input" {...field("state")} />
+            <input required placeholder="Cidade" {...field("city")} />
+            <input required placeholder="UF" minLength={2} maxLength={2} className="uf-input" {...field("state")} />
           </div>
         </Field>
-        <Field label="Endereço" span={2}><input {...field("address")} /></Field>
-        <Field label="Observações do cliente" span={2}><textarea rows={2} {...field("notes")} /></Field>
+        <Field label="Endereço" span={2}><input required {...field("address")} /></Field>
+        <Field label="Observações do cliente (opcional)" span={2}><textarea rows={2} {...field("notes")} /></Field>
         <div className="span-2"><ErrorBox msg={error} /></div>
         <div className="actions span-2">
           <button className="btn btn-primary">{editing ? "Salvar alterações" : "Cadastrar cliente"}</button>
@@ -172,8 +176,10 @@ function CustomerSearch({ customers, value, onSelect }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customers, value]);
 
+  const qDigits = query.replace(/\D/g, "");  // typing the CPF/CNPJ without the dots still finds the customer
   const matches = query
-    ? customers.filter((c) => `${c.name} ${c.document || ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+    ? customers.filter((c) => `${c.name} ${c.document || ""}`.toLowerCase().includes(query.toLowerCase())
+        || (qDigits.length >= 3 && (c.document || "").replace(/\D/g, "").includes(qDigits))).slice(0, 8)
     : [];
 
   function pick(c) {
@@ -338,6 +344,7 @@ export default function OrderForm() {
     setError("");
     if (!header.customer_id) return setError("Escolha o cliente.");
     if (!header.delivery_date) return setError("Informe a data de entrega.");
+    if (header.delivery_date < header.date) return setError("A data de entrega não pode ser anterior à data do pedido.");
     if (!header.payment_method) return setError("Selecione a forma de pagamento.");
     if (!header.payment_terms) return setError("Selecione o prazo de pagamento.");
     if (!items.length) return setError("Adicione ao menos um produto.");
@@ -389,7 +396,7 @@ export default function OrderForm() {
         <Field label="Data do pedido"><input type="date" value={header.date} onChange={(e) => setHeader({ ...header, date: e.target.value })} /></Field>
 
         <Field label="Data de entrega">
-          <input type="date" required value={header.delivery_date} onChange={(e) => setHeader({ ...header, delivery_date: e.target.value })} />
+          <input type="date" required min={header.date || undefined} value={header.delivery_date} onChange={(e) => setHeader({ ...header, delivery_date: e.target.value })} />
         </Field>
         <Field label="Forma de pagamento">
           <select required value={header.payment_method} onChange={(e) => setHeader({ ...header, payment_method: e.target.value })}>

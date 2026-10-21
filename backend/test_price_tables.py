@@ -6,11 +6,16 @@ from datetime import date
 
 db_file = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.com",
-                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="")
+                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="", CHECK_EMAIL_DNS="false")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
+
+# a customer needs every field but the notes; no city lookup or DNS check over the network
+from app.routers import customers as _customers_router  # noqa: E402
+_customers_router.geocode_and_cache_background = lambda *a: None
+FULL = {"phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
 
 TODAY = date.today().isoformat()
 
@@ -43,7 +48,7 @@ with TestClient(app) as c:
     only_r = product("R2", 100, [ids["r"]])
 
     def order(h, pid, **extra):
-        cid = c.post("/api/customers", headers=h, json={"name": "Cliente", "document": "1"}).json()["id"]
+        cid = c.post("/api/customers", headers=h, json={"name": "Cliente", "document": "1", **FULL}).json()["id"]
         return c.post("/api/orders", headers=h, json={
             "customer_id": cid, "delivery_date": TODAY, "status": "confirmed", "payment_method": "Pix",
             "payment_terms": "À vista", "items": [{"product_id": pid, "color_id": color, "size": "P", "quantity": 2}],
@@ -77,6 +82,13 @@ with TestClient(app) as c:
                 "items": [{"product_id": common, "color_id": color, "size": "P", "quantity": 1, "unit_price": 1}]}
     assert c.post("/api/orders", headers=B, json=override).json()["items"][0]["unit_price"] == 134.85
     assert c.post("/api/orders", headers=admin, json=override).json()["items"][0]["unit_price"] == 1
+    # delivery can't come before the order date (same day is fine)
+    early = {**override, "date": "2026-10-10", "delivery_date": "2026-10-09"}
+    r = c.post("/api/orders", headers=B, json=early)
+    assert r.status_code == 400 and "entrega" in r.json()["detail"], r.text
+    assert c.post("/api/orders", headers=B, json={**early, "delivery_date": "2026-10-10"}).status_code == 201
+    oid = c.post("/api/orders", headers=admin, json={**early, "delivery_date": "2026-10-20"}).json()["id"]
+    assert c.put(f"/api/orders/{oid}", headers=admin, json=early).status_code == 400
 
     # the markup is an admin setting; editing a retail order keeps its table and recorded prices
     s = c.get("/api/settings", headers=admin).json()

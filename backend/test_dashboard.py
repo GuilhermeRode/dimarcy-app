@@ -6,12 +6,17 @@ from datetime import date, timedelta
 
 db_file = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.com",
-                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="")
+                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="", CHECK_EMAIL_DNS="false")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app import clock  # noqa: E402
 from app.main import app  # noqa: E402
+
+# a customer needs every field but the notes; no city lookup or DNS check over the network
+from app.routers import customers as _customers_router  # noqa: E402
+_customers_router.geocode_and_cache_background = lambda *a: None
+FULL = {"phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
 from app.models import customer_status  # noqa: E402
 
 TODAY = date(2026, 10, 7)
@@ -79,7 +84,7 @@ with TestClient(app) as c:
         "reference": "R1", "description": "Blusão", "price": 100, "color_ids": [color["id"]]}).json()
 
     def customer(headers, name):
-        r = c.post("/api/customers", headers=headers, json={"name": name, "document": "123"})
+        r = c.post("/api/customers", headers=headers, json={"name": name, "document": "123", **FULL})
         assert r.status_code == 201, r.text
         return r.json()["id"]
 

@@ -75,6 +75,11 @@ def _build_items(data: OrderIn, db: Session, user: User, app_settings: AppSettin
     return items
 
 
+def _check_delivery(order_date, delivery_date) -> None:
+    if delivery_date < order_date:
+        raise HTTPException(400, "A data de entrega não pode ser anterior à data do pedido.")
+
+
 def _check_discount(discount: float, items: list[OrderItem], app_settings: AppSettings) -> None:
     gross = sum(i.subtotal for i in items)
     max_discount = round(gross * float(app_settings.max_discount_percent) / 100, 2)
@@ -137,6 +142,7 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
     price_table = data.price_table or tables[0]
     if price_table not in tables:
         raise HTTPException(400, "Tabela de preço não permitida para este vendedor.")
+    _check_delivery(data.date or clock.today_br(), data.delivery_date)
     app_settings = get_app_settings(db)
     items = _build_items(data, db, u, app_settings, existing_order=None, price_table=price_table)
     _check_discount(data.discount, items, app_settings)
@@ -156,6 +162,7 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
 @router.put("/{oid}", dependencies=[Depends(require_admin)])
 def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o = _find(oid, db)
+    _check_delivery(data.date or o.date, data.delivery_date)
     old_status = o.status
     app_settings = get_app_settings(db)
     # The table is fixed when the order is created; editing keeps it.
