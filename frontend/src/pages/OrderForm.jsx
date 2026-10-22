@@ -284,7 +284,8 @@ export default function OrderForm() {
         setCustomerKey((k) => k + 1);
       }
     });
-    api.get("/products", { params: { active_only: true } }).then((r) => setProducts(r.data));
+    // New order: only what this user may sell (admins too). Editing: the server checks against the order's seller.
+    api.get("/products", { params: { active_only: true, for_sale: !id } }).then((r) => setProducts(r.data));
     api.get("/settings").then((r) => {
       setSettings(r.data);
       // A single table is set for them; with both, the seller must pick one ("Tipo de venda")

@@ -116,7 +116,7 @@ class ProductIn(BaseModel):
     sizes: list[str] = ["U", "P", "M", "G", "GG"]
     active: bool = True
     color_ids: list[int] = []
-    seller_ids: list[int] | None = None  # empty = every seller may sell it; None = keep the current ones
+    seller_ids: list[int] | None = None  # users (sellers or admins) who may sell it; empty = everyone; None = keep
 
 
 class ProductOut(ORM):

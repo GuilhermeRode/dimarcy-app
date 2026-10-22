@@ -43,7 +43,7 @@ export default function Products() {
       return;
     }
     api.get("/colors").then((r) => setColors(r.data));
-    api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller")));
+    api.get("/users").then((r) => setSellers(r.data));  // sellers and admins: an admin may be the only one enabled
   }, [isAdmin]);
   // A photo dropped outside a drop area would make the browser (and the desktop app) navigate to the file
   useEffect(() => {
@@ -250,14 +250,14 @@ export default function Products() {
               <div className="field span-2">
                 <span>Disponível para</span>
                 <div className="chips">
-                  {/* inactive sellers only if already picked, so they can still be unchecked */}
+                  {/* inactive users only if already picked, so they can still be unchecked */}
                   {sellers.filter((u) => u.active || form.seller_ids.includes(u.id)).map((u) => (
                     <button type="button" key={u.id} className={`chip ${form.seller_ids.includes(u.id) ? "on" : ""}`}
-                      onClick={() => toggle("seller_ids", u.id)}>{u.name}{!u.active && " (inativo)"}</button>
+                      onClick={() => toggle("seller_ids", u.id)}>{u.name}{u.role === "admin" && " (admin)"}{!u.active && " (inativo)"}</button>
                   ))}
                 </div>
                 <small className="muted">
-                  {form.seller_ids.length ? "Só os vendedores marcados podem vender este produto." : "Nenhum marcado: todos os vendedores podem vender."}
+                  {form.seller_ids.length ? "Só quem está marcado pode vender este produto." : "Nenhum marcado: todos podem vender."}
                 </small>
               </div>
             )}

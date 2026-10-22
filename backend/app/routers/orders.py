@@ -55,10 +55,13 @@ def _build_items(data: OrderIn, db: Session, user: User, app_settings: AppSettin
     # Editing an order keeps each existing line's recorded price — only a brand-new
     # product line falls back to the product's current price (see also the override case).
     price_on_record = {i.product_id: float(i.unit_price) for i in existing_order.items} if existing_order else {}
+    # A product restricted to some users (admins included) may only be sold by them. An admin editing
+    # any order isn't restricted (they fix everyone's orders); lines already in the order always stay.
+    restricted = not (user.role == "admin" and existing_order)
     items = []
     for it in data.items:
         prod = db.get(Product, it.product_id)
-        if not prod or (user.role != "admin" and prod.sellers and user not in prod.sellers):
+        if not prod or (restricted and prod.sellers and user not in prod.sellers and prod.id not in price_on_record):
             raise HTTPException(400, f"Product {it.product_id} not found.")
         if it.color_id not in {c.id for c in prod.colors}:
             raise HTTPException(400, f"The chosen color is not registered for {prod.reference}.")

@@ -34,7 +34,7 @@ def _apply(p: Product, data: ProductIn, db: Session):
     p.active = data.active
     p.colors = db.query(Color).filter(Color.id.in_(data.color_ids)).all() if data.color_ids else []
     if data.seller_ids is not None:
-        p.sellers = db.query(User).filter(User.id.in_(data.seller_ids), User.role == "seller").all()
+        p.sellers = db.query(User).filter(User.id.in_(data.seller_ids)).all()  # admins sell too
 
 
 def available_to(user: User):
@@ -43,11 +43,12 @@ def available_to(user: User):
 
 
 @router.get("", response_model=list[ProductOut])
-def list_all(search: str = "", active_only: bool = False, db: Session = Depends(get_db),
+def list_all(search: str = "", active_only: bool = False, for_sale: bool = False, db: Session = Depends(get_db),
              user: User = Depends(get_current_user)):
     # colors/sellers in one batch each, not per product
     q = db.query(Product).options(selectinload(Product.colors), selectinload(Product.sellers))
-    if user.role != "admin":
+    # Admins see the whole catalog to manage it; for_sale (the new-order form) applies the restriction to them too.
+    if user.role != "admin" or for_sale:
         q = q.filter(available_to(user))
     if search:
         t = f"%{search}%"
