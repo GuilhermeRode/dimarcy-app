@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { dateBR, money, orderNumber, STATUS } from "../format";
@@ -61,6 +61,7 @@ export default function OrderDetail() {
     <div className="page">
       <header className="page-header">
         <div>
+          <Link to="/orders" className="back-link">‹ Pedidos</Link>
           <h1>Pedido {orderNumber(o.id)}</h1>
           <p className="muted">{o.customer_name} · {dateBR(o.date)} · vendedor {o.seller_name}</p>
         </div>

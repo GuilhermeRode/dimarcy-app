@@ -1,8 +1,8 @@
 """Cadastra os produtos da planilha "Preços promoção 2027 Ivânio" como produtos novos.
 
 Para cada referência da planilha (ex.: 1028):
-- referência = a da planilha; descrição em branco; tamanhos U,P,M,G,GG (padrão do app);
-- preço = coluna "Por" da planilha; coleção "Promoção 2027 Ivânio";
+- referência = a da planilha; descrição em branco;
+- preço = coluna "Por" e tamanhos = coluna "TAM." da planilha; coleção "Promoção 2027 Ivânio";
 - só a cor "Sortidas" (criada se não existir);
 - habilitado só para o vendedor Ivânio (os outros vendedores não veem).
 Se a referência já existir como produto de outra coleção, para sem gravar nada (não mexe em produto existente).
@@ -22,13 +22,16 @@ import sys
 import time
 import unicodedata
 
-# Referência -> preço "Por" (planilha "Preços promoção 2027 Ivânio.xlsx")
+# Referência -> (preço "Por", tamanhos) — planilha docs/"Preços promoção 2027 Ivânio.xlsx"
 PROMO = {
-    "1028": 79.80, "1050": 79.80, "1057": 69.80, "1161": 69.80, "1133": 69.80,
-    "1216": 89.80, "1210": 79.80, "1137": 59.80, "1160": 89.80, "1111": 68.90,
-    "1501": 24.90, "150": 12.90, "111": 17.80, "128": 35.90, "130": 35.90,
+    "1028": (79.80, "P,M,G,GG"), "1050": (79.80, "P,M,G,GG"), "1057": (69.80, "P,M,G,GG"),
+    "1161": (69.80, "P,M,G,GG,XGG"), "1133": (69.80, "P,M,G,GG,XGG"), "1216": (89.80, "P,M,G,GG,XGG"),
+    "1210": (79.80, "P,M,G,GG"), "1137": (59.80, "P,M,G,GG"), "1160": (89.80, "P,M,G,GG"),
+    "1111": (68.90, "P,M,G,GG,XGG"), "1501": (24.90, "10,12,14"), "150": (12.90, "02,04,06,08"),
+    "111": (17.80, "PP,P,M,G,GG"), "128": (35.90, "M,G,GG"), "130": (35.90, "M,G,GG"),
+    # the sheet's 2006 is the children's one; "2006" in production is a different (regular) product
+    "2006-INF": (19.80, "02,04,06,08"),
 }
-SIZES = "U,P,M,G,GG"
 COLLECTION = "Promoção 2027 Ivânio"
 COLOR = ("Sortidas", "#d64545", "#2f6fed")  # name, hex, hex2 (two-tone swatch)
 SELLER = "ivanio"
@@ -63,15 +66,15 @@ def run(con, apply):
         color_id = cur.lastrowid
         stats["cor"] = "criada"
 
-    for ref, price in PROMO.items():
+    for ref, (price, sizes) in PROMO.items():
         pid = existing[ref]
         if pid is None:
             cur.execute("INSERT INTO products (reference, description, collection, price, sizes, active) "
-                        "VALUES (?, '', ?, ?, ?, 1)", (ref, COLLECTION, price, SIZES))
+                        "VALUES (?, '', ?, ?, ?, 1)", (ref, COLLECTION, price, sizes))
             pid = cur.lastrowid
             stats["produtos novos"] += 1
-        else:  # a re-run: refresh the price, keep anything edited in the app since
-            cur.execute("UPDATE products SET price = ?, active = 1 WHERE id = ?", (price, pid))
+        else:  # a re-run: refresh price and sizes, keep anything else edited in the app since
+            cur.execute("UPDATE products SET price = ?, sizes = ?, active = 1 WHERE id = ?", (price, sizes, pid))
             stats["produtos atualizados"] += 1
         cur.execute("INSERT OR IGNORE INTO product_color (product_id, color_id) VALUES (?, ?)", (pid, color_id))
         cur.execute("DELETE FROM product_seller WHERE product_id = ?", (pid,))

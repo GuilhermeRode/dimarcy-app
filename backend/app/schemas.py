@@ -68,20 +68,27 @@ class ProfileIn(BaseModel):
 
 # ---------- Customers ----------
 class CustomerIn(ORM):
+    """Everything but the notes is required to register a customer."""
     name: str = Field(min_length=2)
     document: str = Field(min_length=1)
-    phone: str | None = None
-    email: str | None = None
-    city: str | None = None
-    state: str | None = Field(default=None, max_length=2)
-    address: str | None = None
+    phone: str = Field(min_length=1)
+    email: str = Field(min_length=1)
+    city: str = Field(min_length=1)
+    state: str = Field(min_length=2, max_length=2)
+    address: str = Field(min_length=1)
     notes: str | None = None
     owner_id: int | None = None  # seller this customer belongs to; only admins can set/change it
 
 
 class CustomerOut(CustomerIn):
     id: int
-    document: str | None = None  # older records may not have one; new ones always do (see CustomerIn)
+    # older records may lack these; new ones always have them (see CustomerIn)
+    document: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    city: str | None = None
+    state: str | None = None
+    address: str | None = None
     owner_name: str | None = None
     created_at: datetime | None = None
     lat: float | None = None
