@@ -14,13 +14,12 @@ from .order_pdf import build_order_pdf
 
 RESEND_URL = "https://api.resend.com/emails"
 
-# Fixed business inboxes that must be copied on every new order — not
-# environment-specific, so no .env entry for these.
-ORDER_CREATED_RECIPIENTS = ["dimarcypedidos@gmail.com", "di_marcy@hotmail.com"]
-
+# The business inbox: copied on every order e-mail (with the seller; the customer gets
+# a separate one) and where replies go. Not environment-specific, so no .env entry.
 # Resend requires "from" on a domain verified with them (gmail.com can't be
-# verified), so replies are routed back to the real inbox via Reply-To.
-REPLY_TO = "dimarcypedidos@gmail.com"
+# verified), so replies are routed back to this inbox via Reply-To.
+TEAM_INBOX = "dimarcypedidos@gmail.com"
+REPLY_TO = TEAM_INBOX
 
 # Brand palette, matching frontend/src/styles.css (:root custom properties) —
 # email clients don't support CSS variables, so the values are copied in here.
@@ -232,7 +231,7 @@ def send_order_created_emails(order) -> None:
     name, seller, day = order.customer.name, order.seller.name, _date_br(order.date)
     heading = f"Um novo pedido para {name} foi criado por {seller} em {day}."
     intro = f"Um novo pedido para <strong>{html.escape(name)}</strong> foi criado por {html.escape(seller)} em {day}."
-    _notify(order, "Order-created", _with_seller(ORDER_CREATED_RECIPIENTS, order), f"Pedido {n} criado — {name}",
+    _notify(order, "Order-created", _with_seller([TEAM_INBOX], order), f"Pedido {n} criado — {name}",
             heading, intro, "Novo pedido", ACCENT_STRONG, f"Pedido {n} recebido")
     _notify_customer(order, "Order-created", f"Recebemos seu pedido {n}",
                      f"Recebemos seu pedido feito com {seller} em {day}. Obrigado pela preferência!",
@@ -244,7 +243,7 @@ def send_order_updated_emails(order) -> None:
     name = order.customer.name
     heading = f"O pedido de {name} foi alterado. Segue a versão atualizada."
     intro = f"O pedido de <strong>{html.escape(name)}</strong> foi alterado. Segue a versão atualizada."
-    _notify(order, "Order-updated", _with_seller(ORDER_CREATED_RECIPIENTS, order), f"Pedido {n} alterado — {name}",
+    _notify(order, "Order-updated", _with_seller([TEAM_INBOX], order), f"Pedido {n} alterado — {name}",
             heading, intro, "Pedido alterado", ACCENT_STRONG, f"Pedido {n} alterado")
     _notify_customer(order, "Order-updated", f"Seu pedido {n} foi atualizado",
                      "Seu pedido foi atualizado. A versão mais recente segue em PDF anexo.",
@@ -256,7 +255,7 @@ def send_order_delivered_email(order) -> None:
     name = order.customer.name
     heading = f"O pedido de {name} foi marcado como entregue."
     intro = f"O pedido de <strong>{html.escape(name)}</strong> foi marcado como entregue."
-    _notify(order, "Delivery", _with_seller([settings.notify_email or settings.admin_email], order),
+    _notify(order, "Delivery", _with_seller([TEAM_INBOX], order),
             f"Pedido {n} entregue — {name}", heading, intro, "Pedido entregue", DELIVERED_COLOR, f"Pedido {n} entregue")
     _notify_customer(order, "Delivery", f"Seu pedido {n} foi entregue",
                      "Seu pedido foi entregue. Obrigado pela preferência!",
