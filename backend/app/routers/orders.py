@@ -1,11 +1,11 @@
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import clock, finance
 from ..database import get_db
-from ..mailer import send_order_created_emails, send_order_delivered_email
+from ..mailer import send_order_created_emails, send_order_delivered_email, send_order_updated_emails
 from ..models import ORDER_STATUSES, AppSettings, Customer, FinancialEntry, Order, OrderItem, Product, User
 from ..schemas import OrderIn, StatusIn
 from ..sales import late_filter, visible_orders
@@ -13,6 +13,8 @@ from ..security import get_current_user, require_admin
 from ..settings_store import allowed_price_tables, get_app_settings, retail_price
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+SELLER_EDIT_WINDOW = timedelta(hours=1)  # sellers may fix their own order for this long after creating it
 
 
 def _format_brl(v: float) -> str:
@@ -92,6 +94,14 @@ def _find(oid: int, db: Session) -> Order:
     return o
 
 
+def _can_edit(o: Order, user: User) -> bool:
+    if user.role == "admin":
+        return True
+    # created_at is the DB's CURRENT_TIMESTAMP: naive UTC on SQLite, server time zone (UTC by default) on Postgres.
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    return o.seller_id == user.id and o.created_at is not None and now_utc - o.created_at < SELLER_EDIT_WINDOW
+
+
 def _sync_installments(db: Session, o: Order, old_status: str | None) -> None:
     """Entering "delivered" creates the receivables; leaving it drops the unpaid ones.
     Runs after a flush and before the single commit, so the order and its installments save together."""
@@ -124,7 +134,7 @@ def get(oid: int, db: Session = Depends(get_db), user: User = Depends(get_curren
     o = _find(oid, db)
     if user.role != "admin" and o.seller_id != user.id:
         raise HTTPException(404, "Order not found.")
-    return full(o)
+    return {**full(o), "can_edit": _can_edit(o, user)}
 
 
 @router.post("", status_code=201)
@@ -153,9 +163,18 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
     return full(o)
 
 
-@router.put("/{oid}", dependencies=[Depends(require_admin)])
+@router.put("/{oid}")
 def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o = _find(oid, db)
+    if not _can_edit(o, user):
+        if user.role != "admin" and o.seller_id == user.id:
+            raise HTTPException(403, "O prazo de 1 hora para editar este pedido terminou. Fale com o administrador.")
+        raise HTTPException(404, "Order not found.")
+    if user.role != "admin":
+        customer = db.get(Customer, data.customer_id)
+        if not customer or customer.owner_id != user.id:
+            raise HTTPException(400, "Customer not found.")
+        data.status = o.status  # only the admin moves an order through its statuses
     old_status = o.status
     app_settings = get_app_settings(db)
     # The table is fixed when the order is created; editing keeps it.
@@ -172,6 +191,8 @@ def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = 
     db.refresh(o)
     if o.status == "delivered" and old_status != "delivered":
         send_order_delivered_email(o)
+    else:
+        send_order_updated_emails(o)
     return full(o)
 
 

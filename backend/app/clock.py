@@ -10,7 +10,7 @@ def today_br() -> date:
     return datetime.now(BRT).date()
 
 
-GOAL_YEAR_START_MONTH = 10  # goals run October -> September: the 2027 goal covers 2026-10-01 .. 2027-09-30
+GOAL_YEAR_START_MONTH = 10  # goals run October -> September: the 2026/27 goal covers 2026-10-01 .. 2027-09-30
 
 
 def goal_year_start(today: date) -> date:

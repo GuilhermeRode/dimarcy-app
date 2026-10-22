@@ -11,7 +11,6 @@ os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.c
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import clock  # noqa: E402
 from app.main import app  # noqa: E402
 
 TODAY = date.today()
@@ -78,8 +77,23 @@ with TestClient(app) as c:
     assert c.get(f"/api/orders/{o_admin}", headers=A).status_code == 404  # sold by admin, not by Ana
     assert order(B, cA["id"]).status_code == 400  # can't sell to Ana's customer
     assert order(B, c_none["id"]).status_code == 400  # nor to an unowned one
-    for oid in (oA, oB):  # editing, status changes and deletion are admin-only
-        assert c.put(f"/api/orders/{oid}", headers=B, json={}).status_code == 403
+    # editing: a seller only edits their own order, for 1 hour, and can't change its status
+    edit = {"customer_id": cB["id"], "delivery_date": TODAY.isoformat(), "status": "canceled", "payment_method": "PIX",
+            "payment_terms": "À vista", "items": [{"product_id": product, "color_id": color, "size": "P", "quantity": 2}]}
+    assert c.put(f"/api/orders/{oA}", headers=B, json={**edit, "customer_id": cA["id"]}).status_code == 404
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["can_edit"] is True
+    r = c.put(f"/api/orders/{oB}", headers=B, json=edit)
+    assert r.status_code == 200 and r.json()["status"] == "delivered", r.text
+    assert c.put(f"/api/orders/{oB}", headers=B, json={**edit, "customer_id": cA["id"]}).status_code == 400
+    from datetime import datetime, timezone  # noqa: E402
+    from app.database import SessionLocal  # noqa: E402
+    from app.models import Order  # noqa: E402
+    with SessionLocal() as db:  # push the order past the 1-hour window
+        db.get(Order, oB).created_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=2)
+        db.commit()
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["can_edit"] is False
+    assert c.put(f"/api/orders/{oB}", headers=B, json=edit).status_code == 403
+    for oid in (oA, oB):  # status changes and deletion are admin-only
         assert c.patch(f"/api/orders/{oid}/status", headers=B, json={"status": "canceled"}).status_code == 403
         assert c.delete(f"/api/orders/{oid}", headers=B).status_code == 403
     assert {o["id"] for o in c.get("/api/orders", headers=admin).json()} == {oA, oB, o_admin}
@@ -91,8 +105,7 @@ with TestClient(app) as c:
     assert [x["name"] for x in d["top_customers"]] == ["Cliente do Bruno"]
     assert sum(m["orders"] for m in d["monthly_sales"]) == 1
     assert d["alerts"]["late_orders"] == 0  # Ana's late order is not Bruno's
-    days = (TODAY - clock.goal_year_start(TODAY)).days + 1  # default period: goal year (from 1 Oct) to today
-    assert d["goal"] == round(2000 * days / 365, 2), d["goal"]  # Bruno's own goal, not the company's
+    assert d["goal"] == 2000 and d["goal_value"] == 200, d["goal"]  # Bruno's own full goal vs. his goal-year sales
     da = c.get("/api/dashboard", headers=A).json()
     assert da["kpis"]["revenue"] == 100 and da["alerts"]["late_orders"] == 1  # admin's sale excluded
     assert "60800" not in str(d) and "annual_goal" not in str(d)

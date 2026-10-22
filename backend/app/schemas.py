@@ -40,6 +40,7 @@ class UserIn(UserBase):
 
 class UserOut(UserBase):
     id: int
+    quick_quantity: bool = True  # personal preference, set in Meu perfil (not by the admin's user form)
 
 
 class TokenOut(BaseModel):
@@ -64,6 +65,7 @@ class ProfileIn(BaseModel):
     current_password: str | None = None
     new_password: str | None = None
     theme: str | None = None
+    quick_quantity: bool | None = None  # None = keep (an older cached app doesn't send it)
 
 
 # ---------- Customers ----------

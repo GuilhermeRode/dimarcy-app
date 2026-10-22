@@ -27,6 +27,15 @@ export default function Profile() {
     } finally { setBusy(false); }
   }
 
+  // Saved on toggle, apart from the access form (which may hold a half-typed password).
+  async function setQuickQuantity(on) {
+    setError(""); setOk("");
+    try {
+      const { data } = await api.put("/auth/me", { name: user.name, email: user.email, quick_quantity: on });
+      updateUser(data);
+    } catch (err) { setError(errorMessage(err)); }
+  }
+
   async function onAvatarPick(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -83,6 +92,19 @@ export default function Profile() {
             <button className="btn btn-primary" disabled={busy}>Salvar alterações</button>
           </div>
         </form>
+      </section>
+
+      <section className="panel">
+        <h3>Preferências</h3>
+        <label className="switch-row">
+          <span>
+            Usar botões +1 / +2 na grade do pedido
+            <small className="muted">Tocar na grade de quantidades soma sem abrir o teclado.</small>
+          </span>
+          {/* on by default; an older cached user has no field */}
+          <input type="checkbox" role="switch" className="switch" checked={user.quick_quantity !== false}
+            onChange={(e) => setQuickQuantity(e.target.checked)} />
+        </label>
       </section>
     </div>
   );

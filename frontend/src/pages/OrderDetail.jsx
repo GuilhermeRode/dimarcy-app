@@ -79,6 +79,7 @@ export default function OrderDetail() {
             <>
               <Status s={o.status} />
               <button className="btn" onClick={() => nav(`/orders/${id}/client-print`)}>Imprimir p/ cliente</button>
+              {o.can_edit && <button className="btn" onClick={() => nav(`/orders/${id}/edit`)}>Editar</button>}
             </>
           )}
         </div>

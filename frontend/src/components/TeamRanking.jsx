@@ -19,11 +19,12 @@ export default function TeamRanking({ title, sellers, showGoalGap = false }) {
   const m = metric === "goal" && !hasGoal ? "value" : metric;
   if (!sellers.length) return null;
 
-  const score = (s) => (m === "goal" ? (s.goal ? (s.value / s.goal) * 100 : -1) : s[m]);
+  // The goal is annual: measured against the goal year's sales (goal_value), not the period's.
+  const score = (s) => (m === "goal" ? (s.goal ? (s.goal_value / s.goal) * 100 : -1) : s[m]);
   const rows = sellers.map((s, i) => ({ ...s, color: SELLER_COLORS[i % SELLER_COLORS.length] }))
     .sort((a, b) => score(b) - score(a));
   const best = Math.max(score(rows[0]), 1);
-  const teamTotal = sellers.reduce((t, s) => t + s[m === "goal" ? "value" : m], 0);
+  const teamTotal = sellers.reduce((t, s) => t + s[m === "goal" ? "goal_value" : m], 0);
   const lead = score(rows[0]) > 0
     ? `${rows[0].name.split(" ")[0]} lidera em ${METRICS[m].label.toLowerCase()}`
     : "Sem vendas no período";
@@ -52,12 +53,12 @@ export default function TeamRanking({ title, sellers, showGoalGap = false }) {
             <div className="team-bar"><span style={{ width: `${Math.max(0, score(s)) / best * 100}%`, background: s.color }} /></div>
             <span className="team-sub">
               {m === "goal"
-                ? (s.goal ? `Meta ${money(s.goal)}` : "Defina em Usuários")
+                ? (s.goal ? `Meta anual ${money(s.goal)}` : "Defina em Usuários")
                 : `${teamTotal ? Math.round((s[m] / teamTotal) * 100) : 0}% do total da equipe`}
             </span>
             {showGoalGap && s.goal > 0 && (
               <span className="team-sub">
-                {s.value >= s.goal ? "Meta do período batida" : `Faltam ${money(s.goal - s.value)} para a meta`}
+                {s.goal_value >= s.goal ? "Meta anual batida" : `Faltam ${money(s.goal - s.goal_value)} para a meta anual`}
               </span>
             )}
           </div>
