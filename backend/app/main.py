@@ -47,7 +47,8 @@ async def lifespan(app: FastAPI):
     _monthly_to_annual_goal("users")
     _monthly_to_annual_goal("app_settings")
     _ensure_columns("users", {"reset_token_hash": "VARCHAR(64)", "reset_token_expires_at": "TIMESTAMP",
-                              "annual_goal": "NUMERIC(12,2)", "price_table": "VARCHAR(10) DEFAULT 'wholesale'"})
+                              "annual_goal": "NUMERIC(12,2)", "price_table": "VARCHAR(10) DEFAULT 'wholesale'",
+                              "quick_quantity": "BOOLEAN DEFAULT TRUE"})
     _ensure_columns("colors", {"hex2": "VARCHAR(7)"})
     _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'"})
     _ensure_columns("app_settings", {"annual_goal": "NUMERIC(12,2) DEFAULT 0",

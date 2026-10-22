@@ -26,13 +26,16 @@ const PAYMENT_METHODS = ["Dinheiro", "Pix", "Boleto", "Cheque"];
 const PAYMENT_TERMS = ["À vista", "30/60", "30/60/90", "30/60/90/120", "30/60/90/120/150", "Quinzenal"];
 
 // Color × size grid for a product: the core of placing an order
-function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, onCancel }) {
+function QuantityGrid({ product, initial, initialPrice, canEditPrice, quickQuantity, onSave, onCancel }) {
   const [qty, setQty] = useState(() => Object.fromEntries(initial.map((i) => [key(i), i.quantity])));
   const [price, setPrice] = useState(initialPrice ?? product.price);
   const [zoom, setZoom] = useState(false);
+  // tapping a cell adds `step` (no keyboard); 0 = type the number. Each user turns it on/off in Meu perfil.
+  const [step, setStep] = useState(quickQuantity ? 1 : 0);
 
   const totalPieces = Object.values(qty).reduce((s, v) => s + (Number(v) || 0), 0);
   const set = (k, v) => setQty((q) => ({ ...q, [k]: v.replace(/\D/g, "") }));
+  const bump = (k) => setQty((q) => ({ ...q, [k]: String(Math.max(0, (Number(q[k]) || 0) + step) || "") }));
 
   function save() {
     const items = [];
@@ -71,6 +74,14 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, on
             : <strong>{money(price)}</strong>}
         </label>
       </div>
+      {quickQuantity && (
+        <div className="seg-control qty-step" role="group" aria-label="Ao tocar na grade">
+          {[[1, "+1"], [2, "+2"], [-1, "−1"], [0, "Digitar"]].map(([n, label]) => (
+            <button key={n} type="button" className={step === n ? "on" : ""} aria-pressed={step === n}
+              onClick={() => setStep(n)}>{label}</button>
+          ))}
+        </div>
+      )}
       <div className="scroll-area">
         <table className="qty-grid-table">
           <thead>
@@ -85,6 +96,7 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, on
                   {product.sizes.map((t) => (
                     <td key={t}>
                       <input inputMode="numeric" className="qty-input" value={qty[`${c.id}|${t}`] || ""}
+                        readOnly={step !== 0} onClick={() => step && bump(`${c.id}|${t}`)}
                         onChange={(e) => set(`${c.id}|${t}`, e.target.value)} placeholder="·" aria-label={`${c.name} ${t}`} />
                     </td>
                   ))}
@@ -533,7 +545,7 @@ export default function OrderForm() {
               <button type="button" className="modal-back" onClick={() => setEditing(null)}>← Escolher outro produto</button>
               <QuantityGrid product={editing} initial={groups[editing.id] || []}
                 initialPrice={groups[editing.id]?.[0]?.unit_price ?? priceOf(editing)} canEditPrice={isAdmin && settings.allow_price_override}
-                onSave={saveGrid} onCancel={closeProductModal} />
+                quickQuantity={user?.quick_quantity !== false} onSave={saveGrid} onCancel={closeProductModal} />
             </>
           )}
         </Modal>

@@ -59,6 +59,7 @@ class User(Base):
     annual_goal: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)  # NULL/0 = no goal
     price_table: Mapped[str] = mapped_column(String(10), default="wholesale",
                                              server_default="wholesale")  # wholesale | retail | both
+    quick_quantity: Mapped[bool] = mapped_column(Boolean, default=True)  # +1/+2 taps in the order grid (Meu perfil)
     reset_token_hash: Mapped[str | None] = mapped_column(String(64))  # sha256 hex of the forgot-password token
     reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
 

@@ -25,7 +25,7 @@ export const localDate = (d = new Date()) =>
 export const tablePrice = (price, table, markup) =>
   table === "retail" ? Math.round(Math.round(price * 100) * Math.round((100 + Number(markup)) * 100) / 10000) / 100 : price;
 
-// Goals run October -> September (backend: clock.goal_year_start): the 2027 goal starts on 2026-10-01.
+// Goals run October -> September (backend: clock.goal_year_start): the 2026/27 goal starts on 2026-10-01.
 export const goalYearStart = (d = new Date()) => `${d.getMonth() >= 9 ? d.getFullYear() : d.getFullYear() - 1}-10-01`;
 
 export const addDays = (iso, days) => {

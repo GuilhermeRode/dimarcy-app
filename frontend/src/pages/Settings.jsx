@@ -37,44 +37,54 @@ export default function Settings() {
       </header>
 
       {form ? (
-        <section className="panel">
-          <form onSubmit={save} className="form-grid">
-            <div className="span-2">
-              <label className="check">
-                <input type="checkbox" checked={form.allow_price_override}
+        <form onSubmit={save} className="page">
+          <section className="panel">
+            <h3>Preços</h3>
+            <div className="form-grid">
+              <label className="switch-row span-2">
+                <span>
+                  Administradores podem alterar o preço no pedido
+                  <small className="muted">Vendedores nunca alteram. Desligado, o preço vem sempre do cadastro do produto.</small>
+                </span>
+                <input type="checkbox" role="switch" className="switch" checked={form.allow_price_override}
                   onChange={(e) => setForm({ ...form, allow_price_override: e.target.checked })} />
-                Permitir que administradores alterem o preço unitário no pedido
               </label>
-              <p className="muted" style={{ marginTop: 4 }}>
-                Vendedores nunca alteram o preço. Quando desligado, o preço sempre vem do cadastro do produto.
-              </p>
+              <Field label="Acréscimo da tabela de varejo (%)" span={2}>
+                <input type="number" min="0" max="1000" step="0.01" value={form.retail_markup_percent}
+                  onChange={(e) => setForm({ ...form, retail_markup_percent: e.target.value })} />
+                <small className="muted">Somado ao preço de atacado. A tabela de cada vendedor é definida em Usuários.</small>
+              </Field>
             </div>
-            <Field label="Desconto máximo por pedido (%)" span={2}>
-              <input type="number" min="0" max="100" step="0.01" value={form.max_discount_percent}
-                onChange={(e) => setForm({ ...form, max_discount_percent: e.target.value })} />
-            </Field>
-            <Field label="Acréscimo da tabela de varejo (%)" span={2}>
-              <input type="number" min="0" max="1000" step="0.01" value={form.retail_markup_percent}
-                onChange={(e) => setForm({ ...form, retail_markup_percent: e.target.value })} />
-            </Field>
-            <p className="muted span-2" style={{ marginTop: -8 }}>
-              Aplicado sobre o preço de atacado nos pedidos de varejo. A tabela de cada vendedor é definida em Usuários.
-            </p>
-            <Field label="Meta anual da empresa (R$)" span={2}>
-              <input type="number" min="0" step="0.01" placeholder="Sem meta"
-                value={form.annual_goal ?? ""}
-                onChange={(e) => setForm({ ...form, annual_goal: e.target.value })} />
-            </Field>
-            <p className="muted span-2" style={{ marginTop: -8 }}>
-              O ano da meta vai de outubro a setembro (a meta de 2027 vale de 01/10/2026 a 30/09/2027). No Painel e no Faturamento ela é proporcional ao período escolhido. Deixe em branco para não usar meta.
-            </p>
-            <div className="span-2"><ErrorBox msg={error} /></div>
-            {ok && <div className="span-2 muted">{ok}</div>}
-            <div className="actions span-2">
-              <button className="btn btn-primary" disabled={busy}>Salvar configurações</button>
+          </section>
+
+          <section className="panel">
+            <h3>Desconto</h3>
+            <div className="form-grid">
+              <Field label="Desconto máximo por pedido (%)" span={2}>
+                <input type="number" min="0" max="100" step="0.01" value={form.max_discount_percent}
+                  onChange={(e) => setForm({ ...form, max_discount_percent: e.target.value })} />
+              </Field>
             </div>
-          </form>
-        </section>
+          </section>
+
+          <section className="panel">
+            <h3>Meta de vendas</h3>
+            <div className="form-grid">
+              <Field label="Meta anual da empresa (R$)" span={2}>
+                <input type="number" min="0" step="0.01" placeholder="Sem meta"
+                  value={form.annual_goal ?? ""}
+                  onChange={(e) => setForm({ ...form, annual_goal: e.target.value })} />
+                <small className="muted">O ano da meta vai de outubro a setembro. As metas dos vendedores ficam em Usuários.</small>
+              </Field>
+            </div>
+          </section>
+
+          <ErrorBox msg={error} />
+          {ok && <div className="muted">{ok}</div>}
+          <div className="actions">
+            <button className="btn btn-primary" disabled={busy}>Salvar configurações</button>
+          </div>
+        </form>
       ) : <ErrorBox msg={error} />}
     </div>
   );
