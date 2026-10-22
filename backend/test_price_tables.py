@@ -123,9 +123,24 @@ with TestClient(app) as c:
     c.put(f"/api/products/{only_r}", headers=admin, json={"reference": "R2", "description": "Blusão", "price": 100,
                                                           "color_ids": [color]})
     assert c.get(f"/api/products/{only_r}", headers=admin).json()["seller_ids"] == [ids["r"]]
-    # only sellers can be picked; other ids are ignored
+    # admins can be picked too (id 1 = the first admin); unknown ids are ignored
     p = c.put(f"/api/products/{only_r}", headers=admin, json={"reference": "R2", "description": "Blusão", "price": 100,
-                                                              "color_ids": [color], "seller_ids": [1, ids["w"]]}).json()
-    assert p["seller_ids"] == [ids["w"]], p["seller_ids"]
+                                                              "color_ids": [color], "seller_ids": [1, ids["w"], 999]}).json()
+    assert sorted(p["seller_ids"]) == sorted([1, ids["w"]]), p["seller_ids"]
+
+    # a product enabled only for an admin: other users can't sell it, and when selling (for_sale)
+    # an admin only sees what's enabled for them, while the catalog screen still lists everything
+    sale_refs = lambda h: [p["reference"] for p in c.get("/api/products", headers=h, params={"for_sale": True}).json()]  # noqa: E731
+    c.put(f"/api/products/{only_r}", headers=admin, json={"reference": "R2", "description": "Blusão", "price": 100,
+                                                          "color_ids": [color], "seller_ids": [1]})
+    assert sale_refs(admin) == ["R1", "R2"] and refs(admin) == ["R1", "R2"]
+    assert refs(R) == ["R1"] and order(R, only_r).status_code == 400
+    assert order(admin, only_r).status_code == 201
+    c.post("/api/users", headers=admin, json={"name": "Outra Admin", "email": "adm2@t.com", "password": "admin-pass-456",
+                                              "role": "admin"})
+    r2 = c.post("/api/auth/login", json={"email": "adm2@t.com", "password": "admin-pass-456"}).json()
+    admin2 = {"Authorization": "Bearer " + r2["access_token"]}
+    assert sale_refs(admin2) == ["R1"] and refs(admin2) == ["R1", "R2"]
+    assert order(admin2, only_r).status_code == 400
 
 print("price tables + product sellers OK")
