@@ -7,11 +7,16 @@ from datetime import date, timedelta
 
 db_file = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.com",
-                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="")
+                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="", CHECK_EMAIL_DNS="false")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
+
+# a customer needs every field but the notes; no city lookup or DNS check over the network
+from app.routers import customers as _customers_router  # noqa: E402
+_customers_router.geocode_and_cache_background = lambda *a: None
+FULL = {"phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
 
 TODAY = date.today()
 
@@ -36,13 +41,13 @@ with TestClient(app) as c:
                                                            "color_ids": [color]}).json()["id"]
 
     def customer(h, name, **extra):
-        r = c.post("/api/customers", headers=h, json={"name": name, "document": "123", **extra})
+        r = c.post("/api/customers", headers=h, json={"name": name, "document": "123", **FULL, **extra})
         assert r.status_code == 201, r.text
         return r.json()
 
     def order(h, cid, qty=1, status="delivered"):
         return c.post("/api/orders", headers=h, json={
-            "customer_id": cid, "date": TODAY.isoformat(), "delivery_date": (TODAY - timedelta(days=2)).isoformat(),
+            "customer_id": cid, "date": (TODAY - timedelta(days=2)).isoformat(), "delivery_date": (TODAY - timedelta(days=2)).isoformat(),
             "status": status, "payment_method": "PIX", "payment_terms": "À vista",
             "items": [{"product_id": product, "color_id": color, "size": "P", "quantity": qty}]})
 
@@ -58,13 +63,13 @@ with TestClient(app) as c:
     assert [x["name"] for x in c.get("/api/customers", headers=B, params={"search": "Ana"}).json()] == []
     for cid in (cA["id"], c_none["id"]):
         assert c.get(f"/api/customers/{cid}", headers=B).status_code == 404
-        assert c.put(f"/api/customers/{cid}", headers=B, json={"name": "Hack", "document": "1"}).status_code == 404
+        assert c.put(f"/api/customers/{cid}", headers=B, json={"name": "Hack", "document": "1", **FULL}).status_code == 404
         assert c.delete(f"/api/customers/{cid}", headers=B).status_code == 404
     assert c.get(f"/api/customers/{cA['id']}", headers=admin).json()["name"] == "Cliente da Ana"  # untouched
     # a seller can't create or move a customer into someone else's portfolio
     assert customer(B, "Tentativa", owner_id=ids["a"])["owner_id"] == ids["b"]
     r = c.put(f"/api/customers/{cB['id']}", headers=B, json={"name": "Cliente do Bruno", "document": "1",
-                                                             "owner_id": ids["a"]})
+                                                             **FULL, "owner_id": ids["a"]})
     assert r.json()["owner_id"] == ids["b"]
     names_b = {x["name"] for x in c.get("/api/customers/overview", headers=B).json()}
     assert names_b == {"Cliente do Bruno", "Tentativa"}, names_b

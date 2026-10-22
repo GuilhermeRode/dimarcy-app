@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     frontend_url: str = "https://app.dimarcy.com.br"  # used to build the password-reset link
     admin_email: str = "admin@dimarcy.com.br"
     admin_password: str = "admin123"
+    check_email_dns: bool = True  # customer e-mails: also confirm the domain exists (off in tests: no network)
     enable_docs: bool = False  # /docs and /openapi.json map every route; keep off in production
 
     # E-mail notifications (order created, edited, delivered), sent via Resend's HTTP API.

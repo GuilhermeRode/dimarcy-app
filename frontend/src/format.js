@@ -51,6 +51,31 @@ export function initials(name) {
 // Lowercase without accents, for search ("Itaiópolis" matches "itaiopolis").
 export const normalize = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+// CPF/CNPJ share one field: it formats as a CPF (000.000.000-00) up to 11 digits and switches to a
+// CNPJ (00.000.000/0000-00) when the 12th digit is typed.
+const digits = (s) => (s || "").replace(/\D/g, "");
+export function maskDocument(v) {
+  const d = digits(v).slice(0, 14);
+  if (d.length > 11) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}${d.length > 12 ? "-" + d.slice(12) : ""}`;
+  return [d.slice(0, 3), d.slice(3, 6), d.slice(6, 9)].filter(Boolean).join(".") + (d.length > 9 ? "-" + d.slice(9) : "");
+}
+// (00) 0000-0000 up to 10 digits, (00) 00000-0000 with 11; a pasted country code 55 is dropped.
+export function maskPhone(v) {
+  let d = digits(v);
+  if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+  d = d.slice(0, 11);
+  if (!d) return "";
+  const k = d.length > 10 ? 5 : 4;
+  return `(${d.slice(0, 2)}` + (d.length > 2 ? `) ${d.slice(2, 2 + k)}` : "") + (d.length > 2 + k ? `-${d.slice(2 + k)}` : "");
+}
+// Only checks fields the user changed, so an old record with a free-text value can still be edited.
+export function customerFieldError(form, before = {}) {
+  const changed = (k) => (form[k] || "") !== (before[k] || "");
+  if (changed("document") && ![11, 14].includes(digits(form.document).length)) return "CPF/CNPJ incompleto: informe 11 dígitos (CPF) ou 14 (CNPJ).";
+  if (changed("phone") && form.phone && ![10, 11].includes(digits(form.phone).length)) return "Telefone incompleto: informe o DDD e o número.";
+  return "";
+}
+
 // Only digits ever reach the URL. Brazilian numbers: 10-11 digits (DDD + number) after an
 // optional country code 55 and an optional trunk 0 ("047 ...", "0xx47 ...").
 export function whatsappUrl(phone) {

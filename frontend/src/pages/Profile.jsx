@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
-import { Avatar, ErrorBox, Field } from "../components/ui";
+import { Avatar, ErrorBox, Field, PasswordInput } from "../components/ui";
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
@@ -81,10 +81,10 @@ export default function Profile() {
           <Field label="Nome" span={2}><input required {...f("name")} /></Field>
           <Field label="E-mail" span={2}><input type="email" required {...f("email")} /></Field>
           <Field label="Senha atual" span={2}>
-            <input type="password" placeholder="Necessária para trocar e-mail ou senha" {...f("current_password")} />
+            <PasswordInput autoComplete="current-password" placeholder="Necessária para trocar e-mail ou senha" {...f("current_password")} />
           </Field>
           <Field label="Nova senha (deixe em branco para manter)" span={2}>
-            <input type="password" minLength={10} {...f("new_password")} />
+            <PasswordInput autoComplete="new-password" minLength={10} {...f("new_password")} />
           </Field>
           <div className="span-2"><ErrorBox msg={error} /></div>
           {ok && <div className="span-2 muted">{ok}</div>}

@@ -7,13 +7,18 @@ from decimal import Decimal
 
 db_file = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.com",
-                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="")
+                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="", CHECK_EMAIL_DNS="false")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app import clock, finance  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
+
+# a customer needs every field but the notes; no city lookup or DNS check over the network
+from app.routers import customers as _customers_router  # noqa: E402
+_customers_router.geocode_and_cache_background = lambda *a: None
+FULL = {"phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
 from app.models import FinancialEntry  # noqa: E402
 
 TODAY = date(2026, 10, 15)
@@ -74,8 +79,8 @@ with TestClient(app) as c:
                                                            "color_ids": [color]}).json()["id"]
     cheap = c.post("/api/products", headers=admin, json={"reference": "R2", "description": "Botão", "price": 0.05,
                                                          "color_ids": [color]}).json()["id"]
-    cust = c.post("/api/customers", headers=admin, json={"name": "Loja Bela", "document": "1"}).json()["id"]
-    cust2 = c.post("/api/customers", headers=admin, json={"name": "Malharia Sul", "document": "2"}).json()["id"]
+    cust = c.post("/api/customers", headers=admin, json={"name": "Loja Bela", "document": "1", **FULL}).json()["id"]
+    cust2 = c.post("/api/customers", headers=admin, json={"name": "Malharia Sul", "document": "2", **FULL}).json()["id"]
 
     def body(**kw):
         return {"customer_id": cust, "delivery_date": TODAY.isoformat(), "status": "confirmed",
