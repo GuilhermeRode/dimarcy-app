@@ -58,6 +58,15 @@ with TestClient(app) as c:
     oB = order(B, cB["id"], qty=2).json()["id"]
     o_admin = order(admin, cA["id"], qty=5).json()["id"]  # admin sold to Ana's customer
 
+    # ---- a legacy customer without email can't get new orders (admin included) ----
+    from app.database import SessionLocal  # noqa: E402
+    from app.models import Customer  # noqa: E402
+    with SessionLocal() as db:
+        db.get(Customer, c_none["id"]).email = None
+        db.commit()
+    r = order(admin, c_none["id"])
+    assert r.status_code == 400 and "e-mail" in r.json()["detail"], r.text
+
     # ---- customers ----
     assert [x["name"] for x in c.get("/api/customers", headers=B).json()] == ["Cliente do Bruno"]
     assert [x["name"] for x in c.get("/api/customers", headers=B, params={"search": "Ana"}).json()] == []

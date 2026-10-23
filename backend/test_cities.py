@@ -38,7 +38,7 @@ with TestClient(app) as c:
         rows = [("Loja 1", "Rio do Sul", "SC", ana["id"]), ("Loja 2", " Rio  do Súl ", "sc", ana["id"]),
                 ("Loja 3", "Rio do Sul", "SC", bruno["id"]), ("Loja 4", "Curitiba", "PR", bruno["id"]),
                 ("Loja 5", "Blumenau", "SC", ana["id"]), ("Sem cidade", None, None, ana["id"])]
-        objs = [Customer(name=n, document="1", city=ci, state=uf, owner_id=o, lat=-27.2 if ci else None,
+        objs = [Customer(name=n, document="1", email="c@test.com", city=ci, state=uf, owner_id=o, lat=-27.2 if ci else None,
                          lng=-49.6 if ci else None) for n, ci, uf, o in rows]
         db.add_all(objs)
         db.commit()

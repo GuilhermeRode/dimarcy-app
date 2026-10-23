@@ -118,10 +118,16 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, quickQuant
   );
 }
 
+// Older customers may predate the required fields; picking one for an order asks for them first.
+const REQUIRED_CUSTOMER_FIELDS = { document: "CPF/CNPJ", phone: "Telefone", email: "E-mail", city: "Cidade", state: "UF", address: "Endereço" };
+const missingCustomerFields = (c) =>
+  Object.entries(REQUIRED_CUSTOMER_FIELDS).filter(([k]) => !String(c?.[k] || "").trim()).map(([, label]) => label);
+
 // Full customer form, used both to create and to edit without leaving the order
 function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
   const [f, setF] = useState(() => (customer ? { ...customer, owner_id: customer.owner_id || "" } : { ...EMPTY_CUSTOMER }));
-  const [error, setError] = useState("");
+  const missing = customer?.id ? missingCustomerFields(customer) : [];
+  const [error, setError] = useState(missing.length ? `Faltam campos obrigatórios: ${missing.join(", ")}.` : "");
   const editing = Boolean(customer?.id);
 
   async function save(e) {
@@ -143,6 +149,7 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
   return (
     <Modal title={editing ? `Editar cliente — ${customer.name}` : "Cadastrar cliente"} onClose={onClose} wide>
       <form onSubmit={save} className="form-grid">
+        <div className="span-2"><ErrorBox msg={error} /></div>
         <Field label="Nome / razão social" span={2}><input required autoFocus {...field("name")} /></Field>
         <Field label="CPF/CNPJ" span={2}><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...field("document")}
           onChange={(e) => setF({ ...f, document: maskDocument(e.target.value) })} /></Field>
@@ -165,7 +172,6 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
         </Field>
         <Field label="Endereço" span={2}><input required {...field("address")} /></Field>
         <Field label="Observações do cliente (opcional)" span={2}><textarea rows={2} {...field("notes")} /></Field>
-        <div className="span-2"><ErrorBox msg={error} /></div>
         <div className="actions span-2">
           <button className="btn btn-primary">{editing ? "Salvar alterações" : "Cadastrar cliente"}</button>
         </div>
@@ -251,6 +257,7 @@ export default function OrderForm() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loadedCustomerId, setLoadedCustomerId] = useState(null); // legacy orders may keep a customer without email
 
   // A customer preselected from the Clientes screen alone isn't "unsaved work".
   const customerChanged = Boolean(header.customer_id) && Number(header.customer_id) !== presetCustomer;
@@ -293,10 +300,16 @@ export default function OrderForm() {
     });
     if (isAdmin) api.get("/users").then((r) => setSellers(r.data));
     if (id) api.get(`/orders/${id}`).then(({ data }) => {
+      setLoadedCustomerId(data.customer_id);
       setHeader({
         customer_id: data.customer_id, date: data.date, delivery_date: data.delivery_date || "",
         status: data.status, payment_method: data.payment_method || "",
-        payment_terms: data.payment_terms || "", price_table: data.price_table, discount: data.discount,
+        payment_terms: data.payment_terms || "", price_table: data.price_table,
+        // the API stores the discount in R$; the form edits it as a % of the gross
+        discount: (() => {
+          const g = data.items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+          return g ? Math.round(data.discount / g * 10000) / 100 : 0;
+        })(),
         notes: data.notes || "",
       });
       setItems(data.items);
@@ -321,9 +334,9 @@ export default function OrderForm() {
 
   const gross = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
   const pieces = items.reduce((s, i) => s + i.quantity, 0);
-  const total = gross - (Number(header.discount) || 0);
-  const maxDiscount = Math.round(gross * settings.max_discount_percent) / 100;
-  const discountTooHigh = (Number(header.discount) || 0) > maxDiscount + 0.005;
+  const discountValue = Math.round(gross * (Number(header.discount) || 0)) / 100;
+  const total = gross - discountValue;
+  const discountTooHigh = (Number(header.discount) || 0) > settings.max_discount_percent;
 
   const selectedCustomer = customers.find((c) => c.id === Number(header.customer_id));
 
@@ -357,6 +370,8 @@ export default function OrderForm() {
   async function save() {
     setError("");
     if (!header.customer_id) return setError("Escolha o cliente.");
+    if (!selectedCustomer?.email?.trim() && (!id || Number(header.customer_id) !== loadedCustomerId))
+      return setError("Este cliente não tem e-mail cadastrado. Cadastre o e-mail do cliente antes de lançar o pedido.");
     if (!header.delivery_date) return setError("Informe a data de entrega.");
     if (header.delivery_date < header.date) return setError("A data de entrega não pode ser anterior à data do pedido.");
     if (!header.payment_method) return setError("Selecione a forma de pagamento.");
@@ -364,10 +379,10 @@ export default function OrderForm() {
     if (!header.price_table) return setError("Selecione o tipo de venda.");
     if (!items.length) return setError("Adicione ao menos um produto.");
     if (discountTooHigh) return setError(
-      `O desconto máximo é de ${settings.max_discount_percent}% (${money(maxDiscount)}). Peça ao administrador para alterar o limite.`);
+      `O desconto máximo é de ${settings.max_discount_percent}%. Peça ao administrador para alterar o limite.`);
     setSaving(true);
     const body = {
-      ...header, customer_id: Number(header.customer_id), discount: Number(header.discount) || 0,
+      ...header, customer_id: Number(header.customer_id), discount: discountValue,
       price_table: header.price_table || null,
       items: items.map(({ product_id, color_id, size, quantity, unit_price }) =>
         ({ product_id, color_id, size, quantity, unit_price })),
@@ -397,7 +412,10 @@ export default function OrderForm() {
         <Field label="Cliente" span={2}>
           <div className="customer-picker">
             <CustomerSearch key={customerKey} customers={customers} value={header.customer_id}
-              onSelect={(c) => setHeader((h) => ({ ...h, customer_id: c ? c.id : "" }))} />
+              onSelect={(c) => {
+                setHeader((h) => ({ ...h, customer_id: c ? c.id : "" }));
+                if (c && missingCustomerFields(c).length) setCustomerModal(c);
+              }} />
             <button type="button" className="btn btn-primary icon-btn" title="Cadastrar novo cliente" onClick={() => setCustomerModal("new")}>
               <PlusIcon />
             </button>
@@ -494,12 +512,9 @@ export default function OrderForm() {
           <div><span>Peças</span><strong>{pieces}</strong></div>
           <div><span>Subtotal</span><strong>{money(gross)}</strong></div>
           <div>
-            <span>Desconto (R$)</span>
-            <input type="number" min="0" step="0.01" value={header.discount}
+            <span>Desconto (%)</span>
+            <input type="number" min="0" max="100" step="0.01" value={header.discount}
               onChange={(e) => setHeader({ ...header, discount: e.target.value })} />
-            <small className={discountTooHigh ? "danger" : "muted"}>
-              Máximo {settings.max_discount_percent}% · até {money(maxDiscount)}
-            </small>
           </div>
           <div className="grand-total"><span>Total</span><strong>{money(total)}</strong></div>
         </div>
@@ -561,7 +576,14 @@ export default function OrderForm() {
       {customerModal && (
         <CustomerForm customer={customerModal === "new" ? null : customerModal}
           isAdmin={isAdmin} sellers={sellers}
-          onClose={() => setCustomerModal(null)}
+          onClose={() => {
+            // closing without completing an incomplete customer drops them from the order
+            if (customerModal !== "new" && missingCustomerFields(customerModal).length && customerModal.id !== loadedCustomerId) {
+              setHeader((x) => ({ ...x, customer_id: "" }));
+              setCustomerKey((k) => k + 1);
+            }
+            setCustomerModal(null);
+          }}
           onSaved={(c) => {
             setCustomers((l) => [...l.filter((x) => x.id !== c.id), c].sort((a, b) => a.name.localeCompare(b.name)));
             setHeader((x) => ({ ...x, customer_id: c.id }));
