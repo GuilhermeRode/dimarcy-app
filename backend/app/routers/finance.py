@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, contains_eager
 
@@ -114,6 +114,62 @@ def create_entry(data: EntryIn, db: Session = Depends(get_db)):
     today = clock.today_br()
     return [_out(e, today) for e in entries]
 
+
+IMPORT_MAX_BYTES = 5 * 1024 * 1024
+
+
+def _read_upload(file: UploadFile) -> bytes:
+    data = file.file.read(IMPORT_MAX_BYTES + 1)
+    if len(data) > IMPORT_MAX_BYTES:
+        raise HTTPException(400, "Arquivo grande demais (máximo 5 MB).")
+    return data
+
+
+@router.post("/import")
+def import_entries(kind: Literal["receivable", "payable"], apply: bool = False, file: UploadFile = File(...),
+                   card_due: date | None = None, card_name: str = "", category: str = "Outros",
+                   db: Session = Depends(get_db)):
+    """Reads a CSV/XLSX. apply=false only previews; apply=true creates all the rows, or none if any is wrong.
+    With card_due, the file is a credit card statement and becomes a single payable for its total."""
+    data = _read_upload(file)
+    items = []
+    try:
+        rows = finance.read_sheet(file.filename or "", data)
+        if card_due and kind == "payable":
+            entries, errors, items = finance.parse_card_statement(rows, card_due, card_name, category)
+        else:
+            entries, errors = finance.parse_entries(kind, rows)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if not apply:
+        return {"entries": [{**e, "amount": float(e["amount"]),
+                             "paid_amount": float(e["paid_amount"]) if e["paid_amount"] else None} for e in entries],
+                "items": [{**i, "amount": float(i["amount"])} for i in items],
+                "errors": errors}
+    if errors:
+        raise HTTPException(400, "Corrija a planilha antes de importar: " + " ".join(errors[:5]))
+    db.add_all(FinancialEntry(**e) for e in entries)
+    db.commit()
+    return {"created": len(entries)}
+
+
+@router.post("/boleto")
+def read_boleto(code: str = Form(""), file: UploadFile | None = File(None)):
+    """Amount and due date from a pasted linha digitável or a boleto PDF; nothing is saved."""
+    if file is not None:
+        if not (file.filename or "").lower().endswith(".pdf"):
+            raise HTTPException(400, "Envie o boleto em PDF.")
+        try:
+            found = finance.find_boleto(finance.pdf_text(_read_upload(file)), clock.today_br())
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        if not found:
+            raise HTTPException(400, "Não encontrei a linha digitável no PDF. Se for um boleto escaneado, cole a linha digitável.")
+    else:
+        found = finance.parse_boleto_code(code, clock.today_br())
+        if not found:
+            raise HTTPException(400, "Linha digitável inválida. Confira os números (47 ou 48 dígitos).")
+    return {**found, "amount": float(found["amount"]) if found["amount"] else None}
 
 @router.put("/entries/{eid}")
 def update_entry(eid: int, data: EntryUpdate, db: Session = Depends(get_db)):

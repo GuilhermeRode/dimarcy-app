@@ -95,7 +95,6 @@ function EntryModal({ kind, entry, onClose, onDone }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const input = (k) => ({ value: f[k] ?? "", onChange: (e) => setF({ ...f, [k]: e.target.value }) });
-
   async function run(request) {
     setError(""); setBusy(true);
     try { await request(); onDone(); } catch (err) { setError(errorMessage(err)); setBusy(false); }
@@ -229,6 +228,277 @@ function BulkPayModal({ entries, onClose, onDone }) {
   );
 }
 
+// Reads a CSV/XLSX on the server, shows what it understood, and only then creates the entries
+function ImportModal({ kind, onClose, onDone }) {
+  const payable = kind === "payable";
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null); // { entries, items, errors }
+  const [card, setCard] = useState(null); // { card_due, card_name, category } while importing a card statement
+  const [mode, setModeState] = useState("list"); // "list" | "card" | "boleto"
+  const [bol, setBol] = useState(null); // the boleto read, plus what the user types: supplier, description, category
+  const [code, setCode] = useState(""); // pasted linha digitável
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function send(f, apply, c = card) {
+    if (!f || (c && !c.card_due)) return;
+    const fd = new FormData();
+    fd.append("file", f);
+    setError(""); setBusy(true);
+    try {
+      const { data } = await api.post("/finance/import", fd, { params: { kind, apply, ...c } });
+      if (apply) return onDone();
+      setPreview(data);
+    } catch (err) { setError(errorMessage(err)); }
+    setBusy(false);
+  }
+
+  const [over, setOver] = useState(false); // a file is being dragged over the drop zone
+
+  // Value and due date from the boleto's PDF or its linha digitável; the user completes the rest
+  async function readBoleto(key, value) {
+    const fd = new FormData();
+    fd.append(key, value);
+    setError(""); setBusy(true);
+    try {
+      const { data } = await api.post("/finance/boleto", fd);
+      setBol((cur) => ({ supplier: "", description: "Boleto", category: "Outros", ...cur,
+        code: data.code, amount: data.amount ?? "", due_date: data.due_date ?? "" }));
+      setCode(data.code);
+    } catch (err) { setError(errorMessage(err)); }
+    setBusy(false);
+  }
+
+  async function saveBoleto() {
+    setError(""); setBusy(true);
+    try {
+      await api.post("/finance/entries", {
+        kind, description: bol.description, amount: Number(bol.amount), due_date: bol.due_date, payment_method: "Boleto",
+        notes: `Linha digitável: ${bol.code}`, supplier: bol.supplier || null, category: bol.category,
+      });
+      onDone();
+    } catch (err) { setError(errorMessage(err)); setBusy(false); }
+  }
+
+  function choose(f) {
+    setOver(false);
+    if (!f) return;
+    if (payable && mode !== "card" && /\.pdf$/i.test(f.name)) {  // a PDF dropped on "Lista de contas" is a boleto too
+      setModeState("boleto"); setFile(f); setPreview(null);
+      return readBoleto("file", f);
+    }
+    if (mode === "boleto") return setError("Envie o boleto em PDF.");
+    if (!/\.(csv|xlsx|txt)$/i.test(f.name)) {
+      setFile(null); setPreview(null);
+      return setError("Envie um arquivo .csv ou .xlsx.");
+    }
+    setFile(f); setPreview(null);
+    send(f, false);
+  }
+
+  // Changing a card field reads the file again, so the preview always matches what will be saved
+  function setCardField(k, v) {
+    const next = card ? { ...card, [k]: v } : null;
+    setCard(next); setPreview(null);
+    send(file, false, next);
+  }
+
+  function setMode(m) {
+    if (m === mode) return;
+    const next = m === "card" ? { card_due: "", card_name: "", category: "Outros" } : null;
+    setModeState(m); setCard(next); setPreview(null); setError("");
+    if (m === "boleto" || mode === "boleto") { setFile(null); setBol(null); setCode(""); return; }
+    send(file, false, next);
+  }
+
+  const entries = preview?.entries || [];
+  const items = preview?.items || [];
+  const errors = preview?.errors || [];
+  const total = entries.reduce((sum, x) => sum + x.amount, 0);
+  let status = "";
+  if (busy) status = "Lendo o arquivo…";
+  else if (mode === "boleto") status = bol ? "Boleto lido — confira e complete abaixo" : "";
+  else if (card && file && !card.card_due) status = "Informe o vencimento da fatura para ver a prévia";
+  else if (errors.length) status = `${errors.length} ${errors.length === 1 ? "problema encontrado" : "problemas encontrados"}`;
+  else if (entries.length) status = `${entries.length} ${entries.length === 1 ? "lançamento pronto" : "lançamentos prontos"} para importar`;
+
+  return (
+    <Modal title={payable ? "Importar contas a pagar" : "Importar contas a receber"} onClose={onClose} wide>
+      <div className="import">
+        {payable && (
+          <div className="segmented import-mode" role="group" aria-label="Tipo de arquivo">
+            {[["list", "Lista de contas"], ["card", "Fatura de cartão"], ["boleto", "Boleto (PDF)"]].map(([m, label]) => (
+              <button key={m} type="button" className={mode === m ? "on" : ""} aria-pressed={mode === m} onClick={() => setMode(m)}>{label}</button>
+            ))}
+          </div>
+        )}
+
+        {card && (
+          <div className="import-card">
+            <Field label="Cartão"><input maxLength={120} placeholder="Ex.: Nubank" value={card.card_name}
+              onChange={(e) => setCard({ ...card, card_name: e.target.value })} onBlur={(e) => setCardField("card_name", e.target.value)} /></Field>
+            <Field label="Vencimento da fatura">
+              <input type="date" required value={card.card_due} onChange={(e) => setCardField("card_due", e.target.value)} />
+            </Field>
+            <Field label="Categoria">
+              <select value={card.category} onChange={(e) => setCardField("category", e.target.value)}>
+                {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </Field>
+          </div>
+        )}
+
+        <label className={`dropzone ${over ? "drop-over" : ""} ${file ? "has-file" : ""}`}
+          onDragOver={(e) => { e.preventDefault(); if (!over) setOver(true); }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(false); }}
+          onDrop={(e) => { e.preventDefault(); choose(e.dataTransfer.files[0]); }}>
+          <input type="file" accept={mode === "boleto" ? ".pdf" : payable && !card ? ".csv,.xlsx,.txt,.pdf" : ".csv,.xlsx,.txt"} hidden disabled={busy}
+            onChange={(e) => { choose(e.target.files[0]); e.target.value = ""; }} />
+          <svg className="dropzone-icon" viewBox="0 0 24 24" aria-hidden="true">
+            {file
+              ? <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zm0 0v5h5M9 13h6M9 17h6" />
+              : <path d="M12 16V4m0 0L7 9m5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />}
+          </svg>
+          {file ? (
+            <span className="dropzone-text">
+              <strong>{file.name}</strong>
+              <span className={errors.length && !busy ? "dropzone-bad" : "muted"}>{status || `${Math.max(1, Math.round(file.size / 1024))} KB`}</span>
+              <span className="dropzone-link">Trocar arquivo</span>
+            </span>
+          ) : (
+            <span className="dropzone-text">
+              <strong>{over ? "Solte o arquivo aqui" : mode === "boleto" ? "Arraste o PDF do boleto para cá" : "Arraste o arquivo para cá"}</strong>
+              <span className="muted">ou <span className="dropzone-link">clique para escolher</span> · {mode === "boleto" ? "PDF" : "CSV ou XLSX"}, até 5 MB</span>
+            </span>
+          )}
+        </label>
+
+        {mode === "boleto" && (
+          <div className="field-row">
+            <input style={{ flex: 1 }} inputMode="numeric" aria-label="Linha digitável" placeholder="Ou cole a linha digitável"
+              value={code} onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (code.trim()) readBoleto("code", code); } }} />
+            <button type="button" className="btn" disabled={!code.trim() || busy} onClick={() => readBoleto("code", code)}>Ler</button>
+          </div>
+        )}
+
+        {mode === "boleto" && bol && (
+          <div className="import-preview">
+            <div className="import-preview-head">
+              <strong>Boleto</strong>
+              <span className="muted boleto-code">{bol.code}</span>
+            </div>
+            <div className="form-grid boleto-form">
+              <Field label="Fornecedor / favorecido"><input maxLength={160} autoFocus value={bol.supplier}
+                onChange={(e) => setBol({ ...bol, supplier: e.target.value })} /></Field>
+              <Field label="Categoria">
+                <select value={bol.category} onChange={(e) => setBol({ ...bol, category: e.target.value })}>
+                  {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </Field>
+              <Field label="Descrição" span={2}><input required maxLength={200} value={bol.description}
+                onChange={(e) => setBol({ ...bol, description: e.target.value })} /></Field>
+              <Field label="Valor (R$)"><input type="number" step="0.01" min="0.01" required value={bol.amount}
+                onChange={(e) => setBol({ ...bol, amount: e.target.value })} /></Field>
+              <Field label="Vencimento"><input type="date" required value={bol.due_date}
+                onChange={(e) => setBol({ ...bol, due_date: e.target.value })} /></Field>
+              {!bol.due_date && <p className="dropzone-bad span-2">Este boleto não traz o vencimento no código — informe a data.</p>}
+            </div>
+          </div>
+        )}
+
+        <details className="import-help">
+          <summary>{mode === "boleto" ? "Que boleto funciona?" : "Como a planilha precisa estar?"}</summary>
+          {mode === "boleto" ? (
+            <p>O PDF do boleto como o banco ou o fornecedor envia: o valor e o vencimento são lidos da linha digitável e conferidos pelos
+              dígitos verificadores. Boleto escaneado ou foto não tem texto para ler — nesse caso, cole a linha digitável. Contas de
+              luz, água e impostos nem sempre trazem o vencimento no código.</p>
+          ) : card ? (
+            <p>A fatura exportada do banco, com uma linha por compra e a coluna <strong>Valor</strong> (Data e Descrição são opcionais).
+              Vira uma conta só com o total; o pagamento da fatura anterior é ignorado e as compras ficam nas observações.</p>
+          ) : (
+            <p>Uma linha por lançamento, com as colunas <strong>Valor</strong> e <strong>Vencimento</strong>. Opcionais: Descrição,{" "}
+              {payable ? "Fornecedor, Categoria" : "Cliente"}, Forma de pagamento, Observações e Pago em (já entra com baixa).
+              Pode ter um título acima do cabeçalho.</p>
+          )}
+        </details>
+
+        {errors.length > 0 && (
+          <div className="import-errors" role="alert">
+            <strong>Corrija a planilha e envie de novo — nada foi importado.</strong>
+            <ul>{errors.map((x) => <li key={x}>{x}</li>)}</ul>
+          </div>
+        )}
+
+        {entries.length > 0 && (
+          <div className="import-preview">
+            <div className="import-preview-head">
+              <strong>Prévia</strong>
+              <span className="muted">{entries.length} {entries.length === 1 ? "lançamento" : "lançamentos"} · <strong>{money(total)}</strong></span>
+            </div>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Vencimento</th><th>{payable ? "Fornecedor · Descrição" : "Descrição"}</th>
+                    {payable && <th>Categoria</th>}<th className="num">Valor</th><th>Situação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((x, i) => (
+                    <tr key={i}>
+                      <td>{dateBR(x.due_date)}</td>
+                      <td>
+                        <span className="cell-stack">
+                          <strong className="cell-main">{(payable && x.supplier) || x.description}</strong>
+                          {payable && x.supplier && <span className="cell-sub">{x.description}</span>}
+                        </span>
+                      </td>
+                      {payable && <td><span className="cat-tag">{x.category}</span></td>}
+                      <td className="num"><strong>{money(x.amount)}</strong></td>
+                      <td>{x.paid_at
+                        ? <span className="badge badge-paid">Paga em {dateBR(x.paid_at).slice(0, 5)}</span>
+                        : <span className="badge badge-open">Em aberto</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {items.length > 0 && (
+              <details className="import-items">
+                <summary>Ver as {items.length} {items.length === 1 ? "compra" : "compras"} da fatura</summary>
+                <table className="table">
+                  <tbody>
+                    {items.map((x, i) => (
+                      <tr key={i}>
+                        <td className="muted">{x.date ? dateBR(x.date) : "—"}</td><td>{x.description}</td>
+                        <td className="num">{money(x.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            )}
+          </div>
+        )}
+
+        <ErrorBox msg={error} />
+        <div className="actions">
+          <button type="button" className="btn" onClick={onClose}>Cancelar</button>
+          {mode === "boleto" ? (
+            <button type="button" className="btn btn-primary" onClick={saveBoleto}
+              disabled={busy || !bol || !(Number(bol.amount) > 0) || !bol.due_date || !bol.description.trim()}>Lançar boleto</button>
+          ) : (
+            <button type="button" className="btn btn-primary" disabled={busy || !entries.length || errors.length > 0} onClick={() => send(file, true)}>
+              {entries.length ? `Importar ${entries.length} ${entries.length === 1 ? "lançamento" : "lançamentos"}` : "Importar"}
+            </button>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // Colored dot + label, value, caption; `active` marks the card whose filter is on
 function Card({ label, tone, card, active, onClick }) {
   return (
@@ -252,6 +522,7 @@ export default function Finance({ kind }) {
   const [paying, setPaying] = useState(null);
   const [bulkPaying, setBulkPaying] = useState(false);
   const [editing, setEditing] = useState(null); // entry, or "new"
+  const [importing, setImporting] = useState(false);
 
   function load() {
     setError("");
@@ -287,7 +558,7 @@ export default function Finance({ kind }) {
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
-  const done = () => { setPaying(null); setBulkPaying(false); setEditing(null); load(); };
+  const done = () => { setPaying(null); setBulkPaying(false); setEditing(null); setImporting(false); load(); };
   const noun = receivable ? ["parcela", "parcelas"] : ["conta", "contas"];
 
   // Month group headers only make sense while the list is in due-date order
@@ -344,6 +615,7 @@ export default function Finance({ kind }) {
         : "Controle as contas da empresa e dê baixa no que foi pago."}>
         <PeriodPicker presets={DUE_PRESETS} value={{ start: filters.start, end: filters.end }}
           onChange={({ start, end }) => setFilters({ ...filters, start, end })} />
+        <button className="btn" onClick={() => setImporting(true)}>Importar arquivo</button>
         <button className="btn btn-primary" onClick={() => setEditing("new")}>+ Lançar conta</button>
       </RevenueHeader>
       <ErrorBox msg={error} />
@@ -414,6 +686,7 @@ export default function Finance({ kind }) {
 
       {paying && <PayModal entry={paying} onClose={() => setPaying(null)} onDone={done} />}
       {bulkPaying && <BulkPayModal entries={picked} onClose={done} onDone={done} />}
+      {importing && <ImportModal kind={kind} onClose={() => setImporting(false)} onDone={done} />}
       {editing && <EntryModal kind={kind} entry={editing === "new" ? null : editing} onClose={() => setEditing(null)} onDone={done} />}
     </div>
   );

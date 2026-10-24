@@ -529,6 +529,43 @@ section.item-group { margin-top: 0; }
   .product-form-top { grid-template-columns: 1fr; }
   .product-form-top .product-image-preview { width: 120px; }
 }
+
+/* finance: import a CSV/XLSX */
+.import { display: flex; flex-direction: column; gap: 14px; }
+.import-mode { align-self: flex-start; }
+.import-card { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
+.dropzone { display: flex; align-items: center; gap: 14px; padding: 22px 20px; border: 2px dashed var(--line); border-radius: var(--radius);
+  background: var(--surface-2); cursor: pointer; transition: border-color .15s, background .15s; }
+.dropzone:hover, .dropzone:focus-within { border-color: var(--accent); }
+.dropzone.drop-over { border-color: var(--accent); background: var(--accent-light); }
+.dropzone:not(.has-file) { flex-direction: column; justify-content: center; text-align: center; padding: 34px 20px; }
+.dropzone.has-file { border-style: solid; background: var(--surface); }
+.dropzone-icon { width: 34px; height: 34px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.dropzone-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 0.9rem; }
+.dropzone-text strong { font-size: 0.98rem; overflow-wrap: anywhere; }
+.dropzone.has-file .dropzone-text { flex: 1; }
+.dropzone-link { color: var(--accent-strong); font-weight: 600; }
+.dropzone.has-file .dropzone-link { font-size: 0.85rem; }
+.dropzone-bad { color: var(--danger); font-weight: 600; }
+.import-help { font-size: 0.88rem; color: var(--muted); }
+.import-help summary, .import-items summary { cursor: pointer; font-weight: 600; color: var(--accent-strong); width: fit-content; }
+.import-help p { margin: 8px 0 0; line-height: 1.5; }
+.import-errors { background: var(--danger-light); color: var(--danger); border-radius: var(--radius); padding: 12px 14px; font-size: 0.88rem; }
+.import-errors ul { margin: 6px 0 0; padding-left: 18px; max-height: 140px; overflow: auto; color: var(--ink); }
+.import-preview { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.import-preview-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+.import-preview .table-scroll { max-height: 300px; overflow: auto; }
+.import-preview .table { border: 0; border-radius: 0; }
+.import-preview .table th { position: sticky; top: 0; }
+.import-items { padding: 10px 14px; border-top: 1px solid var(--line); font-size: 0.88rem; }
+.import-items .table { margin-top: 8px; }
+.import-items .table td { padding: 6px 10px; }
+@media (max-width: 640px) { .import-card { grid-template-columns: 1fr; } }
+/* finance: a boleto read in "Importar arquivo" */
+.boleto-form { padding: 14px; }
+.boleto-form p { margin: 0; font-size: 0.85rem; }
+.boleto-code { font-variant-numeric: tabular-nums; font-size: 0.82rem; overflow-wrap: anywhere; }
 /* enlarged product photo; above the edit modal (z-index 100) */
 .photo-zoom { position: fixed; inset: 0; z-index: 110; background: rgba(5, 12, 26, .88); display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 12px; padding: 16px; cursor: zoom-out; }
