@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, errorMessage, fileUrl } from "../api";
 import { useAuth } from "../auth";
-import { customerFieldError, localDate, maskDocument, maskPhone, money, orderNumber, tablePrice } from "../format";
+import { customerFieldError, localDate, maskDocument, maskPhone, money, orderNumber, sortSizes, tablePrice } from "../format";
 import { Field, ErrorBox, Modal, Swatch, PhotoZoom, ConfirmDialog } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
 import { StateRegistrationField } from "../components/CustomerFormModal";
@@ -96,9 +96,13 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, quickQuant
                   <td className="qty-grid-color"><ColorLabel name={c.name} hex={c.hex} hex2={c.hex2} size={20} /></td>
                   {product.sizes.map((t) => (
                     <td key={t}>
-                      <input inputMode="numeric" className="qty-input" value={qty[`${c.id}|${t}`] || ""}
-                        readOnly={step !== 0} onClick={() => step && bump(`${c.id}|${t}`)}
-                        onChange={(e) => set(`${c.id}|${t}`, e.target.value)} placeholder="·" aria-label={`${c.name} ${t}`} />
+                      {/* tap mode uses a button: a focused (even read-only) input makes phones scroll it into view
+                          and get ready for the keyboard on every tap, so the page jumps up and down */}
+                      {step
+                        ? <button type="button" className={`qty-input qty-tap ${qty[`${c.id}|${t}`] ? "filled" : ""}`}
+                            onClick={() => bump(`${c.id}|${t}`)} aria-label={`${c.name} ${t}`}>{qty[`${c.id}|${t}`] || "·"}</button>
+                        : <input inputMode="numeric" className="qty-input" value={qty[`${c.id}|${t}`] || ""}
+                            onChange={(e) => set(`${c.id}|${t}`, e.target.value)} placeholder="·" aria-label={`${c.name} ${t}`} />}
                     </td>
                   ))}
                   <td className="qty-total">{rowTotal || ""}</td>
@@ -440,7 +444,7 @@ export default function OrderForm() {
             {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </Field>
-        <Field label="Prazo / condição de pagamento">
+        <Field label="Prazo de pagamento">
           <select required value={header.payment_terms} onChange={(e) => setHeader({ ...header, payment_terms: e.target.value })}>
             <option value="">Selecione</option>
             {PAYMENT_TERMS.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -471,7 +475,7 @@ export default function OrderForm() {
         {!Object.keys(groups).length && <p className="muted">Nenhum produto adicionado ainda.</p>}
 
         {Object.entries(groups).map(([pid, lines]) => {
-          const sizes = [...new Set(lines.map((l) => l.size))];
+          const sizes = sortSizes(new Set(lines.map((l) => l.size)));
           const colors = [...new Map(lines.map((l) => [l.color_id, l])).values()];
           const q = (c, t) => lines.find((l) => l.color_id === c && l.size === t)?.quantity;
           const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);

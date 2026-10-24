@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from .br_format import format_document, format_phone, format_state_registration
+from .models import size_key
 from .uploads import thumb_name
 
 
@@ -163,7 +164,8 @@ class ProductOut(ORM):
     @field_validator("sizes", mode="before")
     @classmethod
     def split(cls, v):
-        return [t for t in v.split(",") if t] if isinstance(v, str) else v
+        # sorted on the way out too, so products saved before the order rule show P M G GG as well
+        return sorted((t for t in v.split(",") if t), key=size_key) if isinstance(v, str) else v
 
 
 # ---------- Orders ----------

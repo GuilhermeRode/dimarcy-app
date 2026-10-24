@@ -101,6 +101,12 @@ input[type="checkbox"] { width: auto; }
 .profile-header { display: flex; align-items: center; gap: 18px; }
 .profile-avatar-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .content { padding: 32px 40px; min-width: 0; }
+/* "new version" notice: floats at the bottom, below dialogs (z-index 100), never covers a form */
+.update-banner { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 90;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; max-width: calc(100vw - 32px);
+  background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow); }
+.update-banner span { font-weight: 600; margin-right: 6px; }
+@media (max-width: 640px) { .update-banner { flex-wrap: wrap; justify-content: flex-end; } }
 /* print previews render outside the app shell (no sidebar), so they need their own page chrome */
 .standalone-page { background: var(--bg); min-height: 100vh; padding: 32px 40px; }
 @media print { .standalone-page { padding: 0; background: #fff; min-height: 0; } }
@@ -187,16 +193,12 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .switch-row small { display: block; margin-top: 2px; font-size: 0.85rem; }
 /* input.switch, not .switch: must outrank the global input / input[type="checkbox"] rules (width, padding, border) */
 input.switch { -webkit-appearance: none; appearance: none; flex: none; position: relative; box-sizing: border-box;
-  width: 50px; min-width: 50px; height: 30px; padding: 0; margin: 0; border: 0; border-radius: 999px;
+  width: 38px; min-width: 38px; height: 22px; padding: 0; margin: 0; border: 0; border-radius: 999px;
   background: #c3ccda; cursor: pointer; transition: background .2s; }
-input.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
+input.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
   background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .2s; }
 input.switch:checked { background: var(--accent); }
-input.switch:checked::after { transform: translateX(20px); }
-/* 25% smaller variant */
-input.switch.switch-sm { width: 38px; min-width: 38px; height: 22px; }
-input.switch.switch-sm::after { top: 2px; left: 2px; width: 18px; height: 18px; }
-input.switch.switch-sm:checked::after { transform: translateX(16px); }
+input.switch:checked::after { transform: translateX(16px); }
 input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
@@ -427,7 +429,11 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2
 .qty-input:not(:placeholder-shown) { border-color: var(--accent); background: var(--accent-light); }
 .qty-total { text-align: center; font-weight: 700; min-width: 44px; }
 .qty-step { margin-bottom: 8px; }
-.qty-input[readonly] { cursor: pointer; user-select: none; }
+/* tap mode cell: looks like the input; quick repeated taps must not trigger the browser's double-tap zoom */
+.qty-grid { touch-action: manipulation; }
+.qty-tap { font: inherit; font-size: 16px; font-weight: 600; color: var(--muted); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 7px; min-height: 42px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+.qty-tap.filled { color: var(--ink); border-color: var(--accent); background: var(--accent-light); }
 .qty-grid-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; flex-wrap: wrap; gap: 10px; font-weight: 600; }
 
 .item-group { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }

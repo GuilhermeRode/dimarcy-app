@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
-import { dateBR, money, orderNumber, STATUS } from "../format";
+import { dateBR, money, orderNumber, sortSizes, STATUS } from "../format";
 import { ErrorBox, Status, Swatch, useConfirm } from "../components/ui";
 import { EntryStatus, PayModal } from "./Finance";
 
@@ -98,7 +98,7 @@ export default function OrderDetail() {
       </section>
 
       {groups.map((lines) => {
-        const sizes = [...new Set(lines.map((l) => l.size))];
+        const sizes = sortSizes(new Set(lines.map((l) => l.size)));
         const colors = [...new Map(lines.map((l) => [l.color_id, l])).values()];
         const q = (c, t) => lines.find((l) => l.color_id === c && l.size === t)?.quantity;
         return (

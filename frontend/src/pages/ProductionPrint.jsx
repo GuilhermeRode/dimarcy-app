@@ -1,21 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
-import { dateBR, orderNumber } from "../format";
+import { dateBR, orderNumber, sortSizes } from "../format";
 import { ErrorBox } from "../components/ui";
 import logoFull from "../assets/logo-full.png";
-
-const SIZE_ORDER = ["U", "PP", "P", "M", "G", "GG", "XG"];
-const sizeRank = (t) => (SIZE_ORDER.includes(t) ? SIZE_ORDER.indexOf(t) : 99);
 
 // One compact line per product: colors in sequence, each with its size:qty pairs —
 // e.g. "Bordô (P:2 M:3 G:1)  •  Marinho (P:1 M:2)" — so many refs fit on a single page.
 function colorSequence(lines) {
   const byColor = [...new Map(lines.map((l) => [l.color_id, l])).values()];
+  const order = sortSizes(new Set(lines.map((l) => l.size)));
   return byColor.map((c) => {
     const sizes = lines
       .filter((l) => l.color_id === c.color_id)
-      .sort((a, b) => sizeRank(a.size) - sizeRank(b.size))
+      .sort((a, b) => order.indexOf(a.size) - order.indexOf(b.size))
       .map((l) => `${l.size}:${l.quantity}`)
       .join(" ");
     return `${c.color_name} (${sizes})`;

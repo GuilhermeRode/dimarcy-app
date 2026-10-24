@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
 import { Field, ErrorBox, Modal, Swatch, EmptyState, swatchBg, useConfirm } from "../components/ui";
+import { normalize } from "../format";
 
 // Picks readable text (light or dark) for a given background color.
 function textOn(hex) {
@@ -16,10 +17,12 @@ export default function Colors() {
   const [products, setProducts] = useState([]);
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   const load = () => api.get("/colors").then((r) => setList(r.data));
   useEffect(() => { load(); api.get("/products").then((r) => setProducts(r.data)); }, []);
 
+  const shown = list.filter((c) => normalize(c.name).includes(normalize(search)));
   const usageCount = (colorId) => products.filter((p) => p.colors.some((c) => c.id === colorId)).length;
 
   async function save(e) {
@@ -41,11 +44,14 @@ export default function Colors() {
     <div className="page">
       <header className="page-header">
         <h1>Cores</h1>
-        <button className="btn btn-primary" onClick={() => { setError(""); setForm({ name: "", hex: "#cccccc" }); }}>Cadastrar cor</button>
+        <div className="header-search-group">
+          <input className="header-search" type="search" placeholder="Buscar cor pelo nome ou código" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <button className="btn btn-primary" onClick={() => { setError(""); setForm({ name: "", hex: "#cccccc" }); }}>Cadastrar cor</button>
+        </div>
       </header>
-      {!list.length ? <EmptyState text="Nenhuma cor cadastrada ainda." /> : (
+      {!list.length ? <EmptyState text="Nenhuma cor cadastrada ainda." /> : !shown.length ? <EmptyState text="Nenhuma cor encontrada." /> : (
         <div className="color-grid">
-          {list.map((c) => {
+          {shown.map((c) => {
             const uses = usageCount(c.id);
             const fg = textOn(c.hex);
             return (

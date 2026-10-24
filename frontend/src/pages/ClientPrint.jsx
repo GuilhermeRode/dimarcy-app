@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
-import { dateBR, localDate, money, STATUS } from "../format";
+import { dateBR, localDate, money, sortSizes, STATUS } from "../format";
 import { ErrorBox, Swatch } from "../components/ui";
 import logoFull from "../assets/logo-full.png";
 
@@ -58,7 +58,7 @@ export default function ClientPrint() {
       </section>
 
       {groups.map((lines) => {
-        const sizes = [...new Set(lines.map((l) => l.size))];
+        const sizes = sortSizes(new Set(lines.map((l) => l.size)));
         const colors = [...new Map(lines.map((l) => [l.color_id, l])).values()];
         const q = (c, t) => lines.find((l) => l.color_id === c && l.size === t)?.quantity;
         return (
