@@ -35,6 +35,8 @@ export default function CustomerPanel({ customer: c, isAdmin, onClose, onEdit })
         {stats.map(([l, v]) => <div key={l}><span>{l}</span><strong>{v}</strong></div>)}
       </div>
       <dl className="customer-panel-info">
+        <dt>CPF/CNPJ</dt><dd>{c.document || "—"}</dd>
+        {c.state_registration && <><dt>Inscrição estadual</dt><dd>{c.state_registration}</dd></>}
         {isAdmin && <><dt>Vendedor</dt><dd>{c.owner_name || "Sem vendedor"}</dd></>}
         <dt>Cores mais compradas</dt><dd>{c.colors.slice(0, 3).join(", ") || "—"}</dd>
       </dl>

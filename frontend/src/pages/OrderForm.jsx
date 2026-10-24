@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { customerFieldError, localDate, maskDocument, maskPhone, money, orderNumber, tablePrice } from "../format";
 import { Field, ErrorBox, Modal, Swatch, PhotoZoom, ConfirmDialog } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
+import { StateRegistrationField } from "../components/CustomerFormModal";
 
 // "09/37 - Nuvem/Marrom Terra" -> the card number stands out, the name goes small underneath,
 // so long two-tone names don't push the size columns off screen
@@ -21,7 +22,7 @@ function ColorLabel({ name, hex, hex2, size }) {
 const key = (i) => `${i.color_id}|${i.size}`;
 const customerLabel = (c) => `${c.name}${c.city ? ` — ${c.city}/${c.state || ""}` : ""}`;
 
-const EMPTY_CUSTOMER = { name: "", document: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
+const EMPTY_CUSTOMER = { name: "", document: "", state_registration: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
 const PAYMENT_METHODS = ["Dinheiro", "Pix", "Boleto", "Cheque"];
 const PAYMENT_TERMS = ["À vista", "30/60", "30/60/90", "30/60/90/120", "30/60/90/120/150", "Quinzenal"];
 
@@ -144,8 +145,9 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
     <Modal title={editing ? `Editar cliente — ${customer.name}` : "Cadastrar cliente"} onClose={onClose} wide>
       <form onSubmit={save} className="form-grid">
         <Field label="Nome / razão social" span={2}><input required autoFocus {...field("name")} /></Field>
-        <Field label="CPF/CNPJ" span={2}><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...field("document")}
+        <Field label="CPF/CNPJ"><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...field("document")}
           onChange={(e) => setF({ ...f, document: maskDocument(e.target.value) })} /></Field>
+        <StateRegistrationField value={f.state_registration} uf={f.state} onChange={(v) => setF({ ...f, state_registration: v })} />
         {isAdmin && (
           <Field label="Vendedor responsável" span={2}>
             <select required {...field("owner_id")}>

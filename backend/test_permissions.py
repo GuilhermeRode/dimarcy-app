@@ -16,7 +16,7 @@ from app.main import app  # noqa: E402
 # a customer needs every field but the notes; no city lookup or DNS check over the network
 from app.routers import customers as _customers_router  # noqa: E402
 _customers_router.geocode_and_cache_background = lambda *a: None
-FULL = {"phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
+FULL = {"state_registration": "ISENTO", "phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
 
 TODAY = date.today()
 

@@ -69,6 +69,7 @@ class Customer(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(160), index=True)
     document: Mapped[str | None] = mapped_column(String(20))  # CPF/CNPJ
+    state_registration: Mapped[str | None] = mapped_column(String(30))  # inscrição estadual (IE)
     phone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str | None] = mapped_column(String(160))
     city: Mapped[str | None] = mapped_column(String(100))

@@ -68,11 +68,44 @@ export function maskPhone(v) {
   const k = d.length > 10 ? 5 : 4;
   return `(${d.slice(0, 2)}` + (d.length > 2 ? `) ${d.slice(2, 2 + k)}` : "") + (d.length > 2 + k ? `-${d.slice(2 + k)}` : "");
 }
+// Inscrição estadual mask per state; each 0 is a digit, some states have two lengths.
+// Keep in sync with IE_MASKS in backend/app/br_format.py.
+export const IE_MASKS = {
+  AC: ["00.000.000/000-00"], AL: ["000000000"], AM: ["00.000.000-0"], AP: ["000000000"],
+  BA: ["000000-00", "0000000-00"], CE: ["00000000-0"], DF: ["00000000000-00"], ES: ["000.000.00-0"],
+  GO: ["00.000.000-0"], MA: ["000000000"], MG: ["000.000.000/0000"], MS: ["00.000.000-0"],
+  MT: ["0000000000-0"], PA: ["00-000000-0"], PB: ["00000000-0"], PE: ["0000000-00", "00.0.000.0000000-0"],
+  PI: ["000000000"], PR: ["00000000-00"], RJ: ["00.000.00-0"], RN: ["00.000.000-0", "00.0.000.000-0"],
+  RO: ["0000000000000-0"], RR: ["00000000-0"], RS: ["000/0000000"], SC: ["000.000.000"],
+  SE: ["00000000-0"], SP: ["000.000.000.000"], TO: ["000000000", "00000000000"],
+};
+const ieMasks = (uf) => IE_MASKS[(uf || "").toUpperCase()] || [];
+const zeros = (m) => m.replace(/[^0]/g, "").length;
+// Formats as it's typed, capped at the state's longest IE; the shorter mask is used until a digit overflows it.
+// Without a known UF: digits only, up to 14.
+export function maskStateRegistration(v, uf) {
+  const masks = ieMasks(uf);
+  if (!masks.length) return digits(v).slice(0, 14);
+  const d = digits(v).slice(0, Math.max(...masks.map(zeros)));
+  const mask = masks.find((m) => zeros(m) >= d.length);
+  let out = "", i = 0;
+  for (const ch of mask) {
+    if (i === d.length) break;
+    out += ch === "0" ? d[i++] : ch;
+  }
+  return out;
+}
+export const stateRegistrationHint = (uf) => ieMasks(uf).join(" ou ");
+
 // Only checks fields the user changed, so an old record with a free-text value can still be edited.
 export function customerFieldError(form, before = {}) {
   const changed = (k) => (form[k] || "") !== (before[k] || "");
   if (changed("document") && ![11, 14].includes(digits(form.document).length)) return "CPF/CNPJ incompleto: informe 11 dígitos (CPF) ou 14 (CNPJ).";
   if (changed("phone") && form.phone && ![10, 11].includes(digits(form.phone).length)) return "Telefone incompleto: informe o DDD e o número.";
+  const ie = form.state_registration, masks = ieMasks(form.state);
+  if ((changed("state_registration") || changed("state")) && ie && ie !== "ISENTO" && masks.length
+      && !masks.map(zeros).includes(digits(ie).length))
+    return `Inscrição estadual incompleta para ${form.state.toUpperCase()}: use o formato ${stateRegistrationHint(form.state)}.`;
   return "";
 }
 

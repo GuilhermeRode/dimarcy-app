@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, fileUrl, screenCache } from "../api";
 import { useAuth } from "../auth";
-import { money, tablePrice, DEFAULT_SIZES } from "../format";
+import { money, tablePrice, DEFAULT_SIZES, normalize } from "../format";
 import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom, useConfirm } from "../components/ui";
 import { useSort } from "../components/useSort";
 
@@ -25,6 +25,9 @@ export default function Products() {
   const [imageFile, setImageFile] = useState(null);
   const [error, setError] = useState("");
   const [newSize, setNewSize] = useState("");
+  const [colorSearch, setColorSearch] = useState("");
+  const [colorKind, setColorKind] = useState("all"); // all | solid | combo
+  const [newColor, setNewColor] = useState(null); // { name, hex, hex2 } while creating a color from the product form
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // { src, caption } of the photo shown enlarged
   const [dropTarget, setDropTarget] = useState(null); // product id (or "form") a photo is being dragged over
@@ -57,11 +60,30 @@ export default function Products() {
   function open(p) {
     setError("");
     setImageFile(null);
+    setColorSearch("");
+    setNewColor(null);
+    setNewSize("");
     setForm(p ? { ...p, color_ids: p.colors.map((c) => c.id), seller_ids: p.seller_ids || [] } : EMPTY);
   }
 
   const toggle = (field, v) =>
     setForm((f) => ({ ...f, [field]: f[field].includes(v) ? f[field].filter((x) => x !== v) : [...f[field], v] }));
+
+  function addSize() {
+    if (newSize && !form.sizes.includes(newSize)) setForm((f) => ({ ...f, sizes: [...f.sizes, newSize] }));
+    setNewSize("");
+  }
+
+  async function createColor() {
+    if (!newColor?.name.trim()) return;
+    try {
+      const { data } = await api.post("/colors", { ...newColor, name: newColor.name.trim() });
+      setColors((cs) => [...cs, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm((f) => ({ ...f, color_ids: [...f.color_ids, data.id] }));
+      setNewColor(null);
+      setColorSearch("");
+    } catch (err) { setError(errorMessage(err)); }
+  }
 
   async function save(e) {
     e.preventDefault();
@@ -118,6 +140,12 @@ export default function Products() {
     price: (p) => p.price,
   });
 
+  const pickedColors = colors.filter((c) => form?.color_ids.includes(c.id));
+  // solid colors first, then two-tone combos
+  const shownColors = colors
+    .filter((c) => colorKind === "all" || (colorKind === "combo") === !!c.hex2)
+    .filter((c) => normalize(c.name).includes(normalize(colorSearch)))
+    .sort((a, b) => !!a.hex2 - !!b.hex2);
   const sizeOptions =[...new Set([...DEFAULT_SIZES, "XG", ...(form?.sizes || [])])];
   // the small version for the preview box; the full-size photo for zoom
   const fileBlob = imageFile ? URL.createObjectURL(imageFile) : null;
@@ -177,9 +205,8 @@ export default function Products() {
 
       {form && (
         <Modal title={form.id ? `Editar ${form.reference}` : "Cadastrar produto"} onClose={() => setForm(null)} wide>
-          <form onSubmit={save} className="form-grid">
-            <div className="field span-2">
-              <span>Foto do produto</span>
+          <form onSubmit={save} className="product-form">
+            <div className="product-form-top">
               <div className={`product-image-field ${dropTarget === "form" ? "drop-over" : ""}`}
                 {...dragProps("form", (e) => {
                   e.preventDefault();
@@ -192,9 +219,8 @@ export default function Products() {
                       onClick={() => setZoom({ src: fullUrl, caption: form.reference ? `${form.reference} · ${form.description}` : "" })} />
                   : <div className="product-image-preview product-image-empty" aria-hidden="true">🧶</div>}
                 <div className="product-image-actions">
-                  <span className="muted">Arraste a foto para cá ou</span>
                   <label className="btn btn-light">
-                    Escolher arquivo
+                    {previewUrl ? "Trocar foto" : "Escolher foto"}
                     <input type="file" accept="image/*,.jpg,.jpeg,.jfif,.png,.webp" hidden
                       onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
                   </label>
@@ -206,49 +232,101 @@ export default function Products() {
                       }
                       setForm((f) => ({ ...f, image_url: null }));
                     }}>
-                      Remover foto
+                      Remover
                     </button>
                   )}
+                  <small className="muted">ou arraste a foto para cá</small>
                 </div>
+              </div>
+
+              <div className="form-grid">
+                <Field label="Referência"><input required value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} /></Field>
+                <Field label="Preço (R$)"><input type="number" step="0.01" min="0" required value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></Field>
+                <Field label="Descrição" span={2}><input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+                <Field label="Coleção" span={2}><input value={form.collection || ""} onChange={(e) => setForm({ ...form, collection: e.target.value })} placeholder="Ex.: Inverno 2027" /></Field>
               </div>
             </div>
 
-            <Field label="Referência"><input required value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} /></Field>
-            <Field label="Preço (R$)"><input type="number" step="0.01" min="0" required value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></Field>
-            <Field label="Descrição" span={2}><input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-            <Field label="Coleção" span={2}><input value={form.collection || ""} onChange={(e) => setForm({ ...form, collection: e.target.value })} placeholder="Ex.: Inverno 2027" /></Field>
-
-            <div className="field span-2">
-              <span>Tamanhos</span>
+            <section className="form-section">
+              <h3>Tamanhos <small className="muted">{form.sizes.length ? form.sizes.join(" · ") : "nenhum marcado"}</small></h3>
               <div className="chips">
                 {sizeOptions.map((t) => (
                   <button type="button" key={t} className={`chip ${form.sizes.includes(t) ? "on" : ""}`} onClick={() => toggle("sizes", t)}>{t}</button>
                 ))}
-                <input className="chip-input" placeholder="Outro" value={newSize} maxLength={5}
-                  onChange={(e) => setNewSize(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => { if (e.key === "Enter" && newSize) { e.preventDefault(); if (!form.sizes.includes(newSize)) toggle("sizes", newSize); setNewSize(""); } }} />
+                <input className="chip-input" placeholder="Novo" value={newSize} maxLength={5} aria-label="Novo tamanho"
+                  onChange={(e) => setNewSize(e.target.value.toUpperCase().trim())}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSize(); } }} />
+                <button type="button" className="chip" onClick={addSize} disabled={!newSize}>+ Adicionar tamanho</button>
               </div>
-            </div>
+            </section>
 
-            {!colors.length && <p className="muted span-2">Cadastre as cores primeiro na tela Cores.</p>}
-            {[["Cores disponíveis", colors.filter((c) => !c.hex2)], ["Combinações (listradas / bicolor)", colors.filter((c) => c.hex2)]]
-              .filter(([, group]) => group.length)
-              .map(([label, group]) => (
-                <div className="field span-2" key={label}>
-                  <span>{label}</span>
-                  <div className="chips">
-                    {group.map((c) => (
-                      <button type="button" key={c.id} className={`chip ${form.color_ids.includes(c.id) ? "on" : ""}`} onClick={() => toggle("color_ids", c.id)}>
-                        <Swatch hex={c.hex} hex2={c.hex2} /> {c.name}
-                      </button>
+            <section className="form-section">
+              <h3>Cores <small className="muted">{form.color_ids.length ? `${form.color_ids.length} selecionada${form.color_ids.length > 1 ? "s" : ""}` : "nenhuma selecionada"}</small></h3>
+              {pickedColors.length > 0 && (
+                <div className="chips">
+                  {pickedColors.map((c) => (
+                    <span key={c.id} className="chip on">
+                      <Swatch hex={c.hex} hex2={c.hex2} size={16} /> {c.name}
+                      <button type="button" className="chip-remove" aria-label={`Remover ${c.name}`} onClick={() => toggle("color_ids", c.id)}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="color-picker">
+                <div className="color-picker-bar">
+                  <div className="segmented">
+                    {[["all", "Todas"], ["solid", "Lisas"], ["combo", "Combinações"]].map(([k, label]) => (
+                      <button type="button" key={k} className={colorKind === k ? "on" : ""} onClick={() => setColorKind(k)}>{label}</button>
                     ))}
                   </div>
+                  <input type="search" placeholder="Buscar cor pelo nome ou código" value={colorSearch} onChange={(e) => setColorSearch(e.target.value)} />
+                  {shownColors.length > 0 && (
+                    <button type="button" className="btn btn-light" onClick={() => setForm((f) => ({ ...f, color_ids: [...new Set([...f.color_ids, ...shownColors.map((c) => c.id)])] }))}>
+                      Marcar todas
+                    </button>
+                  )}
+                  {form.color_ids.length > 0 && <button type="button" className="btn btn-light" onClick={() => setForm((f) => ({ ...f, color_ids: [] }))}>Limpar</button>}
                 </div>
-              ))}
+                <div className="color-options">
+                  {shownColors.map((c) => {
+                    const on = form.color_ids.includes(c.id);
+                    return (
+                      <button type="button" key={c.id} className={`color-option ${on ? "on" : ""}`} aria-pressed={on} onClick={() => toggle("color_ids", c.id)}>
+                        <Swatch hex={c.hex} hex2={c.hex2} size={22} />
+                        <span>{c.name}</span>
+                        {on && <span className="color-option-check" aria-hidden="true">✓</span>}
+                      </button>
+                    );
+                  })}
+                  {!shownColors.length && <p className="muted">{colors.length ? "Nenhuma cor encontrada." : "Nenhuma cor cadastrada ainda."}</p>}
+                </div>
+                {newColor ? (
+                  <div className="color-new">
+                    <input type="color" value={newColor.hex} onChange={(e) => setNewColor({ ...newColor, hex: e.target.value })} aria-label="Cor" />
+                    {newColor.hex2 != null && <input type="color" value={newColor.hex2} onChange={(e) => setNewColor({ ...newColor, hex2: e.target.value })} aria-label="Segunda cor" />}
+                    <input placeholder="Nome da cor (ex.: 09 Bordô)" value={newColor.name} autoFocus
+                      onChange={(e) => setNewColor({ ...newColor, name: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createColor(); } if (e.key === "Escape") setNewColor(null); }} />
+                    <label className="check"><input type="checkbox" checked={newColor.hex2 != null}
+                      onChange={(e) => setNewColor({ ...newColor, hex2: e.target.checked ? "#ffffff" : null })} /> Bicolor</label>
+                    <button type="button" className="btn btn-primary" onClick={createColor} disabled={!newColor.name.trim()}>Criar e marcar</button>
+                    <button type="button" className="btn btn-light" onClick={() => setNewColor(null)}>Cancelar</button>
+                  </div>
+                ) : (
+                  <button type="button" className="btn btn-light color-new-btn" onClick={() => setNewColor({ name: colorSearch.trim(), hex: "#cccccc", hex2: null })}>
+                    + Nova cor{colorSearch.trim() && ` “${colorSearch.trim()}”`}
+                  </button>
+                )}
+              </div>
+            </section>
 
             {sellers.length > 0 && (
-              <div className="field span-2">
-                <span>Disponível para</span>
+              <details className="form-section" open={form.seller_ids.length > 0}>
+                <summary>
+                  <h3>Disponível para <small className="muted">
+                    {form.seller_ids.length ? `${form.seller_ids.length} vendedor${form.seller_ids.length > 1 ? "es" : ""}` : "todos os vendedores"}
+                  </small></h3>
+                </summary>
                 <div className="chips">
                   {/* inactive users only if already picked, so they can still be unchecked */}
                   {sellers.filter((u) => u.active || form.seller_ids.includes(u.id)).map((u) => (
@@ -259,15 +337,15 @@ export default function Products() {
                 <small className="muted">
                   {form.seller_ids.length ? "Só quem está marcado pode vender este produto." : "Nenhum marcado: todos podem vender."}
                 </small>
-              </div>
+              </details>
             )}
 
-            <label className="check span-2">
-              <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
-              Disponível para venda
-            </label>
-            <div className="span-2"><ErrorBox msg={error} /></div>
-            <div className="actions span-2">
+            <ErrorBox msg={error} />
+            <div className="actions product-form-footer">
+              <label className="check">
+                <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
+                Disponível para venda
+              </label>
               {form.id && <button type="button" className="btn danger" onClick={remove}>Excluir</button>}
               <button className="btn btn-primary" disabled={uploading}>{uploading ? "Salvando..." : "Salvar produto"}</button>
             </div>
