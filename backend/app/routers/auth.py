@@ -147,6 +147,8 @@ def update_me(data: ProfileIn, db: Session = Depends(get_db), user: User = Depen
         user.password_hash = hash_password(data.new_password)
     if data.theme in THEMES:
         user.theme = data.theme
+    if data.quick_quantity is not None:
+        user.quick_quantity = data.quick_quantity
     db.commit()
     db.refresh(user)
     return user

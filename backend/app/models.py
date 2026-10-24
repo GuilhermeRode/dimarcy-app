@@ -10,6 +10,17 @@ from .database import Base
 ORDER_STATUSES = ["quote", "confirmed", "in_production", "shipped", "delivered", "canceled"]
 SALE_STATUSES = ["confirmed", "in_production", "shipped", "delivered"]  # count as revenue
 LATE_STATUSES = ["confirmed", "in_production"]  # past delivery_date in these = late
+SIZE_ORDER = ["U", "PP", "P", "M", "G", "GG", "XG", "XGG", "EG", "EGG"]  # same list as frontend/src/format.js
+
+
+def size_key(size: str):
+    """Sort key: known sizes in SIZE_ORDER, then numbers (36, 38...), then anything else alphabetically."""
+    s = size.strip().upper()
+    if s in SIZE_ORDER:
+        return (0, SIZE_ORDER.index(s), "")
+    return (1, int(s), "") if s.isdigit() else (2, 0, s)
+
+
 PRICE_TABLES = ["wholesale", "retail"]  # wholesale = registered price; retail = + AppSettings.retail_markup_percent
 ENTRY_KINDS = ["receivable", "payable"]
 # Business content, so in Portuguese; a payable's category must be one of these
@@ -62,6 +73,7 @@ class User(Base):
     annual_goal: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)  # NULL/0 = no goal
     price_table: Mapped[str] = mapped_column(String(10), default="wholesale",
                                              server_default="wholesale")  # wholesale | retail | both
+    quick_quantity: Mapped[bool] = mapped_column(Boolean, default=True)  # +1/+2 taps in the order grid (Meu perfil)
     reset_token_hash: Mapped[str | None] = mapped_column(String(64))  # sha256 hex of the forgot-password token
     reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
 
@@ -71,6 +83,7 @@ class Customer(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(160), index=True)
     document: Mapped[str | None] = mapped_column(String(20))  # CPF/CNPJ
+    state_registration: Mapped[str | None] = mapped_column(String(30))  # inscrição estadual (IE)
     phone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str | None] = mapped_column(String(160))
     city: Mapped[str | None] = mapped_column(String(100))
@@ -130,6 +143,7 @@ class Order(Base):
                                              server_default="wholesale")  # see PRICE_TABLES
     discount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     notes: Mapped[str | None] = mapped_column(Text)
+    notify_customer: Mapped[bool] = mapped_column(Boolean, default=True)  # off = no e-mails to the customer
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     customer: Mapped[Customer] = relationship(back_populates="orders")

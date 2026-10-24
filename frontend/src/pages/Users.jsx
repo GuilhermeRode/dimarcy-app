@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../api";
-import { Field, ErrorBox, Modal } from "../components/ui";
+import { Field, ErrorBox, Modal, PasswordInput } from "../components/ui";
 import { useSort } from "../components/useSort";
 import { normalize } from "../format";
 
@@ -141,7 +141,7 @@ export default function Users() {
             <Field label="Nome" span={2}><input required {...f("name")} /></Field>
             <Field label="E-mail" span={2}><input type="email" required {...f("email")} /></Field>
             <Field label={form.id ? "Nova senha (deixe em branco para manter)" : "Senha"} span={2}>
-              <input type="password" minLength={10} required={!form.id} {...f("password")} />
+              <PasswordInput autoComplete="new-password" minLength={10} required={!form.id} {...f("password")} />
             </Field>
             <Field label="Perfil">
               <select {...f("role")}><option value="seller">Vendedor</option><option value="admin">Administrador</option></select>

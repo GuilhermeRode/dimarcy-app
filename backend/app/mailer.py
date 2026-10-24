@@ -14,13 +14,12 @@ from .order_pdf import build_order_pdf
 
 RESEND_URL = "https://api.resend.com/emails"
 
-# Fixed business inboxes that must be copied on every new order — not
-# environment-specific, so no .env entry for these.
-ORDER_CREATED_RECIPIENTS = ["dimarcypedidos@gmail.com", "di_marcy@hotmail.com"]
-
+# The business inbox: copied on every order e-mail (with the seller; the customer gets
+# a separate one) and where replies go. Not environment-specific, so no .env entry.
 # Resend requires "from" on a domain verified with them (gmail.com can't be
-# verified), so replies are routed back to the real inbox via Reply-To.
-REPLY_TO = "dimarcypedidos@gmail.com"
+# verified), so replies are routed back to this inbox via Reply-To.
+TEAM_INBOX = "dimarcypedidos@gmail.com"
+REPLY_TO = TEAM_INBOX
 
 # Brand palette, matching frontend/src/styles.css (:root custom properties) —
 # email clients don't support CSS variables, so the values are copied in here.
@@ -142,7 +141,7 @@ def _steps_html(status: str) -> str:
             f'<tr>{"".join(cells)}</tr></table>')
 
 
-def _order_body(order, heading: str) -> str:
+def _order_body(order, heading: str, link: bool = True) -> str:
     return (
         f"{heading}\n\n"
         f"Cliente: {order.customer.name}\n"
@@ -151,11 +150,11 @@ def _order_body(order, heading: str) -> str:
         f"Peças: {order.pieces}\n"
         f"Total: R$ {_brl(order.total)}\n\n"
         f"O pedido completo segue em PDF anexo.\n"
-        f"Ver pedido: {_order_url(order)}\n"
+        + (f"Ver pedido: {_order_url(order)}\n" if link else "")
     )
 
 
-def _order_html(order, badge: str, badge_color: str, title: str, intro_html: str) -> str:
+def _order_html(order, badge: str, badge_color: str, title: str, intro_html: str, button: bool = True) -> str:
     def field(label, value):
         return (f'<td width="50%" style="padding-bottom:16px;vertical-align:top;">'
                 f'<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:{MUTED};">{label}</div>'
@@ -175,7 +174,7 @@ def _order_html(order, badge: str, badge_color: str, title: str, intro_html: str
         </table>
       </div>
       <p style="margin:12px 0 0;font-size:13px;color:{MUTED};">O pedido completo segue em PDF anexo.</p>
-      <div style="padding-top:28px;">{_button(_order_url(order), "Ver pedido")}</div>""")
+      {f'<div style="padding-top:28px;">{_button(_order_url(order), "Ver pedido")}</div>' if button else ""}""")
 
 
 def send_password_reset_email(to_email: str, reset_url: str) -> bool:
@@ -205,32 +204,60 @@ def _with_seller(recipients: list[str], order) -> list[str]:
     return list(dict.fromkeys([*recipients, *([order.seller.email] if order.seller.email else [])]))
 
 
-def send_order_created_emails(order) -> None:
-    to = _with_seller(ORDER_CREATED_RECIPIENTS, order)
-    subject = f"Pedido #{order.id:05d} criado — {order.customer.name}"
-    heading = f"Um novo pedido para {order.customer.name} foi criado por {order.seller.name} em {_date_br(order.date)}."
-    intro = (f"Um novo pedido para <strong>{html.escape(order.customer.name)}</strong> foi criado por "
-             f"{html.escape(order.seller.name)} em {_date_br(order.date)}.")
-    body_html = _order_html(order, "Novo pedido", ACCENT_STRONG, f"Pedido #{order.id:05d} recebido", intro)
+def _notify(order, kind: str, to: list[str], subject: str, heading: str, intro: str, badge: str, color: str,
+            title: str, button: bool = True) -> None:
     try:
-        if _send(subject, _order_body(order, heading), body_html, to, _pdf_attachment(order)):
-            print(f"[mailer] Order-created notification sent to {to} for order #{order.id}.")
+        if _send(subject, _order_body(order, heading, button), _order_html(order, badge, color, title, intro, button),
+                 to, _pdf_attachment(order)):
+            print(f"[mailer] {kind} e-mail sent to {to} for order #{order.id}.")
         else:
-            print(f"[mailer] Resend not configured — skipped order-created notification for order #{order.id}.")
-    except Exception as e:  # never let a mail failure break the order creation
-        print(f"[mailer] Failed to send order-created notification for order #{order.id}: {e}")
+            print(f"[mailer] Resend not configured — skipped {kind} e-mail for order #{order.id}.")
+    except Exception as e:  # never let a mail failure break the order save
+        print(f"[mailer] Failed to send {kind} e-mail for order #{order.id}: {e}")
+
+
+def _notify_customer(order, kind: str, subject: str, message: str, badge: str, color: str, title: str) -> None:
+    """Separate e-mail so the customer doesn't see internal addresses; no app link (customers can't log in).
+    Skipped when the order was saved with "Enviar e-mail ao cliente" off."""
+    to = (order.customer.email or "").strip()
+    if not to or not order.notify_customer:
+        return
+    name = order.customer.name
+    _notify(order, f"{kind} (customer)", [to], f"{subject} — Di Marcy", f"Olá, {name}! {message}",
+            f"Olá, <strong>{html.escape(name)}</strong>! {html.escape(message)}", badge, color, title, button=False)
+
+
+def send_order_created_emails(order) -> None:
+    n = f"#{order.id:05d}"
+    name, seller, day = order.customer.name, order.seller.name, _date_br(order.date)
+    heading = f"Um novo pedido para {name} foi criado por {seller} em {day}."
+    intro = f"Um novo pedido para <strong>{html.escape(name)}</strong> foi criado por {html.escape(seller)} em {day}."
+    _notify(order, "Order-created", _with_seller([TEAM_INBOX], order), f"Pedido {n} criado — {name}",
+            heading, intro, "Novo pedido", ACCENT_STRONG, f"Pedido {n} recebido")
+    _notify_customer(order, "Order-created", f"Recebemos seu pedido {n}",
+                     f"Recebemos seu pedido feito com {seller} em {day}. Obrigado pela preferência!",
+                     "Pedido recebido", ACCENT_STRONG, f"Pedido {n}")
+
+
+def send_order_updated_emails(order) -> None:
+    n = f"#{order.id:05d}"
+    name = order.customer.name
+    heading = f"O pedido de {name} foi alterado. Segue a versão atualizada."
+    intro = f"O pedido de <strong>{html.escape(name)}</strong> foi alterado. Segue a versão atualizada."
+    _notify(order, "Order-updated", _with_seller([TEAM_INBOX], order), f"Pedido {n} alterado — {name}",
+            heading, intro, "Pedido alterado", ACCENT_STRONG, f"Pedido {n} alterado")
+    _notify_customer(order, "Order-updated", f"Seu pedido {n} foi atualizado",
+                     "Seu pedido foi atualizado. A versão mais recente segue em PDF anexo.",
+                     "Pedido atualizado", ACCENT_STRONG, f"Pedido {n} atualizado")
 
 
 def send_order_delivered_email(order) -> None:
-    to = _with_seller([settings.notify_email or settings.admin_email], order)
-    subject = f"Pedido #{order.id:05d} entregue — {order.customer.name}"
-    heading = f"O pedido de {order.customer.name} foi marcado como entregue."
-    intro = f"O pedido de <strong>{html.escape(order.customer.name)}</strong> foi marcado como entregue."
-    body_html = _order_html(order, "Pedido entregue", DELIVERED_COLOR, f"Pedido #{order.id:05d} entregue", intro)
-    try:
-        if _send(subject, _order_body(order, heading), body_html, to, _pdf_attachment(order)):
-            print(f"[mailer] Delivery notification sent to {to} for order #{order.id}.")
-        else:
-            print(f"[mailer] Resend not configured — skipped delivery notification for order #{order.id}.")
-    except Exception as e:  # never let a mail failure break the order update
-        print(f"[mailer] Failed to send delivery notification for order #{order.id}: {e}")
+    n = f"#{order.id:05d}"
+    name = order.customer.name
+    heading = f"O pedido de {name} foi marcado como entregue."
+    intro = f"O pedido de <strong>{html.escape(name)}</strong> foi marcado como entregue."
+    _notify(order, "Delivery", _with_seller([TEAM_INBOX], order),
+            f"Pedido {n} entregue — {name}", heading, intro, "Pedido entregue", DELIVERED_COLOR, f"Pedido {n} entregue")
+    _notify_customer(order, "Delivery", f"Seu pedido {n} foi entregue",
+                     "Seu pedido foi entregue. Obrigado pela preferência!",
+                     "Pedido entregue", DELIVERED_COLOR, f"Pedido {n} entregue")

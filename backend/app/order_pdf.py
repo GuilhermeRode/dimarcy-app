@@ -6,6 +6,8 @@ from pathlib import Path
 
 from fpdf import FPDF
 
+from .models import size_key
+
 LOGO = Path(__file__).parent / "assets" / "logo-full.png"
 NAVY = (13, 42, 82)
 MUTED = (92, 108, 138)
@@ -87,7 +89,7 @@ def build_order_pdf(order) -> bytes:
     pdf.set_draw_color(*LINE)
     for lines in _groups(order):
         p = lines[0].product
-        sizes = list(dict.fromkeys(l.size for l in lines))
+        sizes = sorted({l.size for l in lines}, key=size_key)
         colors = list(dict.fromkeys(l.color_id for l in lines))
         qty = {(l.color_id, l.size): l.quantity for l in lines}
         name = {l.color_id: l.color.name for l in lines}

@@ -2,12 +2,13 @@ import { useState } from "react";
 import { money } from "../format";
 import Delta from "./Delta";
 
-export default function RevenueHero({ title, revenue, prevRevenue, series, goal, onClick }) {
+// goal/goalValue: the annual goal vs. the goal year's sales, whatever the period shown.
+export default function RevenueHero({ title, revenue, prevRevenue, series, goal, goalValue, onClick }) {
   const [hover, setHover] = useState(null);
   const max = Math.max(...series.map((p) => p.value), 1);
   const active = hover ?? series.length - 1;
   const point = series[active];
-  const pct = goal ? Math.round((revenue / goal) * 100) : null;
+  const pct = goal ? Math.round((goalValue / goal) * 100) : null;
   return (
     <div className={`hero ${onClick ? "hero-clickable" : ""}`} onClick={onClick}>
       <div className="hero-main">
@@ -27,7 +28,7 @@ export default function RevenueHero({ title, revenue, prevRevenue, series, goal,
           <div className="goal-ring" style={{ "--pct": Math.min(pct, 100) }}>
             <div><strong>{pct}%</strong><span>da meta</span></div>
           </div>
-          <span>Meta do período · {money(goal)}</span>
+          <span>Meta anual · {money(goalValue)} de {money(goal)}</span>
         </div>
       )}
     </div>

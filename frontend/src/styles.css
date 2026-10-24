@@ -101,6 +101,12 @@ input[type="checkbox"] { width: auto; }
 .profile-header { display: flex; align-items: center; gap: 18px; }
 .profile-avatar-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .content { padding: 32px 40px; min-width: 0; }
+/* "new version" notice: floats at the bottom, below dialogs (z-index 100), never covers a form */
+.update-banner { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 90;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; max-width: calc(100vw - 32px);
+  background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow); }
+.update-banner span { font-weight: 600; margin-right: 6px; }
+@media (max-width: 640px) { .update-banner { flex-wrap: wrap; justify-content: flex-end; } }
 /* print previews render outside the app shell (no sidebar), so they need their own page chrome */
 .standalone-page { background: var(--bg); min-height: 100vh; padding: 32px 40px; }
 @media print { .standalone-page { padding: 0; background: #fff; min-height: 0; } }
@@ -174,11 +180,26 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .form-order .span-2 { grid-column: span 1; }
 /* payment terms fills the empty last column so its long label doesn't wrap on narrow laptops */
 .form-order .field:last-child { grid-column: span 2; }
+/* "Tipo de venda" (sellers with both tables) sits beside the payment terms in the last column */
+.form-order .field.sale-type:last-child { grid-column: auto; }
 .span-2 { grid-column: span 2; }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field > span { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
 .field-row { display: flex; gap: 8px; align-items: center; }
+.field-row .check { flex: none; white-space: nowrap; }
 .check { display: flex; gap: 8px; align-items: center; }
+/* On/off switch (phone-settings style): a native checkbox, restyled */
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; cursor: pointer; line-height: 1.35; }
+.switch-row small { display: block; margin-top: 2px; font-size: 0.85rem; }
+/* input.switch, not .switch: must outrank the global input / input[type="checkbox"] rules (width, padding, border) */
+input.switch { -webkit-appearance: none; appearance: none; flex: none; position: relative; box-sizing: border-box;
+  width: 38px; min-width: 38px; height: 22px; padding: 0; margin: 0; border: 0; border-radius: 999px;
+  background: #c3ccda; cursor: pointer; transition: background .2s; }
+input.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .2s; }
+input.switch:checked { background: var(--accent); }
+input.switch:checked::after { transform: translateX(16px); }
+input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--surface);
@@ -207,6 +228,9 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .btn-x { background: none; border: 0; font-size: 1.6rem; line-height: 1; cursor: pointer; color: var(--muted); }
 .modal-back { background: none; border: 0; cursor: pointer; font: inherit; color: var(--accent-strong); font-weight: 600; padding: 0; display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
 .modal-back:hover { text-decoration: underline; }
+/* "‹ Pedidos" above a detail page's title: back to the list it belongs to */
+.back-link { display: inline-block; margin-bottom: 4px; color: var(--accent-strong); font-weight: 600; font-size: 0.92rem; text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
 
 /* ---------- login ---------- */
 .login { min-height: 100vh; display: grid; place-items: center; background: linear-gradient(180deg, var(--navy-3) 0%, var(--navy) 55%, #0a1c38 100%); padding: 24px; }
@@ -404,6 +428,12 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .qty-input { width: 58px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; padding: 7px 4px; }
 .qty-input:not(:placeholder-shown) { border-color: var(--accent); background: var(--accent-light); }
 .qty-total { text-align: center; font-weight: 700; min-width: 44px; }
+.qty-step { margin-bottom: 8px; }
+/* tap mode cell: looks like the input; quick repeated taps must not trigger the browser's double-tap zoom */
+.qty-grid { touch-action: manipulation; }
+.qty-tap { font: inherit; font-size: 16px; font-weight: 600; color: var(--muted); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 7px; min-height: 42px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+.qty-tap.filled { color: var(--ink); border-color: var(--accent); background: var(--accent-light); }
 .qty-grid-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; flex-wrap: wrap; gap: 10px; font-weight: 600; }
 
 .item-group { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
@@ -466,6 +496,82 @@ section.item-group { margin-top: 0; }
 .table tr.drop-over td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .product-image-field { border: 2px dashed transparent; border-radius: var(--radius); padding: 6px; margin: -8px; }
 .product-image-field.drop-over { border-color: var(--accent); background: var(--accent-light); }
+/* product form: photo beside the basic fields, then one titled section per topic */
+.modal-wide:has(.product-form) { width: min(980px, 100%); }
+.product-form { display: flex; flex-direction: column; gap: 18px; }
+.product-form-top { display: grid; grid-template-columns: 140px 1fr; gap: 20px; align-items: start; }
+.product-form-top .product-image-field { flex-direction: column; align-items: stretch; margin: -8px; }
+.product-form-top .product-image-preview { width: 100%; height: auto; aspect-ratio: 1; }
+.product-form-top .product-image-actions { align-items: stretch; text-align: center; }
+.form-section { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.form-section h3 { margin: 0; font-size: 0.95rem; display: flex; gap: 8px; align-items: baseline; }
+.form-section h3 small { font-weight: 400; }
+.form-section > summary { cursor: pointer; list-style: none; }
+.form-section > summary::-webkit-details-marker { display: none; }
+.form-section > summary h3::after { content: "▾"; color: var(--muted); margin-left: auto; }
+.form-section:not([open]) > summary h3::after { content: "▸"; }
+.chip:disabled { opacity: .5; cursor: default; }
+.chip-remove { border: 0; background: none; padding: 0 0 0 2px; font-size: 1.1rem; line-height: 1; cursor: pointer; color: inherit; opacity: .7; }
+.chip-remove:hover { opacity: 1; }
+.color-picker { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.color-picker-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+.color-picker-bar input { flex: 1; min-width: 160px; }
+.color-picker-bar .segmented { flex: none; }
+.color-picker-bar .segmented button { white-space: nowrap; }
+.color-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; max-height: 220px; overflow: auto; }
+.color-options p { margin: 4px; }
+.color-option { font: inherit; text-align: left; cursor: pointer; display: flex; gap: 8px; align-items: center; padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.color-option span:not(.swatch) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.color-option:hover { border-color: var(--accent); }
+.color-option.on { border-color: var(--accent); background: var(--accent-light); color: var(--accent-strong); font-weight: 600; }
+.color-option-check { flex: none !important; }
+.color-new { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.color-new input[type="color"] { width: 40px; height: 36px; padding: 2px; flex: none; }
+.color-new input:not([type]) { flex: 1; min-width: 160px; }
+.color-new-btn { align-self: flex-start; }
+.product-form-footer .check { margin-right: auto; }
+@media (max-width: 640px) {
+  .product-form-top { grid-template-columns: 1fr; }
+  .product-form-top .product-image-preview { width: 120px; }
+}
+
+/* finance: import a CSV/XLSX */
+.import { display: flex; flex-direction: column; gap: 14px; }
+.import-mode { align-self: flex-start; }
+.import-card { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
+.dropzone { display: flex; align-items: center; gap: 14px; padding: 22px 20px; border: 2px dashed var(--line); border-radius: var(--radius);
+  background: var(--surface-2); cursor: pointer; transition: border-color .15s, background .15s; }
+.dropzone:hover, .dropzone:focus-within { border-color: var(--accent); }
+.dropzone.drop-over { border-color: var(--accent); background: var(--accent-light); }
+.dropzone:not(.has-file) { flex-direction: column; justify-content: center; text-align: center; padding: 34px 20px; }
+.dropzone.has-file { border-style: solid; background: var(--surface); }
+.dropzone-icon { width: 34px; height: 34px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.dropzone-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 0.9rem; }
+.dropzone-text strong { font-size: 0.98rem; overflow-wrap: anywhere; }
+.dropzone.has-file .dropzone-text { flex: 1; }
+.dropzone-link { color: var(--accent-strong); font-weight: 600; }
+.dropzone.has-file .dropzone-link { font-size: 0.85rem; }
+.dropzone-bad { color: var(--danger); font-weight: 600; }
+.import-help { font-size: 0.88rem; color: var(--muted); }
+.import-help summary, .import-items summary { cursor: pointer; font-weight: 600; color: var(--accent-strong); width: fit-content; }
+.import-help p { margin: 8px 0 0; line-height: 1.5; }
+.import-errors { background: var(--danger-light); color: var(--danger); border-radius: var(--radius); padding: 12px 14px; font-size: 0.88rem; }
+.import-errors ul { margin: 6px 0 0; padding-left: 18px; max-height: 140px; overflow: auto; color: var(--ink); }
+.import-preview { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.import-preview-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+.import-preview .table-scroll { max-height: 300px; overflow: auto; }
+.import-preview .table { border: 0; border-radius: 0; }
+.import-preview .table th { position: sticky; top: 0; }
+.import-items { padding: 10px 14px; border-top: 1px solid var(--line); font-size: 0.88rem; }
+.import-items .table { margin-top: 8px; }
+.import-items .table td { padding: 6px 10px; }
+@media (max-width: 640px) { .import-card { grid-template-columns: 1fr; } }
+/* finance: a boleto read in "Importar arquivo" */
+.boleto-form { padding: 14px; }
+.boleto-form p { margin: 0; font-size: 0.85rem; }
+.boleto-code { font-variant-numeric: tabular-nums; font-size: 0.82rem; overflow-wrap: anywhere; }
 /* enlarged product photo; above the edit modal (z-index 100) */
 .photo-zoom { position: fixed; inset: 0; z-index: 110; background: rgba(5, 12, 26, .88); display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 12px; padding: 16px; cursor: zoom-out; }
@@ -821,10 +927,11 @@ section.item-group { margin-top: 0; }
 .dash-row > .dash-wide { flex: 1.7 1 460px; }
 .dash-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 .dash-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-/* Cards in a row share the tallest one's height; shorter lists spread out instead of leaving a gap. */
+/* Cards in a row share the tallest one's height; lists of 4+ spread out instead of leaving a gap
+   (with 2-3 items spreading pushes them to the card's edges, so those stay together at the top). */
 .dash-grid-3 > .panel, .dash-grid-2 > .panel { display: flex; flex-direction: column; }
-.dash-grid-3 > .panel > .hbars, .dash-grid-3 > .panel > .color-ranking,
-.dash-grid-2 > .panel > .hbars, .dash-grid-2 > .panel > .top-customers { flex: 1; justify-content: space-between; }
+.dash-grid-3 > .panel > :is(.hbars, .color-ranking):has(> :nth-child(4)),
+.dash-grid-2 > .panel > :is(.hbars, .top-customers):has(> :nth-child(4)) { flex: 1; justify-content: space-between; }
 .donut { position: relative; width: 184px; height: 184px; flex-shrink: 0; }
 .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 0 40px; }
 .donut-center strong { font-size: 30px; line-height: 1; }

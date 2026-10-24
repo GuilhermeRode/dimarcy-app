@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..models import Color, OrderItem, Product, User
+from ..models import Color, OrderItem, Product, User, size_key
 from ..schemas import ProductIn, ProductOut
 from ..security import get_current_user, require_admin
 from ..uploads import make_thumb, read_validated_image, thumb_name
@@ -30,11 +30,11 @@ def _apply(p: Product, data: ProductIn, db: Session):
     p.description = data.description.strip()
     p.collection = data.collection
     p.price = data.price
-    p.sizes = ",".join(t.strip().upper() for t in data.sizes if t.strip())
+    p.sizes = ",".join(sorted(dict.fromkeys(t.strip().upper() for t in data.sizes if t.strip()), key=size_key))
     p.active = data.active
     p.colors = db.query(Color).filter(Color.id.in_(data.color_ids)).all() if data.color_ids else []
     if data.seller_ids is not None:
-        p.sellers = db.query(User).filter(User.id.in_(data.seller_ids), User.role == "seller").all()
+        p.sellers = db.query(User).filter(User.id.in_(data.seller_ids)).all()  # admins sell too
 
 
 def available_to(user: User):
@@ -43,11 +43,12 @@ def available_to(user: User):
 
 
 @router.get("", response_model=list[ProductOut])
-def list_all(search: str = "", active_only: bool = False, db: Session = Depends(get_db),
+def list_all(search: str = "", active_only: bool = False, for_sale: bool = False, db: Session = Depends(get_db),
              user: User = Depends(get_current_user)):
     # colors/sellers in one batch each, not per product
     q = db.query(Product).options(selectinload(Product.colors), selectinload(Product.sellers))
-    if user.role != "admin":
+    # Admins see the whole catalog to manage it; for_sale (the new-order form) applies the restriction to them too.
+    if user.role != "admin" or for_sale:
         q = q.filter(available_to(user))
     if search:
         t = f"%{search}%"

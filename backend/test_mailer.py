@@ -37,4 +37,14 @@ assert mailer._pdf_attachment(order)[0]["filename"] == "pedido-00123.pdf"
 assert mailer._with_seller(["a@x.com"], order) == ["a@x.com"]  # seller without e-mail
 assert mailer._with_seller(["a@x.com"], NS(seller=NS(email="v@x.com"))) == ["a@x.com", "v@x.com"]
 assert mailer._with_seller(["a@x.com"], NS(seller=NS(email="a@x.com"))) == ["a@x.com"]  # no duplicate
+
+# the customer's copy goes out unless the order was saved with "Enviar e-mail ao cliente" off
+sent = []
+real_send, mailer._send = mailer._send, lambda subject, text, body, to, attachments=None: sent.append(to) or True
+for flag, expected in ((True, [["cli@x.com"]]), (False, [])):
+    sent.clear()
+    mailer._notify_customer(NS(**{**vars(order), "customer": NS(name="Loja", email="cli@x.com"), "notify_customer": flag}),
+                            "Test", "Assunto", "Mensagem.", "Badge", mailer.NAVY, "Título")
+    assert sent == expected, (flag, sent)
+mailer._send = real_send
 print("mailer OK")

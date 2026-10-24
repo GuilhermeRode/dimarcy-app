@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
+import { PasswordInput } from "../components/ui";
 import logoFull from "../assets/logo-full.png";
 
 export default function ResetPassword() {
@@ -52,7 +53,7 @@ export default function ResetPassword() {
               <p className="login-sub">Escolha sua nova senha.</p>
               <label className="field">
                 <span>Nova senha</span>
-                <input type="password" minLength={10} autoComplete="new-password" value={password}
+                <PasswordInput minLength={10} autoComplete="new-password" value={password}
                   onChange={(e) => setPassword(e.target.value)} autoFocus required />
               </label>
               {error && <div className="error-message">{error}</div>}

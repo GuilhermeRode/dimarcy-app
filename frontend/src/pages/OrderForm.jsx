@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, errorMessage, fileUrl } from "../api";
 import { useAuth } from "../auth";
-import { localDate, money, orderNumber } from "../format";
+import { customerFieldError, localDate, maskDocument, maskPhone, money, orderNumber, sortSizes, tablePrice } from "../format";
 import { Field, ErrorBox, Modal, Swatch, PhotoZoom, ConfirmDialog } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
+import { StateRegistrationField } from "../components/CustomerFormModal";
 
 // "09/37 - Nuvem/Marrom Terra" -> the card number stands out, the name goes small underneath,
 // so long two-tone names don't push the size columns off screen
@@ -19,23 +20,23 @@ function ColorLabel({ name, hex, hex2, size }) {
 }
 
 const key = (i) => `${i.color_id}|${i.size}`;
-// Integer cents, half up — same as the server's retail_price; the server prices the order again on save.
-const tablePrice = (price, table, markup) =>
-  table === "retail" ? Math.round(Math.round(price * 100) * Math.round((100 + Number(markup)) * 100) / 10000) / 100 : price;
 const customerLabel = (c) => `${c.name}${c.city ? ` — ${c.city}/${c.state || ""}` : ""}`;
 
-const EMPTY_CUSTOMER = { name: "", document: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
+const EMPTY_CUSTOMER = { name: "", document: "", state_registration: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
 const PAYMENT_METHODS = ["Dinheiro", "Pix", "Boleto", "Cheque"];
 const PAYMENT_TERMS = ["À vista", "30/60", "30/60/90", "30/60/90/120", "30/60/90/120/150", "Quinzenal"];
 
 // Color × size grid for a product: the core of placing an order
-function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, onCancel }) {
+function QuantityGrid({ product, initial, initialPrice, canEditPrice, quickQuantity, onSave, onCancel }) {
   const [qty, setQty] = useState(() => Object.fromEntries(initial.map((i) => [key(i), i.quantity])));
   const [price, setPrice] = useState(initialPrice ?? product.price);
   const [zoom, setZoom] = useState(false);
+  // tapping a cell adds `step` (no keyboard); 0 = type the number. Each user turns it on/off in Meu perfil.
+  const [step, setStep] = useState(quickQuantity ? 1 : 0);
 
   const totalPieces = Object.values(qty).reduce((s, v) => s + (Number(v) || 0), 0);
   const set = (k, v) => setQty((q) => ({ ...q, [k]: v.replace(/\D/g, "") }));
+  const bump = (k) => setQty((q) => ({ ...q, [k]: String(Math.max(0, (Number(q[k]) || 0) + step) || "") }));
 
   function save() {
     const items = [];
@@ -74,6 +75,14 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, on
             : <strong>{money(price)}</strong>}
         </label>
       </div>
+      {quickQuantity && (
+        <div className="seg-control qty-step" role="group" aria-label="Ao tocar na grade">
+          {[[1, "+1"], [2, "+2"], [-1, "−1"], [0, "Digitar"]].map(([n, label]) => (
+            <button key={n} type="button" className={step === n ? "on" : ""} aria-pressed={step === n}
+              onClick={() => setStep(n)}>{label}</button>
+          ))}
+        </div>
+      )}
       <div className="scroll-area">
         <table className="qty-grid-table">
           <thead>
@@ -87,8 +96,13 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, on
                   <td className="qty-grid-color"><ColorLabel name={c.name} hex={c.hex} hex2={c.hex2} size={20} /></td>
                   {product.sizes.map((t) => (
                     <td key={t}>
-                      <input inputMode="numeric" className="qty-input" value={qty[`${c.id}|${t}`] || ""}
-                        onChange={(e) => set(`${c.id}|${t}`, e.target.value)} placeholder="·" aria-label={`${c.name} ${t}`} />
+                      {/* tap mode uses a button: a focused (even read-only) input makes phones scroll it into view
+                          and get ready for the keyboard on every tap, so the page jumps up and down */}
+                      {step
+                        ? <button type="button" className={`qty-input qty-tap ${qty[`${c.id}|${t}`] ? "filled" : ""}`}
+                            onClick={() => bump(`${c.id}|${t}`)} aria-label={`${c.name} ${t}`}>{qty[`${c.id}|${t}`] || "·"}</button>
+                        : <input inputMode="numeric" className="qty-input" value={qty[`${c.id}|${t}`] || ""}
+                            onChange={(e) => set(`${c.id}|${t}`, e.target.value)} placeholder="·" aria-label={`${c.name} ${t}`} />}
                     </td>
                   ))}
                   <td className="qty-total">{rowTotal || ""}</td>
@@ -109,15 +123,23 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, onSave, on
   );
 }
 
+// Older customers may predate the required fields; picking one for an order asks for them first.
+const REQUIRED_CUSTOMER_FIELDS = { document: "CPF/CNPJ", state_registration: "Inscrição estadual", phone: "Telefone", email: "E-mail", city: "Cidade", state: "UF", address: "Endereço" };
+const missingCustomerFields = (c) =>
+  Object.entries(REQUIRED_CUSTOMER_FIELDS).filter(([k]) => !String(c?.[k] || "").trim()).map(([, label]) => label);
+
 // Full customer form, used both to create and to edit without leaving the order
 function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
   const [f, setF] = useState(() => (customer ? { ...customer, owner_id: customer.owner_id || "" } : { ...EMPTY_CUSTOMER }));
-  const [error, setError] = useState("");
+  const missing = customer?.id ? missingCustomerFields(customer) : [];
+  const [error, setError] = useState(missing.length ? `Faltam campos obrigatórios: ${missing.join(", ")}.` : "");
   const editing = Boolean(customer?.id);
 
   async function save(e) {
     e.preventDefault();
     setError("");
+    const invalid = customerFieldError(f, customer);
+    if (invalid) return setError(invalid);
     const body = { ...f, state: f.state ? f.state.toUpperCase() : null, owner_id: f.owner_id ? Number(f.owner_id) : null };
     try {
       const { data } = editing
@@ -132,8 +154,11 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
   return (
     <Modal title={editing ? `Editar cliente — ${customer.name}` : "Cadastrar cliente"} onClose={onClose} wide>
       <form onSubmit={save} className="form-grid">
+        <div className="span-2"><ErrorBox msg={error} /></div>
         <Field label="Nome / razão social" span={2}><input required autoFocus {...field("name")} /></Field>
-        <Field label="CPF/CNPJ" span={2}><input required {...field("document")} /></Field>
+        <Field label="CPF/CNPJ"><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...field("document")}
+          onChange={(e) => setF({ ...f, document: maskDocument(e.target.value) })} /></Field>
+        <StateRegistrationField value={f.state_registration} uf={f.state} onChange={(v) => setF({ ...f, state_registration: v })} />
         {isAdmin && (
           <Field label="Vendedor responsável" span={2}>
             <select required {...field("owner_id")}>
@@ -142,17 +167,17 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
             </select>
           </Field>
         )}
-        <Field label="Telefone"><input {...field("phone")} /></Field>
-        <Field label="E-mail"><input type="email" {...field("email")} /></Field>
+        <Field label="Telefone"><input required type="tel" inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" {...field("phone")}
+          onChange={(e) => setF({ ...f, phone: maskPhone(e.target.value) })} /></Field>
+        <Field label="E-mail"><input required type="email" placeholder="nome@empresa.com.br" {...field("email")} /></Field>
         <Field label="Cidade / UF" span={2}>
           <div className="city-row">
-            <input placeholder="Cidade" {...field("city")} />
-            <input placeholder="UF" maxLength={2} className="uf-input" {...field("state")} />
+            <input required placeholder="Cidade" {...field("city")} />
+            <input required placeholder="UF" minLength={2} maxLength={2} className="uf-input" {...field("state")} />
           </div>
         </Field>
-        <Field label="Endereço" span={2}><input {...field("address")} /></Field>
-        <Field label="Observações do cliente" span={2}><textarea rows={2} {...field("notes")} /></Field>
-        <div className="span-2"><ErrorBox msg={error} /></div>
+        <Field label="Endereço" span={2}><input required {...field("address")} /></Field>
+        <Field label="Observações do cliente (opcional)" span={2}><textarea rows={2} {...field("notes")} /></Field>
         <div className="actions span-2">
           <button className="btn btn-primary">{editing ? "Salvar alterações" : "Cadastrar cliente"}</button>
         </div>
@@ -175,8 +200,10 @@ function CustomerSearch({ customers, value, onSelect }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customers, value]);
 
+  const qDigits = query.replace(/\D/g, "");  // typing the CPF/CNPJ without the dots still finds the customer
   const matches = query
-    ? customers.filter((c) => `${c.name} ${c.document || ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+    ? customers.filter((c) => `${c.name} ${c.document || ""}`.toLowerCase().includes(query.toLowerCase())
+        || (qDigits.length >= 3 && (c.document || "").replace(/\D/g, "").includes(qDigits))).slice(0, 8)
     : [];
 
   function pick(c) {
@@ -226,6 +253,7 @@ export default function OrderForm() {
   const [header, setHeader] = useState({
     customer_id: "", date: localDate(), delivery_date: "",
     status: "confirmed", payment_method: "", payment_terms: "", price_table: "", discount: 0, notes: "",
+    notify_customer: true,
   });
   const [customerKey, setCustomerKey] = useState(0); // forces CustomerSearch to resync its label after a save
   const [items, setItems] = useState([]);
@@ -236,6 +264,7 @@ export default function OrderForm() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loadedCustomerId, setLoadedCustomerId] = useState(null); // legacy orders may keep a customer without email
 
   // A customer preselected from the Clientes screen alone isn't "unsaved work".
   const customerChanged = Boolean(header.customer_id) && Number(header.customer_id) !== presetCustomer;
@@ -269,18 +298,26 @@ export default function OrderForm() {
         setCustomerKey((k) => k + 1);
       }
     });
-    api.get("/products", { params: { active_only: true } }).then((r) => setProducts(r.data));
+    // New order: only what this user may sell (admins too). Editing: the server checks against the order's seller.
+    api.get("/products", { params: { active_only: true, for_sale: !id } }).then((r) => setProducts(r.data));
     api.get("/settings").then((r) => {
       setSettings(r.data);
-      if (!id) setHeader((h) => ({ ...h, price_table: r.data.price_tables[0] })); // the seller's default table
+      // A single table is set for them; with both, the seller must pick one ("Tipo de venda")
+      if (!id && r.data.price_tables.length === 1) setHeader((h) => ({ ...h, price_table: r.data.price_tables[0] }));
     });
     if (isAdmin) api.get("/users").then((r) => setSellers(r.data));
     if (id) api.get(`/orders/${id}`).then(({ data }) => {
+      setLoadedCustomerId(data.customer_id);
       setHeader({
         customer_id: data.customer_id, date: data.date, delivery_date: data.delivery_date || "",
         status: data.status, payment_method: data.payment_method || "",
-        payment_terms: data.payment_terms || "", price_table: data.price_table, discount: data.discount,
-        notes: data.notes || "",
+        payment_terms: data.payment_terms || "", price_table: data.price_table,
+        // the API stores the discount in R$; the form edits it as a % of the gross
+        discount: (() => {
+          const g = data.items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+          return g ? Math.round(data.discount / g * 10000) / 100 : 0;
+        })(),
+        notes: data.notes || "", notify_customer: data.notify_customer !== false,
       });
       setItems(data.items);
     });
@@ -304,9 +341,9 @@ export default function OrderForm() {
 
   const gross = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
   const pieces = items.reduce((s, i) => s + i.quantity, 0);
-  const total = gross - (Number(header.discount) || 0);
-  const maxDiscount = Math.round(gross * settings.max_discount_percent) / 100;
-  const discountTooHigh = (Number(header.discount) || 0) > maxDiscount + 0.005;
+  const discountValue = Math.round(gross * (Number(header.discount) || 0)) / 100;
+  const total = gross - discountValue;
+  const discountTooHigh = (Number(header.discount) || 0) > settings.max_discount_percent;
 
   const selectedCustomer = customers.find((c) => c.id === Number(header.customer_id));
 
@@ -340,15 +377,19 @@ export default function OrderForm() {
   async function save() {
     setError("");
     if (!header.customer_id) return setError("Escolha o cliente.");
+    if (!selectedCustomer?.email?.trim() && (!id || Number(header.customer_id) !== loadedCustomerId))
+      return setError("Este cliente não tem e-mail cadastrado. Cadastre o e-mail do cliente antes de lançar o pedido.");
     if (!header.delivery_date) return setError("Informe a data de entrega.");
+    if (header.delivery_date < header.date) return setError("A data de entrega não pode ser anterior à data do pedido.");
     if (!header.payment_method) return setError("Selecione a forma de pagamento.");
     if (!header.payment_terms) return setError("Selecione o prazo de pagamento.");
+    if (!header.price_table) return setError("Selecione o tipo de venda.");
     if (!items.length) return setError("Adicione ao menos um produto.");
     if (discountTooHigh) return setError(
-      `O desconto máximo é de ${settings.max_discount_percent}% (${money(maxDiscount)}). Peça ao administrador para alterar o limite.`);
+      `O desconto máximo é de ${settings.max_discount_percent}%. Peça ao administrador para alterar o limite.`);
     setSaving(true);
     const body = {
-      ...header, customer_id: Number(header.customer_id), discount: Number(header.discount) || 0,
+      ...header, customer_id: Number(header.customer_id), discount: discountValue,
       price_table: header.price_table || null,
       items: items.map(({ product_id, color_id, size, quantity, unit_price }) =>
         ({ product_id, color_id, size, quantity, unit_price })),
@@ -378,7 +419,10 @@ export default function OrderForm() {
         <Field label="Cliente" span={2}>
           <div className="customer-picker">
             <CustomerSearch key={customerKey} customers={customers} value={header.customer_id}
-              onSelect={(c) => setHeader((h) => ({ ...h, customer_id: c ? c.id : "" }))} />
+              onSelect={(c) => {
+                setHeader((h) => ({ ...h, customer_id: c ? c.id : "" }));
+                if (c && missingCustomerFields(c).length) setCustomerModal(c);
+              }} />
             <button type="button" className="btn btn-primary icon-btn" title="Cadastrar novo cliente" onClick={() => setCustomerModal("new")}>
               <PlusIcon />
             </button>
@@ -392,7 +436,7 @@ export default function OrderForm() {
         <Field label="Data do pedido"><input type="date" value={header.date} onChange={(e) => setHeader({ ...header, date: e.target.value })} /></Field>
 
         <Field label="Data de entrega">
-          <input type="date" required value={header.delivery_date} onChange={(e) => setHeader({ ...header, delivery_date: e.target.value })} />
+          <input type="date" required min={header.date || undefined} value={header.delivery_date} onChange={(e) => setHeader({ ...header, delivery_date: e.target.value })} />
         </Field>
         <Field label="Forma de pagamento">
           <select required value={header.payment_method} onChange={(e) => setHeader({ ...header, payment_method: e.target.value })}>
@@ -400,20 +444,23 @@ export default function OrderForm() {
             {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </Field>
-        <Field label="Prazo / condição de pagamento">
+        <Field label="Prazo de pagamento">
           <select required value={header.payment_terms} onChange={(e) => setHeader({ ...header, payment_terms: e.target.value })}>
             <option value="">Selecione</option>
             {PAYMENT_TERMS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </Field>
-        {/* New order: only sellers with both tables choose. Editing: the table is fixed, shown if retail. */}
+        {/* New order: only sellers with both tables choose. Editing: the table is fixed, shown if retail.
+            A plain <label> (not Field) so .sale-type keeps it beside the payment terms. */}
         {(id ? header.price_table === "retail" : settings.price_tables.length > 1) && (
-          <Field label="Tabela de preço">
-            <select value={header.price_table} disabled={Boolean(id)} onChange={(e) => changePriceTable(e.target.value)}>
+          <label className="field sale-type">
+            <span>Tipo de venda</span>
+            <select required value={header.price_table} disabled={Boolean(id)} onChange={(e) => changePriceTable(e.target.value)}>
+              <option value="">Selecione</option>
               <option value="wholesale">Atacado</option>
-              <option value="retail">Varejo (+{settings.retail_markup_percent}%)</option>
+              <option value="retail">Varejo</option>
             </select>
-          </Field>
+          </label>
         )}
       </section>
 
@@ -421,13 +468,14 @@ export default function OrderForm() {
         <div className="panel-header">
           <h3>Produtos</h3>
           {/* waits for the price table (from /settings or the order) so items are never priced on the wrong one */}
-          <button type="button" className="btn btn-primary" disabled={!header.price_table} onClick={openNewProductModal}>+ Adicionar produto</button>
+          <button type="button" className="btn btn-primary" disabled={!header.price_table}
+            title={header.price_table ? undefined : "Selecione o tipo de venda primeiro"} onClick={openNewProductModal}>+ Adicionar produto</button>
         </div>
 
         {!Object.keys(groups).length && <p className="muted">Nenhum produto adicionado ainda.</p>}
 
         {Object.entries(groups).map(([pid, lines]) => {
-          const sizes = [...new Set(lines.map((l) => l.size))];
+          const sizes = sortSizes(new Set(lines.map((l) => l.size)));
           const colors = [...new Map(lines.map((l) => [l.color_id, l])).values()];
           const q = (c, t) => lines.find((l) => l.color_id === c && l.size === t)?.quantity;
           const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
@@ -463,20 +511,32 @@ export default function OrderForm() {
       </section>
 
       <section className="panel order-summary">
-        <Field label="Observações">
-          <textarea rows={3} value={header.notes} onChange={(e) => setHeader({ ...header, notes: e.target.value })}
-            placeholder="Detalhes de envio, combinações extras..." />
-        </Field>
+        <div className="page">
+          <Field label="Observações">
+            <textarea rows={3} value={header.notes} onChange={(e) => setHeader({ ...header, notes: e.target.value })}
+              placeholder="Detalhes de envio, combinações extras..." />
+          </Field>
+          <label className="switch-row">
+            <span>
+              Enviar e-mail ao cliente
+              <small className="muted">
+                {selectedCustomer && !selectedCustomer.email
+                  ? "Este cliente não tem e-mail cadastrado."
+                  : "Pedido criado, alterado e entregue, com o PDF. A equipe e o vendedor recebem sempre."}
+              </small>
+            </span>
+            <input type="checkbox" role="switch" className="switch" checked={header.notify_customer}
+              disabled={Boolean(selectedCustomer && !selectedCustomer.email)}
+              onChange={(e) => setHeader({ ...header, notify_customer: e.target.checked })} />
+          </label>
+        </div>
         <div className="totals">
           <div><span>Peças</span><strong>{pieces}</strong></div>
           <div><span>Subtotal</span><strong>{money(gross)}</strong></div>
           <div>
-            <span>Desconto (R$)</span>
-            <input type="number" min="0" step="0.01" value={header.discount}
+            <span>Desconto (%)</span>
+            <input type="number" min="0" max="100" step="0.01" value={header.discount}
               onChange={(e) => setHeader({ ...header, discount: e.target.value })} />
-            <small className={discountTooHigh ? "danger" : "muted"}>
-              Máximo {settings.max_discount_percent}% · até {money(maxDiscount)}
-            </small>
           </div>
           <div className="grand-total"><span>Total</span><strong>{money(total)}</strong></div>
         </div>
@@ -529,7 +589,7 @@ export default function OrderForm() {
               <button type="button" className="modal-back" onClick={() => setEditing(null)}>← Escolher outro produto</button>
               <QuantityGrid product={editing} initial={groups[editing.id] || []}
                 initialPrice={groups[editing.id]?.[0]?.unit_price ?? priceOf(editing)} canEditPrice={isAdmin && settings.allow_price_override}
-                onSave={saveGrid} onCancel={closeProductModal} />
+                quickQuantity={user?.quick_quantity !== false} onSave={saveGrid} onCancel={closeProductModal} />
             </>
           )}
         </Modal>
@@ -538,7 +598,14 @@ export default function OrderForm() {
       {customerModal && (
         <CustomerForm customer={customerModal === "new" ? null : customerModal}
           isAdmin={isAdmin} sellers={sellers}
-          onClose={() => setCustomerModal(null)}
+          onClose={() => {
+            // closing without completing an incomplete customer drops them from the order
+            if (customerModal !== "new" && missingCustomerFields(customerModal).length && customerModal.id !== loadedCustomerId) {
+              setHeader((x) => ({ ...x, customer_id: "" }));
+              setCustomerKey((k) => k + 1);
+            }
+            setCustomerModal(null);
+          }}
           onSaved={(c) => {
             setCustomers((l) => [...l.filter((x) => x.id !== c.id), c].sort((a, b) => a.name.localeCompare(b.name)));
             setHeader((x) => ({ ...x, customer_id: c.id }));

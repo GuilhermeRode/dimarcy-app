@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
-import { Avatar, ErrorBox, Field } from "../components/ui";
+import { Avatar, ErrorBox, Field, PasswordInput } from "../components/ui";
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
@@ -25,6 +25,15 @@ export default function Profile() {
     } catch (err) {
       setError(errorMessage(err));
     } finally { setBusy(false); }
+  }
+
+  // Saved on toggle, apart from the access form (which may hold a half-typed password).
+  async function setQuickQuantity(on) {
+    setError(""); setOk("");
+    try {
+      const { data } = await api.put("/auth/me", { name: user.name, email: user.email, quick_quantity: on });
+      updateUser(data);
+    } catch (err) { setError(errorMessage(err)); }
   }
 
   async function onAvatarPick(e) {
@@ -72,10 +81,10 @@ export default function Profile() {
           <Field label="Nome" span={2}><input required {...f("name")} /></Field>
           <Field label="E-mail" span={2}><input type="email" required {...f("email")} /></Field>
           <Field label="Senha atual" span={2}>
-            <input type="password" placeholder="Necessária para trocar e-mail ou senha" {...f("current_password")} />
+            <PasswordInput autoComplete="current-password" placeholder="Necessária para trocar e-mail ou senha" {...f("current_password")} />
           </Field>
           <Field label="Nova senha (deixe em branco para manter)" span={2}>
-            <input type="password" minLength={10} {...f("new_password")} />
+            <PasswordInput autoComplete="new-password" minLength={10} {...f("new_password")} />
           </Field>
           <div className="span-2"><ErrorBox msg={error} /></div>
           {ok && <div className="span-2 muted">{ok}</div>}
@@ -83,6 +92,19 @@ export default function Profile() {
             <button className="btn btn-primary" disabled={busy}>Salvar alterações</button>
           </div>
         </form>
+      </section>
+
+      <section className="panel">
+        <h3>Preferências</h3>
+        <label className="switch-row">
+          <span>
+            Usar botões +1 / +2 na grade do pedido
+            <small className="muted">Tocar na grade de quantidades soma sem abrir o teclado.</small>
+          </span>
+          {/* on by default; an older cached user has no field */}
+          <input type="checkbox" role="switch" className="switch" checked={user.quick_quantity !== false}
+            onChange={(e) => setQuickQuantity(e.target.checked)} />
+        </label>
       </section>
     </div>
   );

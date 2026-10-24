@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
-import { dateBR, money, orderNumber, STATUS } from "../format";
+import { dateBR, money, orderNumber, sortSizes, STATUS } from "../format";
 import { ErrorBox, Status, Swatch, useConfirm } from "../components/ui";
 import { EntryStatus, PayModal } from "./Finance";
 
@@ -61,6 +61,7 @@ export default function OrderDetail() {
     <div className="page">
       <header className="page-header">
         <div>
+          <Link to="/orders" className="back-link">‹ Pedidos</Link>
           <h1>Pedido {orderNumber(o.id)}</h1>
           <p className="muted">{o.customer_name} · {dateBR(o.date)} · vendedor {o.seller_name}</p>
         </div>
@@ -79,6 +80,7 @@ export default function OrderDetail() {
             <>
               <Status s={o.status} />
               <button className="btn" onClick={() => nav(`/orders/${id}/client-print`)}>Imprimir p/ cliente</button>
+              {o.can_edit && <button className="btn" onClick={() => nav(`/orders/${id}/edit`)}>Editar</button>}
             </>
           )}
         </div>
@@ -96,7 +98,7 @@ export default function OrderDetail() {
       </section>
 
       {groups.map((lines) => {
-        const sizes = [...new Set(lines.map((l) => l.size))];
+        const sizes = sortSizes(new Set(lines.map((l) => l.size)));
         const colors = [...new Map(lines.map((l) => [l.color_id, l])).values()];
         const q = (c, t) => lines.find((l) => l.color_id === c && l.size === t)?.quantity;
         return (

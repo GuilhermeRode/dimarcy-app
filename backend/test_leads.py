@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 
 db_file = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.com",
-                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="")
+                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="", CHECK_EMAIL_DNS="false")
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy.exc import IntegrityError  # noqa: E402
@@ -19,6 +19,9 @@ from app.models import AppSettings, Contact, Customer, Lead, SellerCity, User  #
 from app.sales import _city_key  # noqa: E402
 
 TODAY = date(2026, 10, 16)
+# every field a customer needs since registration became complete; tests override what they check
+REQ = {"phone": "(47) 99999-8888", "email": "loja@gmail.com", "city": "Caxias do Sul", "state": "RS",
+       "address": "Rua A, 1", "state_registration": "ISENTO"}
 clock.today_br = lambda: TODAY
 
 
@@ -124,8 +127,8 @@ def check_regions(ctx):
     assert c.put(f"/api/users/{a_id}/cities", headers=admin, json=[{"city": "", "state": "SC"}]).status_code == 422
 
     # suggestions: Ana's customers' cities, marking the ones another seller has
-    c.post("/api/customers", headers=ctx["a"], json={"name": "Loja Corupá", "document": "1", "city": "Corupa", "state": "SC"})
-    c.post("/api/customers", headers=ctx["a"], json={"name": "Loja Guará", "document": "2", "city": "Guaramirim", "state": "SC"})
+    c.post("/api/customers", headers=ctx["a"], json={**REQ, "name": "Loja Corupá", "document": "1", "city": "Corupa", "state": "SC"})
+    c.post("/api/customers", headers=ctx["a"], json={**REQ, "name": "Loja Guará", "document": "2", "city": "Guaramirim", "state": "SC"})
     sug = c.get(f"/api/users/{a_id}/cities/suggestions", headers=admin).json()
     assert {"city": "Corupa", "state": "SC", "taken_by": "Bruno"} in sug, sug
     assert {"city": "Guaramirim", "state": "SC", "taken_by": None} in sug, sug
@@ -174,7 +177,7 @@ def check_listing(ctx):
     assert c.get(f"/api/leads/{ids['blumenau']}", headers=admin).status_code == 200
 
     # a customer typed by hand with the lead's CNPJ (formatted) hides the lead at once
-    c.post("/api/customers", headers=ctx["a"], json={"name": "Antiga", "document": "10.000.000/0001-03"})
+    c.post("/api/customers", headers=ctx["a"], json={**REQ, "name": "Antiga", "document": "10.000.000/0001-03"})
     assert names(c.get("/api/leads", headers=ctx["a"])) == ["Jota Moda", "Jaraguá Sem Fone"]
 
     # moving Corupá to Ana moves its leads; a deactivated seller's cities show as "sem vendedor"
@@ -200,7 +203,7 @@ def check_ranking_by_active_customers(ctx):
     color = c.post("/api/colors", headers=admin, json={"name": "Preto", "hex": "#111111"}).json()["id"]
     product = c.post("/api/products", headers=admin, json={"reference": "R1", "description": "Blusão", "price": 100,
                                                            "color_ids": [color]}).json()["id"]
-    cust = c.post("/api/customers", headers=admin, json={"name": "Cliente Blu", "document": "77", "city": "Blumenau",
+    cust = c.post("/api/customers", headers=admin, json={**REQ, "name": "Cliente Blu", "document": "77", "city": "Blumenau",
                                                          "state": "SC", "owner_id": None}).json()["id"]
     r = c.post("/api/orders", headers=admin, json={
         "customer_id": cust, "date": TODAY.isoformat(), "delivery_date": TODAY.isoformat(), "status": "delivered", "payment_method": "PIX",
@@ -212,7 +215,7 @@ def check_ranking_by_active_customers(ctx):
 
 def check_convert(ctx):
     c, admin, ids = ctx["c"], ctx["admin"], ctx["leads"]
-    body = {"name": "Jota Moda Ltda", "document": "10000000000101", "city": "Jaraguá do Sul", "state": "SC",
+    body = {**REQ, "name": "Jota Moda Ltda", "document": "10000000000101", "city": "Jaraguá do Sul", "state": "SC",
             "owner_id": ctx["b_id"]}  # a seller can't pick the owner: ignored
     assert c.post(f"/api/leads/{ids['corupa']}/convert", headers=ctx["a"], json=body).status_code == 404
     r = c.post(f"/api/leads/{ids['j_phone_recent']}/convert", headers=ctx["a"], json=body)
@@ -299,7 +302,7 @@ def check_contacts(ctx):
     # converting moves the history to the customer; customer contacts work the same way
     jl2 = add_lead("20000000000102", "Loja Converte")
     contact(ctx["a"], lead_id=jl2, next_action_date=yesterday)
-    cust = c.post(f"/api/leads/{jl2}/convert", headers=ctx["a"], json={"name": "Loja Converte", "document": "20000000000102"}).json()
+    cust = c.post(f"/api/leads/{jl2}/convert", headers=ctx["a"], json={**REQ, "name": "Loja Converte", "document": "20000000000102"}).json()
     hist = c.get("/api/contacts", headers=ctx["a"], params={"customer_id": cust["id"]}).json()
     assert len(hist) == 1
     due = c.get("/api/contacts/due", headers=ctx["a"]).json()
@@ -348,7 +351,7 @@ def check_pending_release(ctx):
     r = c.post("/api/contacts", headers=a, json={"lead_id": pa, "channel": "call", "notes": "x"})
     assert r.status_code == 404, r.text
     assert c.post(f"/api/leads/{pa}/discard", headers=a, json={"reason": "other"}).status_code == 404
-    r = c.post(f"/api/leads/{pa}/convert", headers=a, json={"name": "Xx", "document": "80000000000101", "city": "Jaraguá do Sul", "state": "SC"})
+    r = c.post(f"/api/leads/{pa}/convert", headers=a, json={**REQ, "name": "Xx", "document": "80000000000101", "city": "Jaraguá do Sul", "state": "SC"})
     assert r.status_code == 404, r.text
     assert c.get("/api/leads", headers=admin, params={"status": "foo"}).status_code == 422
     r = c.get("/api/leads", headers=admin, params={"status": "pending", "limit": 200})
@@ -380,7 +383,7 @@ def check_pending_release(ctx):
     assert r.status_code == 201, r.text
     assert "Pend Follow" in [d["name"] for d in c.get("/api/contacts/due", headers=admin).json()]
     lo = add_lead("80000000000105", "Sem Dono", city="Cidade Sem Vendedor", status="new")
-    cu = c.post(f"/api/leads/{lo}/convert", headers=admin, json={"name": "Sem Dono", "document": "80000000000105"}).json()
+    cu = c.post(f"/api/leads/{lo}/convert", headers=admin, json={**REQ, "name": "Sem Dono", "document": "80000000000105"}).json()
     assert c.delete(f"/api/customers/{cu['id']}", headers=admin).status_code == 204
     with SessionLocal() as db:
         assert db.get(Lead, lo).status == "pending"

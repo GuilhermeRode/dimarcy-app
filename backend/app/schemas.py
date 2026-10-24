@@ -5,6 +5,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
+from .br_format import format_document, format_phone, format_state_registration
+from .models import size_key
 from .uploads import thumb_name
 
 
@@ -41,6 +43,7 @@ class UserIn(UserBase):
 
 class UserOut(UserBase):
     id: int
+    quick_quantity: bool = True  # personal preference, set in Meu perfil (not by the admin's user form)
 
 
 class CityIn(BaseModel):
@@ -75,24 +78,54 @@ class ProfileIn(BaseModel):
     current_password: str | None = None
     new_password: str | None = None
     theme: str | None = None
+    quick_quantity: bool | None = None  # None = keep (an older cached app doesn't send it)
 
 
 # ---------- Customers ----------
 class CustomerIn(ORM):
+    """Everything but the notes is required to register a customer."""
     name: str = Field(min_length=2)
     document: str = Field(min_length=1)
-    phone: str | None = None
-    email: str | None = None
-    city: str | None = None
-    state: str | None = Field(default=None, max_length=2)
-    address: str | None = None
+    phone: str = Field(min_length=1)
+    email: str = Field(min_length=1)
+    city: str = Field(min_length=1)
+    state: str = Field(min_length=2, max_length=2)
+    address: str = Field(min_length=1)
+    state_registration: str = Field(min_length=1)  # IE number, or "ISENTO"
     notes: str | None = None
     owner_id: int | None = None  # seller this customer belongs to; only admins can set/change it
+
+    # stored already formatted, whatever the client sent (imports, old app versions)
+    @field_validator("document")
+    @classmethod
+    def _format_document(cls, v):
+        return format_document(v)
+
+    @field_validator("phone")
+    @classmethod
+    def _format_phone(cls, v):
+        return format_phone(v)
+
+    @field_validator("state_registration")
+    @classmethod
+    def _state_registration(cls, v, info):
+        if v is None:  # only reachable on CustomerOut: older records may lack it
+            return v
+        if not v.strip():
+            raise ValueError("Informe a inscrição estadual ou marque Isento.")
+        return format_state_registration(v, info.data.get("state"))  # state is declared above, so already in data
 
 
 class CustomerOut(CustomerIn):
     id: int
-    document: str | None = None  # older records may not have one; new ones always do (see CustomerIn)
+    # older records may lack these; new ones always have them (see CustomerIn)
+    document: str | None = None
+    state_registration: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    city: str | None = None
+    state: str | None = None
+    address: str | None = None
     owner_name: str | None = None
     created_at: datetime | None = None
     lat: float | None = None
@@ -140,7 +173,7 @@ class ProductIn(BaseModel):
     sizes: list[str] = ["U", "P", "M", "G", "GG"]
     active: bool = True
     color_ids: list[int] = []
-    seller_ids: list[int] | None = None  # empty = every seller may sell it; None = keep the current ones
+    seller_ids: list[int] | None = None  # users (sellers or admins) who may sell it; empty = everyone; None = keep
 
 
 class ProductOut(ORM):
@@ -164,7 +197,8 @@ class ProductOut(ORM):
     @field_validator("sizes", mode="before")
     @classmethod
     def split(cls, v):
-        return [t for t in v.split(",") if t] if isinstance(v, str) else v
+        # sorted on the way out too, so products saved before the order rule show P M G GG as well
+        return sorted((t for t in v.split(",") if t), key=size_key) if isinstance(v, str) else v
 
 
 # ---------- Orders ----------
@@ -186,6 +220,7 @@ class OrderIn(BaseModel):
     price_table: Literal["wholesale", "retail"] | None = None  # None = the seller's default
     discount: float = Field(default=0, ge=0)
     notes: str | None = None
+    notify_customer: bool | None = None  # None = on for a new order, kept on an edit (older cached apps)
     items: list[OrderItemIn] = Field(min_length=1)
 
 

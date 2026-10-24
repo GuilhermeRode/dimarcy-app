@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { errorMessage } from "../api";
-import { EyeIcon, EyeOffIcon } from "../components/icons";
+import { PasswordInput } from "../components/ui";
 import logoFull from "../assets/logo-full.png";
 
 const REMEMBER_KEY = "rememberedCredentials";
@@ -17,7 +17,6 @@ export default function Login() {
   const [email, setEmail] = useState(remembered?.email || "");
   const [password, setPassword] = useState(remembered?.password || "");
   const [rememberMe, setRememberMe] = useState(!!remembered);
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -56,14 +55,8 @@ export default function Login() {
           </label>
           <label className="field">
             <span>Senha</span>
-            <div className="password-field">
-              <input type={showPassword ? "text" : "password"} name="password" autoComplete="current-password"
-                placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
-              <button type="button" className="password-toggle" onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>
-                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-              </button>
-            </div>
+            <PasswordInput name="password" autoComplete="current-password"
+              placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </label>
           <label className="check">
             <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .. import clock
 from ..database import get_db
 from ..leads import due_follow_ups
-from ..models import SALE_STATUSES, Order, User
+from ..models import SALE_STATUSES, Order, User, size_key
 from ..sales import customer_overview, late_filter, visible_orders
 from ..security import get_current_user
 from ..settings_store import get_app_settings
@@ -15,8 +15,6 @@ from ..settings_store import get_app_settings
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 MAX_PERIOD_DAYS = 731
-DAYS_PER_YEAR = 365
-SIZE_ORDER = ["U", "PP", "P", "M", "G", "GG", "XG", "XGG"]
 
 
 def _top(d: dict, n=8, by="value"):
@@ -38,10 +36,10 @@ def _kpis(sales: list[Order]) -> dict:
     }
 
 
-def _period_goal(annual, days: int) -> float | None:
-    """The annual goal prorated to the period's length."""
+def _goal(annual) -> float | None:
+    """The full annual goal, whatever the chosen period: it's measured against the goal year's sales."""
     annual = float(annual or 0)  # Numeric columns load as Decimal
-    return round(annual * days / DAYS_PER_YEAR, 2) if annual > 0 else None
+    return annual if annual > 0 else None
 
 
 def _sales_series(sales: list[Order], start: date, end: date) -> list[dict]:
@@ -58,9 +56,9 @@ def _sales_series(sales: list[Order], start: date, end: date) -> list[dict]:
     return [{"label": k.strftime("%d/%m"), "start": k, "value": round(v, 2)} for k, v in buckets.items()]
 
 
-def _seller_row(u: User, days: int) -> dict:
-    return {"id": u.id, "name": u.name, "avatar_url": u.avatar_url, "goal": _period_goal(u.annual_goal, days),
-            "orders": 0, "pieces": 0, "value": 0.0}
+def _seller_row(u: User, year_sales: dict[int, float]) -> dict:
+    return {"id": u.id, "name": u.name, "avatar_url": u.avatar_url, "goal": _goal(u.annual_goal),
+            "goal_value": round(year_sales.get(u.id, 0.0), 2), "orders": 0, "pieces": 0, "value": 0.0}
 
 
 @router.get("")
@@ -78,6 +76,9 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
     sales = [o for o in orders if o.status in SALE_STATUSES]
     prev_end = start - timedelta(days=1)
     prev_sales = _sales_between(db, user, prev_end - timedelta(days=days - 1), prev_end)
+    year_sales: dict[int, float] = defaultdict(float)  # goal-year sales per seller, independent of the period
+    for o in _sales_between(db, user, clock.goal_year_start(today), today):
+        year_sales[o.seller_id] += o.total
 
     by_status = defaultdict(lambda: {"count": 0, "value": 0.0})
     for o in orders:
@@ -87,9 +88,9 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
     sellers: dict[int, dict] = {}
     if is_admin:  # active sellers with no sales still show up, with zeros
         for u in db.query(User).filter(User.active.is_(True), User.role == "seller"):
-            sellers[u.id] = _seller_row(u, days)
+            sellers[u.id] = _seller_row(u, year_sales)
     else:
-        sellers[user.id] = _seller_row(user, days)
+        sellers[user.id] = _seller_row(user, year_sales)
 
     products, customers, colors, cities, sizes = {}, {}, {}, {}, defaultdict(int)
     for o in sales:
@@ -97,7 +98,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         c["orders"] += 1
         c["pieces"] += o.pieces
         c["value"] += o.total
-        s = sellers.setdefault(o.seller_id, _seller_row(o.seller, days))
+        s = sellers.setdefault(o.seller_id, _seller_row(o.seller, year_sales))
         s["orders"] += 1
         s["pieces"] += o.pieces
         s["value"] += o.total
@@ -140,7 +141,8 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         "kpis": _kpis(sales),
         "previous_kpis": _kpis(prev_sales),
         "sales_series": _sales_series(sales, start, end),
-        "goal": _period_goal(company_goal, days),
+        "goal": _goal(company_goal),
+        "goal_value": round(sum(year_sales.values()), 2),
         "monthly_sales": [{"month": f"{m:02d}/{str(y)[2:]}", **series[(y, m)]} for y, m in months],
         "by_status": [{"status": s, **v} for s, v in by_status.items()],
         "top_products": _top(products, by="pieces"),  # the Painel ranks products by pieces sold
@@ -150,7 +152,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         "by_color": _top(colors, len(colors), by="pieces"),  # all colors: the Painel pools the tail into "Outras cores"
         "by_size": sorted(
             [{"size": t, "pieces": q} for t, q in sizes.items()],
-            key=lambda x: SIZE_ORDER.index(x["size"]) if x["size"] in SIZE_ORDER else 99,
+            key=lambda x: size_key(x["size"]),
         ),
         "alerts": {
             "customers_at_risk": statuses["at_risk"],

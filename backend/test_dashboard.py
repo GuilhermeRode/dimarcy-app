@@ -6,12 +6,17 @@ from datetime import date, timedelta
 
 db_file = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.com",
-                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="")
+                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="", CHECK_EMAIL_DNS="false")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app import clock  # noqa: E402
 from app.main import app  # noqa: E402
+
+# a customer needs every field but the notes; no city lookup or DNS check over the network
+from app.routers import customers as _customers_router  # noqa: E402
+_customers_router.geocode_and_cache_background = lambda *a: None
+FULL = {"state_registration": "ISENTO", "phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
 from app.models import customer_status  # noqa: E402
 
 TODAY = date(2026, 10, 7)
@@ -79,7 +84,7 @@ with TestClient(app) as c:
         "reference": "R1", "description": "Blusão", "price": 100, "color_ids": [color["id"]]}).json()
 
     def customer(headers, name):
-        r = c.post("/api/customers", headers=headers, json={"name": name, "document": "123"})
+        r = c.post("/api/customers", headers=headers, json={"name": name, "document": "123", **FULL})
         assert r.status_code == 201, r.text
         return r.json()["id"]
 
@@ -164,17 +169,21 @@ with TestClient(app) as c:
     p = c.get("/api/dashboard", headers=admin, params={"start": day60, "end": day60}).json()
     assert p["kpis"]["revenue"] == 100 and p["previous_kpis"]["revenue"] == 100  # day 60 vs day 61
 
-    # ---- goals: prorated, admin-only company goal, sellers with zero sales listed ----
-    assert s7["goal"] == 14000.0  # 730000 * 7 / 365
+    # ---- goals: the full annual goal vs. the goal year's sales, whatever the period ----
+    goal_year = c.get("/api/dashboard", headers=admin).json()  # default period = the goal year so far
+    assert s7["goal"] == 730000 and s7["goal_value"] == goal_year["kpis"]["revenue"] == goal_year["goal_value"]
     sellers = {s["name"]: s for s in s7["by_seller"]}
-    assert sellers["Ana Vendas"]["goal"] == 7000.0  # 365000 * 7 / 365
+    year_sellers = {s["name"]: s for s in goal_year["by_seller"]}
+    assert sellers["Ana Vendas"]["goal"] == 365000
+    assert sellers["Ana Vendas"]["goal_value"] == year_sellers["Ana Vendas"]["value"]
     assert sellers["Bruno Vendas"]["goal"] is None
     new_user("Carla Nova", "carla@test.com")
     new_user("Davi Inativo", "davi@test.com", active=False)
     names = {s["name"] for s in c.get("/api/dashboard", headers=admin, params=week).json()["by_seller"]}
     assert "Carla Nova" in names and "Davi Inativo" not in names, names
     sa7 = c.get("/api/dashboard", headers=seller_a, params=week).json()
-    assert sa7["goal"] == 7000.0  # the seller gets their own goal, never the company's
+    assert sa7["goal"] == 365000  # the seller gets their own goal, never the company's
+    assert sa7["goal_value"] == year_sellers["Ana Vendas"]["value"]
     assert [s["name"] for s in sa7["by_seller"]] == ["Ana Vendas"]
 
     # ---- rankings by pieces, not by value: a cheap best-seller must not be cut ----
@@ -196,7 +205,7 @@ with TestClient(app) as c:
     from app.models import Customer
     with SessionLocal() as db:  # straight to the DB: the API would geocode each city over the network
         ana_id = next(s["id"] for s in s7["by_seller"] if s["name"] == "Ana Vendas")
-        city_customers = [Customer(name=f"Loja {i}", document="1", city=f"Cidade {i}", state="SC", owner_id=ana_id)
+        city_customers = [Customer(name=f"Loja {i}", document="1", email="c@test.com", city=f"Cidade {i}", state="SC", owner_id=ana_id)
                           for i in range(51)]
         db.add_all(city_customers)
         db.commit()
@@ -209,7 +218,7 @@ with TestClient(app) as c:
 print("dashboard checks OK")
 
 # ---- goal year: October -> September ----
-assert clock.goal_year_start(date(2026, 10, 1)) == date(2026, 10, 1)  # the 2027 goal starts here
+assert clock.goal_year_start(date(2026, 10, 1)) == date(2026, 10, 1)  # the 2026/27 goal starts here
 assert clock.goal_year_start(date(2027, 9, 30)) == date(2026, 10, 1)
 assert clock.goal_year_start(date(2026, 9, 30)) == date(2025, 10, 1)
 print("goal year ok")

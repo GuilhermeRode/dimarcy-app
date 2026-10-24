@@ -6,7 +6,7 @@ import tempfile
 
 db_file = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.com", ADMIN_PASSWORD="admin-pass",
-                  RESEND_API_KEY="")
+                  RESEND_API_KEY="", CHECK_EMAIL_DNS="false")
 
 from fastapi.testclient import TestClient  # noqa: E402
 from PIL import Image  # noqa: E402
@@ -38,6 +38,40 @@ with TestClient(app) as c:
     assert c.post("/api/colors", headers=seller, json={"name": "Bordô"}).status_code == 403
     assert c.get("/api/users", headers=seller).status_code == 403
     pid = c.post("/api/products", headers=admin, json=product).json()["id"]
+    # sellers browse products read-only: no edit, delete or photo changes
+    assert c.get(f"/api/products/{pid}", headers=seller).status_code == 200
+    assert c.put(f"/api/products/{pid}", headers=seller, json=product).status_code == 403
+    assert c.delete(f"/api/products/{pid}", headers=seller).status_code == 403
+    assert c.post(f"/api/products/{pid}/image", headers=seller, files={"file": ("x.jpg", b"x", "image/jpeg")}).status_code == 403
+    assert c.delete(f"/api/products/{pid}/image", headers=seller).status_code == 403
+
+    # ---- customers: every field but the notes is required; the e-mail is checked ----
+    from email_validator import EmailUndeliverableError  # noqa: E402
+    import app.routers.customers as _m  # noqa: E402
+    from app import config as _config  # noqa: E402
+    _m.geocode_and_cache_background = lambda *a: None
+    full = {"name": "Cliente Teste", "document": "123.456.789-01", "state_registration": "254.123.456", "phone": "(54) 99999-8888", "email": "ok@gmail.com",
+            "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
+    for field in ("document", "state_registration", "phone", "email", "city", "state", "address"):
+        assert c.post("/api/customers", headers=admin, json={**full, field: ""}).status_code == 422, field
+    assert c.post("/api/customers", headers=admin, json={**full, "notes": None}).status_code == 201  # notes stay optional
+    for bad in ("semarroba", "a@gmail", "a b@gmail.com"):
+        r = c.post("/api/customers", headers=admin, json={**full, "email": bad})
+        assert r.status_code == 400 and "E-mail" in r.json()["detail"], (bad, r.text)
+    r = c.post("/api/customers", headers=admin, json={**full, "email": "joao@gmial.com"})
+    assert r.status_code == 400 and "joao@gmail.com" in r.json()["detail"], r.text
+    # the domain check, with the resolver faked (no network): a missing domain is refused
+    _config.settings.check_email_dns = True
+    real = _m.validate_email
+    def _fake(email, check_deliverability=True, **kw):
+        if check_deliverability and email.endswith("@dominioinexistente.com"):
+            raise EmailUndeliverableError("The domain name dominioinexistente.com does not exist.")
+        return real(email, check_deliverability=False)
+    _m.validate_email = _fake
+    r = c.post("/api/customers", headers=admin, json={**full, "email": "a@dominioinexistente.com"})
+    assert r.status_code == 400 and "não existe" in r.json()["detail"], r.text
+    assert c.post("/api/customers", headers=admin, json={**full, "email": "a@gmail.com"}).status_code == 201
+    _m.validate_email, _config.settings.check_email_dns = real, False
 
     # two-tone colors keep their second tone; a bad one is rejected
     duo = c.post("/api/colors", headers=admin, json={"name": "09/37", "hex": "#f0f7de", "hex2": "#6b4a32"}).json()

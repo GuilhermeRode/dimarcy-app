@@ -181,7 +181,7 @@ export default function Dashboard() {
         <>
           <section className="hero-row">
             <RevenueHero title="Faturamento no período" revenue={d.kpis.revenue} prevRevenue={d.previous_kpis.revenue}
-              series={d.sales_series} goal={d.goal} onClick={isAdmin ? () => nav("/revenue") : undefined} />
+              series={d.sales_series} goal={d.goal} goalValue={d.goal_value} onClick={isAdmin ? () => nav("/revenue") : undefined} />
             <div className="kpi-stack">
               {kpis.map(([label, cur, prev, fmt]) => (
                 <div key={label}>

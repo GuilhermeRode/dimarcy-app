@@ -13,13 +13,13 @@ class Settings(BaseSettings):
     frontend_url: str = "https://app.dimarcy.com.br"  # used to build the password-reset link
     admin_email: str = "admin@dimarcy.com.br"
     admin_password: str = "admin123"
+    check_email_dns: bool = True  # customer e-mails: also confirm the domain exists (off in tests: no network)
     enable_docs: bool = False  # /docs and /openapi.json map every route; keep off in production
 
-    # E-mail notifications (order created, order delivered), sent via Resend's HTTP API.
+    # E-mail notifications (order created, edited, delivered), sent via Resend's HTTP API.
     # Leave resend_api_key empty to disable sending.
     resend_api_key: str = ""
     mail_from: str = ""  # must be on a domain verified in Resend, e.g. "Di Marcy <pedidos@dimarcy.com.br>"
-    notify_email: str = ""  # who receives it; defaults to admin_email when empty
 
     # Receita Federal open CNPJ data (lead import). A public Nextcloud share read over WebDAV;
     # the Receita has moved it before, so both are overridable from .env.

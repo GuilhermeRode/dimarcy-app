@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { STATUS } from "../format";
 import { fileUrl } from "../api";
-import { WarningIcon } from "./icons";
+import { EyeIcon, EyeOffIcon, WarningIcon } from "./icons";
 
 // A product photo shown full screen; click anywhere, × or Esc closes it. Renders above modals.
 export function PhotoZoom({ src, caption, onClose }) {
@@ -87,6 +87,20 @@ export function Field({ label, children, span }) {
       <span>{label}</span>
       {children}
     </label>
+  );
+}
+
+// A password input with the eye button that shows/hides what was typed
+export function PasswordInput(props) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="password-field">
+      <input {...props} type={show ? "text" : "password"} />
+      <button type="button" className="password-toggle" onClick={() => setShow((v) => !v)}
+        aria-label={show ? "Ocultar senha" : "Mostrar senha"}>
+        {show ? <EyeOffIcon /> : <EyeIcon />}
+      </button>
+    </div>
   );
 }
 

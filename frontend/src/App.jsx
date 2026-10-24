@@ -54,7 +54,7 @@ const router = createHashRouter(createRoutesFromElements(
       <Route path="orders/new" element={<OrderForm />} />
       <Route path="orders" element={<Orders />} />
       <Route path="orders/:id" element={<OrderDetail />} />
-      <Route path="orders/:id/edit" element={<Protected admin><OrderForm /></Protected>} />
+      <Route path="orders/:id/edit" element={<OrderForm />} />  {/* sellers: own order, 1h window (server checks) */}
       <Route path="production" element={<Protected admin><Production /></Protected>} />
       <Route path="revenue" element={<Protected admin><Revenue /></Protected>} />
       {/* key: both routes render Finance, so switching tabs must start fresh state */}
@@ -68,7 +68,7 @@ const router = createHashRouter(createRoutesFromElements(
           <Protected admin><Suspense fallback={null}><CustomersByCity /></Suspense></Protected>
         } />
       )}
-      <Route path="products" element={<Protected admin><Products /></Protected>} />
+      <Route path="products" element={<Protected><Products /></Protected>} />
       <Route path="colors" element={<Protected admin><Colors /></Protected>} />
       <Route path="users" element={<Protected admin><Users /></Protected>} />
       <Route path="settings" element={<Protected admin><Settings /></Protected>} />

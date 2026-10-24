@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { MapContainer, TileLayer, CircleMarker, Tooltip, ZoomControl, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -72,6 +73,7 @@ export default function CustomersByCity() {
     <div className="page page-wide">
       <header className="page-header">
         <div>
+          <Link to="/customers" className="back-link">‹ Clientes</Link>
           <h1>Clientes por cidade</h1>
         </div>
       </header>

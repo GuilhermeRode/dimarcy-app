@@ -1,8 +1,10 @@
+from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .. import clock
+from ..config import settings
 from ..database import get_db
 from ..geocoding import geocode_and_cache_background, lookup_cached_city
 from ..leads import city_owners, lead_owner
@@ -12,6 +14,25 @@ from ..sales import customer_overview, customers_by_city
 from ..security import get_current_user, require_admin
 
 router = APIRouter(prefix="/customers", tags=["customers"])
+
+
+# Common typos of big providers: these domains exist, so the DNS check alone wouldn't catch them
+TYPO_DOMAINS = {"gmial.com": "gmail.com", "gmai.com": "gmail.com", "gnail.com": "gmail.com",
+                "hotmial.com": "hotmail.com", "hotmal.com": "hotmail.com", "outlok.com": "outlook.com", "yaho.com": "yahoo.com"}
+
+
+def _check_email(email: str, check_dns: bool) -> str:
+    """Valid format, not a known typo and (when asked) a domain that exists. Returns the normalized address.
+    A DNS timeout is not a failure — email_validator lets those through, so the server being offline can't block a save."""
+    try:
+        v = validate_email(email, check_deliverability=check_dns and settings.check_email_dns, timeout=4)
+    except EmailUndeliverableError:
+        raise HTTPException(400, f"O domínio do e-mail ({email.rsplit('@', 1)[-1]}) não existe ou não recebe e-mails. Confira o que foi digitado.")
+    except EmailNotValidError:
+        raise HTTPException(400, "E-mail inválido. Confira se digitou corretamente.")
+    if v.domain in TYPO_DOMAINS:
+        raise HTTPException(400, f"O domínio {v.domain} parece errado. Você quis dizer {v.local_part}@{TYPO_DOMAINS[v.domain]}?")
+    return v.normalized
 
 
 def _visible(cid: int, db: Session, user: User) -> Customer:
@@ -53,7 +74,9 @@ def get(cid: int, db: Session = Depends(get_db), user: User = Depends(get_curren
 def add_customer(db: Session, data: CustomerIn, owner_id: int | None) -> Customer:
     """Adds (doesn't commit) a new customer, with cached coordinates when the city is known.
     Callers commit, then call geocode_later."""
-    c = Customer(**data.model_dump(exclude={"owner_id"}), owner_id=owner_id)
+    payload = data.model_dump(exclude={"owner_id"})
+    payload["email"] = _check_email(data.email, check_dns=True)
+    c = Customer(**payload, owner_id=owner_id)
     if c.city:
         cached = lookup_cached_city(db, c.city, c.state)
         if cached:
@@ -83,7 +106,10 @@ def update(cid: int, data: CustomerIn, background_tasks: BackgroundTasks,
            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     c = _visible(cid, db, user)
     city_changed = data.city != c.city or data.state != c.state
-    for k, v in data.model_dump(exclude={"owner_id"}).items():
+    payload = data.model_dump(exclude={"owner_id"})
+    # the DNS lookup only when the address changed: an untouched (old) one never blocks saving other fields
+    payload["email"] = _check_email(data.email, check_dns=data.email != c.email)
+    for k, v in payload.items():
         setattr(c, k, v)
     if user.role == "admin":
         c.owner_id = data.owner_id

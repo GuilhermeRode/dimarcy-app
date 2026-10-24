@@ -7,12 +7,16 @@ from datetime import date, timedelta
 
 db_file = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.com",
-                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="")
+                  ADMIN_PASSWORD="admin-pass-123", RESEND_API_KEY="", CHECK_EMAIL_DNS="false")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import clock  # noqa: E402
 from app.main import app  # noqa: E402
+
+# a customer needs every field but the notes; no city lookup or DNS check over the network
+from app.routers import customers as _customers_router  # noqa: E402
+_customers_router.geocode_and_cache_background = lambda *a: None
+FULL = {"state_registration": "ISENTO", "phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
 
 TODAY = date.today()
 
@@ -37,13 +41,13 @@ with TestClient(app) as c:
                                                            "color_ids": [color]}).json()["id"]
 
     def customer(h, name, **extra):
-        r = c.post("/api/customers", headers=h, json={"name": name, "document": "123", **extra})
+        r = c.post("/api/customers", headers=h, json={"name": name, "document": "123", **FULL, **extra})
         assert r.status_code == 201, r.text
         return r.json()
 
     def order(h, cid, qty=1, status="delivered"):
         return c.post("/api/orders", headers=h, json={
-            "customer_id": cid, "date": TODAY.isoformat(), "delivery_date": (TODAY - timedelta(days=2)).isoformat(),
+            "customer_id": cid, "date": (TODAY - timedelta(days=2)).isoformat(), "delivery_date": (TODAY - timedelta(days=2)).isoformat(),
             "status": status, "payment_method": "PIX", "payment_terms": "À vista",
             "items": [{"product_id": product, "color_id": color, "size": "P", "quantity": qty}]})
 
@@ -54,18 +58,27 @@ with TestClient(app) as c:
     oB = order(B, cB["id"], qty=2).json()["id"]
     o_admin = order(admin, cA["id"], qty=5).json()["id"]  # admin sold to Ana's customer
 
+    # ---- a legacy customer without email can't get new orders (admin included) ----
+    from app.database import SessionLocal  # noqa: E402
+    from app.models import Customer  # noqa: E402
+    with SessionLocal() as db:
+        db.get(Customer, c_none["id"]).email = None
+        db.commit()
+    r = order(admin, c_none["id"])
+    assert r.status_code == 400 and "e-mail" in r.json()["detail"], r.text
+
     # ---- customers ----
     assert [x["name"] for x in c.get("/api/customers", headers=B).json()] == ["Cliente do Bruno"]
     assert [x["name"] for x in c.get("/api/customers", headers=B, params={"search": "Ana"}).json()] == []
     for cid in (cA["id"], c_none["id"]):
         assert c.get(f"/api/customers/{cid}", headers=B).status_code == 404
-        assert c.put(f"/api/customers/{cid}", headers=B, json={"name": "Hack", "document": "1"}).status_code == 404
+        assert c.put(f"/api/customers/{cid}", headers=B, json={"name": "Hack", "document": "1", **FULL}).status_code == 404
         assert c.delete(f"/api/customers/{cid}", headers=B).status_code == 404
     assert c.get(f"/api/customers/{cA['id']}", headers=admin).json()["name"] == "Cliente da Ana"  # untouched
     # a seller can't create or move a customer into someone else's portfolio
     assert customer(B, "Tentativa", owner_id=ids["a"])["owner_id"] == ids["b"]
     r = c.put(f"/api/customers/{cB['id']}", headers=B, json={"name": "Cliente do Bruno", "document": "1",
-                                                             "owner_id": ids["a"]})
+                                                             **FULL, "owner_id": ids["a"]})
     assert r.json()["owner_id"] == ids["b"]
     names_b = {x["name"] for x in c.get("/api/customers/overview", headers=B).json()}
     assert names_b == {"Cliente do Bruno", "Tentativa"}, names_b
@@ -78,8 +91,35 @@ with TestClient(app) as c:
     assert c.get(f"/api/orders/{o_admin}", headers=A).status_code == 404  # sold by admin, not by Ana
     assert order(B, cA["id"]).status_code == 400  # can't sell to Ana's customer
     assert order(B, c_none["id"]).status_code == 400  # nor to an unowned one
-    for oid in (oA, oB):  # editing, status changes and deletion are admin-only
-        assert c.put(f"/api/orders/{oid}", headers=B, json={}).status_code == 403
+    # editing: a seller only edits their own order, for 1 hour, and can't change its status
+    edit = {"customer_id": cB["id"], "delivery_date": TODAY.isoformat(), "status": "canceled", "payment_method": "PIX",
+            "payment_terms": "À vista", "items": [{"product_id": product, "color_id": color, "size": "P", "quantity": 2}]}
+    assert c.put(f"/api/orders/{oA}", headers=B, json={**edit, "customer_id": cA["id"]}).status_code == 404
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["can_edit"] is True
+    from app.routers import orders as orders_router  # noqa: E402
+    updated_mails = []
+    orders_router.send_order_updated_emails = lambda o: updated_mails.append(o.id)
+    r = c.put(f"/api/orders/{oB}", headers=B, json=edit)  # same 2 pieces, new payment/dates: no e-mail
+    assert r.status_code == 200 and r.json()["status"] == "delivered", r.text
+    assert updated_mails == [], updated_mails
+    c.put(f"/api/orders/{oB}", headers=B, json={**edit, "items": [{**edit["items"][0], "quantity": 3}]})
+    c.put(f"/api/orders/{oB}", headers=B, json={**edit, "items": [{**edit["items"][0], "size": "M"}]})
+    assert updated_mails == [oB, oB], updated_mails  # quantity changed, then size changed
+    # "Enviar e-mail ao cliente" is saved with the order; an edit that doesn't send it keeps it
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["notify_customer"] is True
+    c.put(f"/api/orders/{oB}", headers=B, json={**edit, "notify_customer": False})
+    c.put(f"/api/orders/{oB}", headers=B, json=edit)
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["notify_customer"] is False
+    assert c.put(f"/api/orders/{oB}", headers=B, json={**edit, "customer_id": cA["id"]}).status_code == 400
+    from datetime import datetime, timezone  # noqa: E402
+    from app.database import SessionLocal  # noqa: E402
+    from app.models import Order  # noqa: E402
+    with SessionLocal() as db:  # push the order past the 1-hour window
+        db.get(Order, oB).created_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=2)
+        db.commit()
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["can_edit"] is False
+    assert c.put(f"/api/orders/{oB}", headers=B, json=edit).status_code == 403
+    for oid in (oA, oB):  # status changes and deletion are admin-only
         assert c.patch(f"/api/orders/{oid}/status", headers=B, json={"status": "canceled"}).status_code == 403
         assert c.delete(f"/api/orders/{oid}", headers=B).status_code == 403
     assert {o["id"] for o in c.get("/api/orders", headers=admin).json()} == {oA, oB, o_admin}
@@ -91,8 +131,7 @@ with TestClient(app) as c:
     assert [x["name"] for x in d["top_customers"]] == ["Cliente do Bruno"]
     assert sum(m["orders"] for m in d["monthly_sales"]) == 1
     assert d["alerts"]["late_orders"] == 0  # Ana's late order is not Bruno's
-    days = (TODAY - clock.goal_year_start(TODAY)).days + 1  # default period: goal year (from 1 Oct) to today
-    assert d["goal"] == round(2000 * days / 365, 2), d["goal"]  # Bruno's own goal, not the company's
+    assert d["goal"] == 2000 and d["goal_value"] == 200, d["goal"]  # Bruno's own full goal vs. his goal-year sales
     da = c.get("/api/dashboard", headers=A).json()
     assert da["kpis"]["revenue"] == 100 and da["alerts"]["late_orders"] == 1  # admin's sale excluded
     assert "60800" not in str(d) and "annual_goal" not in str(d)
