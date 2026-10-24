@@ -36,6 +36,21 @@ jobs:
         run: |
           rsync -az --delete -e "ssh -i ~/.ssh/dimarcy_vm" frontend/dist/ opc@163.176.158.45:/opt/dimarcy/frontend/
 
+      # snapshot the database before new code (and its startup migrations) touches it; keeps the last 20.
+      # sqlite3's backup API gives a consistent copy even while the backend is running. No database = no deploy.
+      - name: Back up database
+        run: |
+          ssh -i ~/.ssh/dimarcy_vm opc@163.176.158.45 '
+            set -e
+            cd /opt/dimarcy/backend
+            test -f dimarcy.db || { echo "dimarcy.db not found — backup not made, deploy stopped"; exit 1; }
+            mkdir -p /opt/dimarcy/backups
+            out=/opt/dimarcy/backups/dimarcy-$(date +%Y%m%d-%H%M%S).db
+            python3 -c "import sqlite3, sys; s = sqlite3.connect(sys.argv[1]); d = sqlite3.connect(sys.argv[2]); s.backup(d); d.close()" dimarcy.db "$out"
+            ls -la "$out"
+            ls -1t /opt/dimarcy/backups/dimarcy-*.db | tail -n +21 | xargs -r rm --
+          '
+
       # only sync app/ + requirements.txt — never touch .env, dimarcy.db, uploads/, .venv on the server
       - name: Deploy backend (app code)
         run: |
