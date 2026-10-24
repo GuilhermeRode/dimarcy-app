@@ -58,6 +58,15 @@ with TestClient(app) as c:
     oB = order(B, cB["id"], qty=2).json()["id"]
     o_admin = order(admin, cA["id"], qty=5).json()["id"]  # admin sold to Ana's customer
 
+    # ---- a legacy customer without email can't get new orders (admin included) ----
+    from app.database import SessionLocal  # noqa: E402
+    from app.models import Customer  # noqa: E402
+    with SessionLocal() as db:
+        db.get(Customer, c_none["id"]).email = None
+        db.commit()
+    r = order(admin, c_none["id"])
+    assert r.status_code == 400 and "e-mail" in r.json()["detail"], r.text
+
     # ---- customers ----
     assert [x["name"] for x in c.get("/api/customers", headers=B).json()] == ["Cliente do Bruno"]
     assert [x["name"] for x in c.get("/api/customers", headers=B, params={"search": "Ana"}).json()] == []
@@ -87,8 +96,20 @@ with TestClient(app) as c:
             "payment_terms": "À vista", "items": [{"product_id": product, "color_id": color, "size": "P", "quantity": 2}]}
     assert c.put(f"/api/orders/{oA}", headers=B, json={**edit, "customer_id": cA["id"]}).status_code == 404
     assert c.get(f"/api/orders/{oB}", headers=B).json()["can_edit"] is True
-    r = c.put(f"/api/orders/{oB}", headers=B, json=edit)
+    from app.routers import orders as orders_router  # noqa: E402
+    updated_mails = []
+    orders_router.send_order_updated_emails = lambda o: updated_mails.append(o.id)
+    r = c.put(f"/api/orders/{oB}", headers=B, json=edit)  # same 2 pieces, new payment/dates: no e-mail
     assert r.status_code == 200 and r.json()["status"] == "delivered", r.text
+    assert updated_mails == [], updated_mails
+    c.put(f"/api/orders/{oB}", headers=B, json={**edit, "items": [{**edit["items"][0], "quantity": 3}]})
+    c.put(f"/api/orders/{oB}", headers=B, json={**edit, "items": [{**edit["items"][0], "size": "M"}]})
+    assert updated_mails == [oB, oB], updated_mails  # quantity changed, then size changed
+    # "Enviar e-mail ao cliente" is saved with the order; an edit that doesn't send it keeps it
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["notify_customer"] is True
+    c.put(f"/api/orders/{oB}", headers=B, json={**edit, "notify_customer": False})
+    c.put(f"/api/orders/{oB}", headers=B, json=edit)
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["notify_customer"] is False
     assert c.put(f"/api/orders/{oB}", headers=B, json={**edit, "customer_id": cA["id"]}).status_code == 400
     from datetime import datetime, timezone  # noqa: E402
     from app.database import SessionLocal  # noqa: E402

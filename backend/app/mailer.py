@@ -217,9 +217,10 @@ def _notify(order, kind: str, to: list[str], subject: str, heading: str, intro: 
 
 
 def _notify_customer(order, kind: str, subject: str, message: str, badge: str, color: str, title: str) -> None:
-    """Separate e-mail so the customer doesn't see internal addresses; no app link (customers can't log in)."""
+    """Separate e-mail so the customer doesn't see internal addresses; no app link (customers can't log in).
+    Skipped when the order was saved with "Enviar e-mail ao cliente" off."""
     to = (order.customer.email or "").strip()
-    if not to:
+    if not to or not order.notify_customer:
         return
     name = order.customer.name
     _notify(order, f"{kind} (customer)", [to], f"{subject} — Di Marcy", f"Olá, {name}! {message}",

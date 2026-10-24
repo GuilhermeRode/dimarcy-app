@@ -129,6 +129,7 @@ class Order(Base):
                                              server_default="wholesale")  # see PRICE_TABLES
     discount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     notes: Mapped[str | None] = mapped_column(Text)
+    notify_customer: Mapped[bool] = mapped_column(Boolean, default=True)  # off = no e-mails to the customer
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     customer: Mapped[Customer] = relationship(back_populates="orders")

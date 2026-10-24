@@ -68,7 +68,8 @@ async def lifespan(app: FastAPI):
     _ensure_columns("colors", {"hex2": "VARCHAR(7)"})
     _ensure_columns("customers", {"state_registration": "VARCHAR(30)"})
     _tidy_customers()
-    _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'"})
+    _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'",
+                               "notify_customer": "BOOLEAN DEFAULT TRUE"})
     _ensure_columns("app_settings", {"annual_goal": "NUMERIC(12,2) DEFAULT 0",
                                      "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50"})
     with SessionLocal() as db:

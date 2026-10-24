@@ -185,6 +185,7 @@ class OrderIn(BaseModel):
     price_table: Literal["wholesale", "retail"] | None = None  # None = the seller's default
     discount: float = Field(default=0, ge=0)
     notes: str | None = None
+    notify_customer: bool | None = None  # None = on for a new order, kept on an edit (older cached apps)
     items: list[OrderItemIn] = Field(min_length=1)
 
 

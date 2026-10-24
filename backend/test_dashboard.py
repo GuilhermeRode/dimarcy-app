@@ -205,7 +205,7 @@ with TestClient(app) as c:
     from app.models import Customer
     with SessionLocal() as db:  # straight to the DB: the API would geocode each city over the network
         ana_id = next(s["id"] for s in s7["by_seller"] if s["name"] == "Ana Vendas")
-        city_customers = [Customer(name=f"Loja {i}", document="1", city=f"Cidade {i}", state="SC", owner_id=ana_id)
+        city_customers = [Customer(name=f"Loja {i}", document="1", email="c@test.com", city=f"Cidade {i}", state="SC", owner_id=ana_id)
                           for i in range(51)]
         db.add_all(city_customers)
         db.commit()
