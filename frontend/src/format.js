@@ -15,6 +15,17 @@ export const STATUS = {
 };
 
 export const DEFAULT_SIZES = ["U", "P", "M", "G", "GG"];
+// Same order everywhere sizes are listed (product form, order grid, prints). Same list as SIZE_ORDER in backend/app/models.py.
+const SIZE_ORDER = ["U", "PP", "P", "M", "G", "GG", "XG", "XGG", "EG", "EGG"];
+const sizeRank = (s) => {
+  const i = SIZE_ORDER.indexOf(s);
+  return i >= 0 ? [0, i, ""] : /^\d+$/.test(s) ? [1, Number(s), ""] : [2, 0, s];
+};
+// known sizes in SIZE_ORDER, then numbers (36, 38...), then anything else alphabetically
+export const sortSizes = (sizes) => [...sizes].sort((a, b) => {
+  const [x, y] = [sizeRank(a), sizeRank(b)];
+  return x[0] - y[0] || x[1] - y[1] || x[2].localeCompare(y[2]);
+});
 
 // Calendar dates in the user's local timezone. Never toISOString() — that's UTC and
 // returns tomorrow's date after 21:00 in Brazil.

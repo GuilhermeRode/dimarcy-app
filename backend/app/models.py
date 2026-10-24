@@ -10,6 +10,17 @@ from .database import Base
 ORDER_STATUSES = ["quote", "confirmed", "in_production", "shipped", "delivered", "canceled"]
 SALE_STATUSES = ["confirmed", "in_production", "shipped", "delivered"]  # count as revenue
 LATE_STATUSES = ["confirmed", "in_production"]  # past delivery_date in these = late
+SIZE_ORDER = ["U", "PP", "P", "M", "G", "GG", "XG", "XGG", "EG", "EGG"]  # same list as frontend/src/format.js
+
+
+def size_key(size: str):
+    """Sort key: known sizes in SIZE_ORDER, then numbers (36, 38...), then anything else alphabetically."""
+    s = size.strip().upper()
+    if s in SIZE_ORDER:
+        return (0, SIZE_ORDER.index(s), "")
+    return (1, int(s), "") if s.isdigit() else (2, 0, s)
+
+
 PRICE_TABLES = ["wholesale", "retail"]  # wholesale = registered price; retail = + AppSettings.retail_markup_percent
 ENTRY_KINDS = ["receivable", "payable"]
 # Business content, so in Portuguese; a payable's category must be one of these

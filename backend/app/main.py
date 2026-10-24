@@ -10,7 +10,7 @@ from sqlalchemy import inspect, text
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .br_format import extract_state_registration, format_document, format_phone, format_state_registration
-from .models import Customer, User
+from .models import Customer, Product, User, size_key
 from .routers import auth, colors, customers, dashboard, finance, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
@@ -57,6 +57,15 @@ def _tidy_customers():
         db.commit()  # only the rows that actually changed are written
 
 
+def _sort_product_sizes():
+    """Sizes used to be saved in the order they were ticked ("GG,P,M"); store them in SIZE_ORDER ("P,M,GG").
+    Idempotent: products already in order are left alone."""
+    with SessionLocal() as db:
+        for p in db.query(Product).all():
+            p.sizes = ",".join(sorted((t for t in (p.sizes or "").split(",") if t), key=size_key))
+        db.commit()  # only the rows that actually changed are written
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
@@ -68,6 +77,7 @@ async def lifespan(app: FastAPI):
     _ensure_columns("colors", {"hex2": "VARCHAR(7)"})
     _ensure_columns("customers", {"state_registration": "VARCHAR(30)"})
     _tidy_customers()
+    _sort_product_sizes()
     _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'",
                                "notify_customer": "BOOLEAN DEFAULT TRUE"})
     _ensure_columns("app_settings", {"annual_goal": "NUMERIC(12,2) DEFAULT 0",

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, fileUrl, screenCache } from "../api";
 import { useAuth } from "../auth";
-import { money, tablePrice, DEFAULT_SIZES, normalize } from "../format";
+import { money, tablePrice, DEFAULT_SIZES, normalize, sortSizes } from "../format";
 import { Field, ErrorBox, Modal, Swatch, EmptyState, PhotoZoom, useConfirm } from "../components/ui";
 import { useSort } from "../components/useSort";
 
@@ -146,7 +146,7 @@ export default function Products() {
     .filter((c) => colorKind === "all" || (colorKind === "combo") === !!c.hex2)
     .filter((c) => normalize(c.name).includes(normalize(colorSearch)))
     .sort((a, b) => !!a.hex2 - !!b.hex2);
-  const sizeOptions =[...new Set([...DEFAULT_SIZES, "XG", ...(form?.sizes || [])])];
+  const sizeOptions = sortSizes(new Set([...DEFAULT_SIZES, "XG", ...(form?.sizes || [])]));
   // the small version for the preview box; the full-size photo for zoom
   const fileBlob = imageFile ? URL.createObjectURL(imageFile) : null;
   const previewUrl = fileBlob || fileUrl(form?.thumb_url);
@@ -248,7 +248,7 @@ export default function Products() {
             </div>
 
             <section className="form-section">
-              <h3>Tamanhos <small className="muted">{form.sizes.length ? form.sizes.join(" · ") : "nenhum marcado"}</small></h3>
+              <h3>Tamanhos <small className="muted">{form.sizes.length ? sortSizes(form.sizes).join(" · ") : "nenhum marcado"}</small></h3>
               <div className="chips">
                 {sizeOptions.map((t) => (
                   <button type="button" key={t} className={`chip ${form.sizes.includes(t) ? "on" : ""}`} onClick={() => toggle("sizes", t)}>{t}</button>

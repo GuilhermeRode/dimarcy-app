@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..database import get_db
-from ..models import SALE_STATUSES, Order, User
+from ..models import SALE_STATUSES, Order, User, size_key
 from ..sales import customer_overview, late_filter, visible_orders
 from ..security import get_current_user
 from ..settings_store import get_app_settings
@@ -14,7 +14,6 @@ from ..settings_store import get_app_settings
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 MAX_PERIOD_DAYS = 731
-SIZE_ORDER = ["U", "PP", "P", "M", "G", "GG", "XG", "XGG"]
 
 
 def _top(d: dict, n=8, by="value"):
@@ -152,7 +151,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         "by_color": _top(colors, len(colors), by="pieces"),  # all colors: the Painel pools the tail into "Outras cores"
         "by_size": sorted(
             [{"size": t, "pieces": q} for t, q in sizes.items()],
-            key=lambda x: SIZE_ORDER.index(x["size"]) if x["size"] in SIZE_ORDER else 99,
+            key=lambda x: size_key(x["size"]),
         ),
         "alerts": {
             "customers_at_risk": statuses["at_risk"],

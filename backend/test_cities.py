@@ -33,6 +33,10 @@ with TestClient(app) as c:
     color = c.post("/api/colors", headers=admin, json={"name": "Preto", "hex": "#111111"}).json()["id"]
     product = c.post("/api/products", headers=admin, json={"reference": "R1", "description": "Blusão", "price": 100,
                                                            "color_ids": [color]}).json()["id"]
+    # sizes come back in the fixed order whatever order they were ticked in
+    r = c.post("/api/products", headers=admin, json={"reference": "R2", "description": "Calça", "price": 1,
+                                                     "sizes": ["gg", "40", "P", "XG", "M", "38", "U", "Única"]})
+    assert r.json()["sizes"] == ["U", "P", "M", "GG", "XG", "38", "40", "ÚNICA"], r.json()["sizes"]
 
     with SessionLocal() as db:  # straight to the DB: the API would geocode each city over the network
         rows = [("Loja 1", "Rio do Sul", "SC", ana["id"]), ("Loja 2", " Rio  do Súl ", "sc", ana["id"]),
