@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { customerFieldError, localDate, maskDocument, maskPhone, money, orderNumber, tablePrice } from "../format";
 import { Field, ErrorBox, Modal, Swatch, PhotoZoom, ConfirmDialog } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
+import { StateRegistrationField } from "../components/CustomerFormModal";
 
 // "09/37 - Nuvem/Marrom Terra" -> the card number stands out, the name goes small underneath,
 // so long two-tone names don't push the size columns off screen
@@ -21,7 +22,7 @@ function ColorLabel({ name, hex, hex2, size }) {
 const key = (i) => `${i.color_id}|${i.size}`;
 const customerLabel = (c) => `${c.name}${c.city ? ` — ${c.city}/${c.state || ""}` : ""}`;
 
-const EMPTY_CUSTOMER = { name: "", document: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
+const EMPTY_CUSTOMER = { name: "", document: "", state_registration: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
 const PAYMENT_METHODS = ["Dinheiro", "Pix", "Boleto", "Cheque"];
 const PAYMENT_TERMS = ["À vista", "30/60", "30/60/90", "30/60/90/120", "30/60/90/120/150", "Quinzenal"];
 
@@ -119,7 +120,7 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, quickQuant
 }
 
 // Older customers may predate the required fields; picking one for an order asks for them first.
-const REQUIRED_CUSTOMER_FIELDS = { document: "CPF/CNPJ", phone: "Telefone", email: "E-mail", city: "Cidade", state: "UF", address: "Endereço" };
+const REQUIRED_CUSTOMER_FIELDS = { document: "CPF/CNPJ", state_registration: "Inscrição estadual", phone: "Telefone", email: "E-mail", city: "Cidade", state: "UF", address: "Endereço" };
 const missingCustomerFields = (c) =>
   Object.entries(REQUIRED_CUSTOMER_FIELDS).filter(([k]) => !String(c?.[k] || "").trim()).map(([, label]) => label);
 
@@ -151,8 +152,9 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
       <form onSubmit={save} className="form-grid">
         <div className="span-2"><ErrorBox msg={error} /></div>
         <Field label="Nome / razão social" span={2}><input required autoFocus {...field("name")} /></Field>
-        <Field label="CPF/CNPJ" span={2}><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...field("document")}
+        <Field label="CPF/CNPJ"><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...field("document")}
           onChange={(e) => setF({ ...f, document: maskDocument(e.target.value) })} /></Field>
+        <StateRegistrationField value={f.state_registration} uf={f.state} onChange={(v) => setF({ ...f, state_registration: v })} />
         {isAdmin && (
           <Field label="Vendedor responsável" span={2}>
             <select required {...field("owner_id")}>
@@ -247,6 +249,7 @@ export default function OrderForm() {
   const [header, setHeader] = useState({
     customer_id: "", date: localDate(), delivery_date: "",
     status: "confirmed", payment_method: "", payment_terms: "", price_table: "", discount: 0, notes: "",
+    notify_customer: true,
   });
   const [customerKey, setCustomerKey] = useState(0); // forces CustomerSearch to resync its label after a save
   const [items, setItems] = useState([]);
@@ -310,7 +313,7 @@ export default function OrderForm() {
           const g = data.items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
           return g ? Math.round(data.discount / g * 10000) / 100 : 0;
         })(),
-        notes: data.notes || "",
+        notes: data.notes || "", notify_customer: data.notify_customer !== false,
       });
       setItems(data.items);
     });
@@ -504,10 +507,25 @@ export default function OrderForm() {
       </section>
 
       <section className="panel order-summary">
-        <Field label="Observações">
-          <textarea rows={3} value={header.notes} onChange={(e) => setHeader({ ...header, notes: e.target.value })}
-            placeholder="Detalhes de envio, combinações extras..." />
-        </Field>
+        <div className="page">
+          <Field label="Observações">
+            <textarea rows={3} value={header.notes} onChange={(e) => setHeader({ ...header, notes: e.target.value })}
+              placeholder="Detalhes de envio, combinações extras..." />
+          </Field>
+          <label className="switch-row">
+            <span>
+              Enviar e-mail ao cliente
+              <small className="muted">
+                {selectedCustomer && !selectedCustomer.email
+                  ? "Este cliente não tem e-mail cadastrado."
+                  : "Pedido criado, alterado e entregue, com o PDF. A equipe e o vendedor recebem sempre."}
+              </small>
+            </span>
+            <input type="checkbox" role="switch" className="switch" checked={header.notify_customer}
+              disabled={Boolean(selectedCustomer && !selectedCustomer.email)}
+              onChange={(e) => setHeader({ ...header, notify_customer: e.target.checked })} />
+          </label>
+        </div>
         <div className="totals">
           <div><span>Peças</span><strong>{pieces}</strong></div>
           <div><span>Subtotal</span><strong>{money(gross)}</strong></div>

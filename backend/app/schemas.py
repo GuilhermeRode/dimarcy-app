@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
+from .br_format import format_document, format_phone, format_state_registration
 from .uploads import thumb_name
 
 
@@ -78,14 +79,36 @@ class CustomerIn(ORM):
     city: str = Field(min_length=1)
     state: str = Field(min_length=2, max_length=2)
     address: str = Field(min_length=1)
+    state_registration: str = Field(min_length=1)  # IE number, or "ISENTO"
     notes: str | None = None
     owner_id: int | None = None  # seller this customer belongs to; only admins can set/change it
+
+    # stored already formatted, whatever the client sent (imports, old app versions)
+    @field_validator("document")
+    @classmethod
+    def _format_document(cls, v):
+        return format_document(v)
+
+    @field_validator("phone")
+    @classmethod
+    def _format_phone(cls, v):
+        return format_phone(v)
+
+    @field_validator("state_registration")
+    @classmethod
+    def _state_registration(cls, v, info):
+        if v is None:  # only reachable on CustomerOut: older records may lack it
+            return v
+        if not v.strip():
+            raise ValueError("Informe a inscrição estadual ou marque Isento.")
+        return format_state_registration(v, info.data.get("state"))  # state is declared above, so already in data
 
 
 class CustomerOut(CustomerIn):
     id: int
     # older records may lack these; new ones always have them (see CustomerIn)
     document: str | None = None
+    state_registration: str | None = None
     phone: str | None = None
     email: str | None = None
     city: str | None = None
@@ -162,6 +185,7 @@ class OrderIn(BaseModel):
     price_table: Literal["wholesale", "retail"] | None = None  # None = the seller's default
     discount: float = Field(default=0, ge=0)
     notes: str | None = None
+    notify_customer: bool | None = None  # None = on for a new order, kept on an edit (older cached apps)
     items: list[OrderItemIn] = Field(min_length=1)
 
 

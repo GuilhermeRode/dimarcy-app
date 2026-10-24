@@ -102,7 +102,7 @@ export default function Profile() {
             <small className="muted">Tocar na grade de quantidades soma sem abrir o teclado.</small>
           </span>
           {/* on by default; an older cached user has no field */}
-          <input type="checkbox" role="switch" className="switch" checked={user.quick_quantity !== false}
+          <input type="checkbox" role="switch" className="switch switch-sm" checked={user.quick_quantity !== false}
             onChange={(e) => setQuickQuantity(e.target.checked)} />
         </label>
       </section>

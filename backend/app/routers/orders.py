@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -37,6 +38,7 @@ def full(o: Order) -> dict:
     d["payment_terms"] = o.payment_terms
     d["price_table"] = o.price_table
     d["notes"] = o.notes
+    d["notify_customer"] = o.notify_customer
     d["items"] = [{
         "id": i.id, "product_id": i.product_id, "color_id": i.color_id, "size": i.size,
         "quantity": i.quantity, "unit_price": float(i.unit_price), "subtotal": i.subtotal,
@@ -110,6 +112,14 @@ def _find(oid: int, db: Session) -> Order:
     return o
 
 
+def _quantities(items: list[OrderItem]) -> Counter:
+    """Pieces per product/color/size: what an "order changed" e-mail is about."""
+    q = Counter()
+    for i in items:
+        q[(i.product_id, i.color_id, i.size)] += i.quantity
+    return q
+
+
 def _can_edit(o: Order, user: User) -> bool:
     if user.role == "admin":
         return True
@@ -167,7 +177,8 @@ def create(data: OrderIn, db: Session = Depends(get_db), u: User = Depends(get_c
     o = Order(customer_id=data.customer_id, seller_id=u.id, date=data.date or clock.today_br(),
               delivery_date=data.delivery_date, status=data.status,
               payment_method=data.payment_method, payment_terms=data.payment_terms, price_table=price_table,
-              discount=data.discount, notes=data.notes, items=items)
+              discount=data.discount, notes=data.notes, notify_customer=data.notify_customer is not False,
+              items=items)
     db.add(o)
     db.flush()  # the installment descriptions need the order id
     _sync_installments(db, o, old_status=None)
@@ -190,6 +201,7 @@ def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = 
         data.status = o.status  # only the admin moves an order through its statuses
     _check_delivery(data.date or o.date, data.delivery_date)
     old_status = o.status
+    old_quantities = _quantities(o.items)
     app_settings = get_app_settings(db)
     # The table is fixed when the order is created; editing keeps it.
     items = _build_items(data, db, user, app_settings, existing_order=o, price_table=o.price_table)
@@ -199,13 +211,15 @@ def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = 
     o.payment_method, o.payment_terms = data.payment_method, data.payment_terms
     o.date = data.date or o.date
     o.delivery_date = data.delivery_date
+    if data.notify_customer is not None:
+        o.notify_customer = data.notify_customer
     db.flush()
     _sync_installments(db, o, old_status)
     db.commit()
     db.refresh(o)
     if o.status == "delivered" and old_status != "delivered":
         send_order_delivered_email(o)
-    else:
+    elif _quantities(o.items) != old_quantities:  # payment, dates, notes etc. alone send nothing
         send_order_updated_emails(o)
     return full(o)
 

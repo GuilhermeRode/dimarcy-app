@@ -16,7 +16,7 @@ from app.main import app  # noqa: E402
 # a customer needs every field but the notes; no city lookup or DNS check over the network
 from app.routers import customers as _customers_router  # noqa: E402
 _customers_router.geocode_and_cache_background = lambda *a: None
-FULL = {"phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
+FULL = {"state_registration": "ISENTO", "phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
 
 TODAY = date.today()
 
@@ -96,8 +96,20 @@ with TestClient(app) as c:
             "payment_terms": "À vista", "items": [{"product_id": product, "color_id": color, "size": "P", "quantity": 2}]}
     assert c.put(f"/api/orders/{oA}", headers=B, json={**edit, "customer_id": cA["id"]}).status_code == 404
     assert c.get(f"/api/orders/{oB}", headers=B).json()["can_edit"] is True
-    r = c.put(f"/api/orders/{oB}", headers=B, json=edit)
+    from app.routers import orders as orders_router  # noqa: E402
+    updated_mails = []
+    orders_router.send_order_updated_emails = lambda o: updated_mails.append(o.id)
+    r = c.put(f"/api/orders/{oB}", headers=B, json=edit)  # same 2 pieces, new payment/dates: no e-mail
     assert r.status_code == 200 and r.json()["status"] == "delivered", r.text
+    assert updated_mails == [], updated_mails
+    c.put(f"/api/orders/{oB}", headers=B, json={**edit, "items": [{**edit["items"][0], "quantity": 3}]})
+    c.put(f"/api/orders/{oB}", headers=B, json={**edit, "items": [{**edit["items"][0], "size": "M"}]})
+    assert updated_mails == [oB, oB], updated_mails  # quantity changed, then size changed
+    # "Enviar e-mail ao cliente" is saved with the order; an edit that doesn't send it keeps it
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["notify_customer"] is True
+    c.put(f"/api/orders/{oB}", headers=B, json={**edit, "notify_customer": False})
+    c.put(f"/api/orders/{oB}", headers=B, json=edit)
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["notify_customer"] is False
     assert c.put(f"/api/orders/{oB}", headers=B, json={**edit, "customer_id": cA["id"]}).status_code == 400
     from datetime import datetime, timezone  # noqa: E402
     from app.database import SessionLocal  # noqa: E402

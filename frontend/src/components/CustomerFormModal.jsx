@@ -1,9 +1,26 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
 import { Field, ErrorBox, Modal, useConfirm } from "./ui";
-import { customerFieldError, maskDocument, maskPhone } from "../format";
+import { customerFieldError, maskDocument, maskPhone, maskStateRegistration, stateRegistrationHint } from "../format";
 
-export const EMPTY_CUSTOMER = { name: "", document: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
+export const EMPTY_CUSTOMER = { name: "", document: "", state_registration: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
+
+// Inscrição estadual: a number, or the "Isento" box for customers exempt from it (stored as "ISENTO")
+// formatted with the customer's UF mask (re-applied when the UF changes)
+export function StateRegistrationField({ value, uf, onChange }) {
+  const exempt = value === "ISENTO";
+  return (
+    <Field label="Inscrição estadual">
+      <div className="field-row">
+        <input required={!exempt} inputMode="numeric" disabled={exempt}
+          value={exempt ? "" : maskStateRegistration(value, uf)}
+          placeholder={exempt ? "Isento" : stateRegistrationHint(uf) || "Número da IE"}
+          onChange={(e) => onChange(maskStateRegistration(e.target.value, uf))} />
+        <label className="check"><input type="checkbox" checked={exempt} onChange={(e) => onChange(e.target.checked ? "ISENTO" : "")} /> Isento</label>
+      </div>
+    </Field>
+  );
+}
 
 export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved }) {
   const [confirmDialog, ask] = useConfirm();
@@ -38,8 +55,9 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved }
     <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={onClose} wide>
       <form onSubmit={save} className="form-grid">
         <Field label="Nome / razão social" span={2}><input required {...f("name")} /></Field>
-        <Field label="CPF/CNPJ" span={2}><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...f("document")}
+        <Field label="CPF/CNPJ"><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...f("document")}
           onChange={(e) => setForm({ ...form, document: maskDocument(e.target.value) })} /></Field>
+        <StateRegistrationField value={form.state_registration} uf={form.state} onChange={(v) => setForm({ ...form, state_registration: v })} />
         {isAdmin && (
           <Field label="Vendedor responsável" span={2}>
             <select required {...f("owner_id")}>

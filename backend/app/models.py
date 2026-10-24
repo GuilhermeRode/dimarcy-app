@@ -69,6 +69,7 @@ class Customer(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(160), index=True)
     document: Mapped[str | None] = mapped_column(String(20))  # CPF/CNPJ
+    state_registration: Mapped[str | None] = mapped_column(String(30))  # inscrição estadual (IE)
     phone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str | None] = mapped_column(String(160))
     city: Mapped[str | None] = mapped_column(String(100))
@@ -128,6 +129,7 @@ class Order(Base):
                                              server_default="wholesale")  # see PRICE_TABLES
     discount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     notes: Mapped[str | None] = mapped_column(Text)
+    notify_customer: Mapped[bool] = mapped_column(Boolean, default=True)  # off = no e-mails to the customer
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     customer: Mapped[Customer] = relationship(back_populates="orders")

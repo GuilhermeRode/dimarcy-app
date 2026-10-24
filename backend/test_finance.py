@@ -2,7 +2,7 @@
 Uses a throwaway SQLite file, never dimarcy.db."""
 import os
 import tempfile
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 db_file = os.path.join(tempfile.mkdtemp(), "test.db")
@@ -18,7 +18,7 @@ from app.main import app  # noqa: E402
 # a customer needs every field but the notes; no city lookup or DNS check over the network
 from app.routers import customers as _customers_router  # noqa: E402
 _customers_router.geocode_and_cache_background = lambda *a: None
-FULL = {"phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
+FULL = {"state_registration": "ISENTO", "phone": "(54) 99999-8888", "email": "cliente@gmail.com", "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
 from app.models import FinancialEntry  # noqa: E402
 
 TODAY = date(2026, 10, 15)
@@ -249,5 +249,86 @@ with TestClient(app) as c:
 
     assert c.delete(f"/api/finance/entries/{part['id']}", headers=admin).status_code == 204
     assert c.delete(f"/api/finance/entries/{part['id']}", headers=admin).status_code == 404
+
+    # import from a spreadsheet: preview, then all-or-nothing
+    def upload(name, data, kind="payable", apply=False):
+        return c.post("/api/finance/import", headers=admin, params={"kind": kind, "apply": apply}, files={"file": (name, data)})
+
+    bank_csv = ("Extrato de outubro\n"
+                "Descrição;Fornecedor;Categoria;Valor (R$);Vencimento;Forma de pagamento;Pago em\n"
+                "NF 123;Malharia X;matéria-prima;R$ 1.234,56;05/11/2026;Boleto;\n"
+                "Luz;CEEE;;-150,00;2026-10-10;Pix;10/10/2026\n"
+                ";;;;;;\n").encode("cp1252")
+    r = upload("contas.csv", bank_csv)
+    assert r.status_code == 200 and r.json()["errors"] == [], r.text
+    nf, luz = r.json()["entries"]
+    assert (nf["description"], nf["supplier"], nf["category"], nf["amount"], nf["due_date"], nf["paid_at"]) == \
+        ("NF 123", "Malharia X", "Matéria-prima", 1234.56, "2026-11-05", None), nf
+    assert (luz["category"], luz["amount"], luz["paid_at"], luz["paid_amount"]) == ("Outros", 150.0, "2026-10-10", 150.0), luz
+    before = SessionLocal().query(FinancialEntry).count()
+    assert upload("contas.csv", bank_csv, apply=True).json() == {"created": 2}
+    with SessionLocal() as db:
+        assert db.query(FinancialEntry).count() == before + 2
+
+    bad = b"valor,vencimento,categoria\n10,31/02/2026,\nabc,01/01/2027,Viagem\n"
+    r = upload("x.csv", bad)
+    assert r.json()["entries"] == [] and len(r.json()["errors"]) == 2 and "Linha 2" in r.json()["errors"][0], r.text
+    assert upload("x.csv", bad, apply=True).status_code == 400
+    assert upload("x.csv", b"nome,telefone\na,b\n").json()["errors"][0].startswith("Não encontrei o cabeçalho")
+    assert upload("x.pdf", b"%PDF").status_code == 400
+
+    from io import BytesIO
+    from openpyxl import Workbook
+    wb = Workbook()
+    wb.active.append(["Cliente", "Valor", "Data de vencimento", "Obs"])
+    wb.active.append(["Loja Y", 99.9, datetime(2026, 12, 1), "boleto 1/1"])
+    buf = BytesIO()
+    wb.save(buf)
+    r = upload("receber.xlsx", buf.getvalue(), kind="receivable")
+    assert r.json()["errors"] == [] and r.json()["entries"][0] == {
+        "kind": "receivable", "amount": 99.9, "due_date": "2026-12-01", "payment_method": None, "notes": "boleto 1/1",
+        "paid_at": None, "paid_amount": None, "description": "Loja Y"}, r.text
+    assert upload("ruim.xlsx", b"not a zip").status_code == 400
+
+    # a credit card statement becomes one payable for its total; the previous bill's payment is left out
+    card_csv = (b"date,title,amount\n2026-10-01,Malharia Z,500.00\n2026-10-03,Posto,120.50\n"
+                b"2026-10-05,Estorno Posto,-20.50\n2026-10-06,Pagamento recebido,-900.00\n")
+    card = {"card_due": "2026-11-10", "card_name": "Nubank", "category": "Matéria-prima"}
+    r = c.post("/api/finance/import", headers=admin, params={"kind": "payable", **card}, files={"file": ("n.csv", card_csv)})
+    assert r.json()["errors"] == [] and len(r.json()["items"]) == 3, r.text
+    (bill,) = r.json()["entries"]
+    assert (bill["description"], bill["amount"], bill["due_date"], bill["supplier"], bill["category"]) == \
+        ("Fatura Nubank 11/2026", 600.0, "2026-11-10", "Nubank", "Matéria-prima"), bill
+    assert bill["notes"].splitlines()[0] == "01/10  Malharia Z  500,00", bill["notes"]
+    r = c.post("/api/finance/import", headers=admin, params={"kind": "payable", "apply": True, **card},
+               files={"file": ("n.csv", card_csv)})
+    assert r.json() == {"created": 1}, r.text
+
+    # boleto: the linha digitável carries the amount and the due date (BB's example from the Febraban spec)
+    bb = "00190.50095 40144.816069 06809.350314 3 37370000000100"
+    found = finance.parse_boleto_code(bb, TODAY)
+    assert (found["amount"], found["due_date"]) == (Decimal("1.00"), date(2032, 8, 21)), found  # factor 3737, new cycle
+    assert finance.parse_boleto_code(bb.replace("816069", "816068"), TODAY) is None  # a mistyped digit
+    assert finance._boleto_due(9999, TODAY) == date(2025, 2, 21) and finance._boleto_due(1000, TODAY) == date(2025, 2, 22)
+    assert finance._boleto_due(1600, TODAY) == date(2026, 10, 15)
+    luz = finance.parse_boleto_code("836200000005 667800481000 180975657313 001589636081", TODAY)  # utility, mod 10
+    assert luz["amount"] == Decimal("66.78"), luz
+    assert finance.parse_boleto_code("846700000017 435900240209 024050002435 842210108119", TODAY)["amount"] == Decimal("143.59")
+    assert finance.find_boleto(f"Nosso número 12345678901234567890123\nPague até\n{bb}\nCNPJ 12.345.678/0001-90", TODAY)["code"] == bb
+
+    r = c.post("/api/finance/boleto", headers=admin, data={"code": bb.replace(" ", "").replace(".", "")})
+    assert r.status_code == 200 and (r.json()["amount"], r.json()["due_date"]) == (1.0, "2032-08-21"), r.text
+    assert c.post("/api/finance/boleto", headers=admin, data={"code": "123"}).status_code == 400
+    from fpdf import FPDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(text="Banco do Brasil  Vencimento 21/08/2032")
+    pdf.ln()
+    pdf.cell(text=bb)
+    r = c.post("/api/finance/boleto", headers=admin, files={"file": ("boleto.pdf", bytes(pdf.output()))})
+    assert r.status_code == 200 and r.json()["code"] == bb, r.text
+    assert c.post("/api/finance/boleto", headers=admin, files={"file": ("b.pdf", b"nada")}).status_code == 400
+    assert c.post("/api/finance/boleto", headers=A, data={"code": bb}).status_code == 403  # admins only
 
 print("finance checks OK")

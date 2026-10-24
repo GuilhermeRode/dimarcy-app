@@ -37,3 +37,5 @@ frontend/android/app/*.iml
 # --- OS / editor cruft ---
 .DS_Store
 Thumbs.db
+
+backups/

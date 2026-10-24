@@ -97,7 +97,7 @@ def customer_overview(db: Session, user: User, today: date) -> list[dict]:
         last = orders[0].date if orders else None
         rows.append({
             "id": c.id, "name": c.name, "city": c.city, "state": c.state, "phone": c.phone,
-            "document": c.document, "owner_id": c.owner_id, "owner_name": c.owner_name,
+            "document": c.document, "state_registration": c.state_registration, "owner_id": c.owner_id, "owner_name": c.owner_name,
             "created_at": c.created_at,
             "total": round(sum(o.total for o in orders), 2), "orders": len(orders),
             "last_order_date": last, "status": customer_status(last, today),

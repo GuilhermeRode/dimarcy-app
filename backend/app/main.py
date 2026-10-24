@@ -9,7 +9,8 @@ from sqlalchemy import inspect, text
 
 from .config import settings
 from .database import Base, SessionLocal, engine
-from .models import User
+from .br_format import extract_state_registration, format_document, format_phone, format_state_registration
+from .models import Customer, User
 from .routers import auth, colors, customers, dashboard, finance, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
@@ -41,6 +42,21 @@ def _monthly_to_annual_goal(table: str):
         conn.execute(text(f"UPDATE {table} SET annual_goal = monthly_goal * 12"))
 
 
+def _tidy_customers():
+    """Customers imported/registered before the masks existed have bare digits ("12345678000190"), and the
+    IE (inscrição estadual) used to be typed into the notes. Format the first and move the second into
+    state_registration. Idempotent: rows already tidy are left alone."""
+    with SessionLocal() as db:
+        for c in db.query(Customer).all():
+            c.document, c.phone = format_document(c.document), format_phone(c.phone)
+            if not c.state_registration:
+                ie, notes = extract_state_registration(c.notes)
+                if ie:
+                    c.state_registration, c.notes = ie, notes
+            c.state_registration = format_state_registration(c.state_registration, c.state)
+        db.commit()  # only the rows that actually changed are written
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
@@ -50,7 +66,10 @@ async def lifespan(app: FastAPI):
                               "annual_goal": "NUMERIC(12,2)", "price_table": "VARCHAR(10) DEFAULT 'wholesale'",
                               "quick_quantity": "BOOLEAN DEFAULT TRUE"})
     _ensure_columns("colors", {"hex2": "VARCHAR(7)"})
-    _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'"})
+    _ensure_columns("customers", {"state_registration": "VARCHAR(30)"})
+    _tidy_customers()
+    _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'",
+                               "notify_customer": "BOOLEAN DEFAULT TRUE"})
     _ensure_columns("app_settings", {"annual_goal": "NUMERIC(12,2) DEFAULT 0",
                                      "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50"})
     with SessionLocal() as db:
