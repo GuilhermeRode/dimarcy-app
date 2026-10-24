@@ -6,6 +6,7 @@ import {
   ProductsIcon, RevenueIcon, SettingsIcon, UsersAdminIcon,
 } from "./icons";
 import { Avatar } from "./ui";
+import UpdateBanner from "./UpdateBanner";
 import logoFull from "../assets/logo-full.png";
 
 const DASHBOARD_LINK = { to: "/", label: "Painel", end: true, Icon: DashboardIcon };
@@ -66,6 +67,7 @@ export default function Layout() {
           <img src={logoFull} alt="Di Marcy" className="mobile-topbar-logo" />
         </div>
         <Outlet />
+        <UpdateBanner />
       </main>
     </div>
   );

@@ -101,6 +101,12 @@ input[type="checkbox"] { width: auto; }
 .profile-header { display: flex; align-items: center; gap: 18px; }
 .profile-avatar-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .content { padding: 32px 40px; min-width: 0; }
+/* "new version" notice: floats at the bottom, below dialogs (z-index 100), never covers a form */
+.update-banner { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 90;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; max-width: calc(100vw - 32px);
+  background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow); }
+.update-banner span { font-weight: 600; margin-right: 6px; }
+@media (max-width: 640px) { .update-banner { flex-wrap: wrap; justify-content: flex-end; } }
 /* print previews render outside the app shell (no sidebar), so they need their own page chrome */
 .standalone-page { background: var(--bg); min-height: 100vh; padding: 32px 40px; }
 @media print { .standalone-page { padding: 0; background: #fff; min-height: 0; } }
