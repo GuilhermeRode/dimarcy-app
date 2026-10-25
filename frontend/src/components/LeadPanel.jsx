@@ -7,9 +7,20 @@ import { ContactHistory } from "./Contacts";
 export const isNewStore = (openedAt) =>
   !!openedAt && (Date.now() - new Date(`${openedAt}T00:00:00`)) / 86400000 <= 730; // opened within 2 years
 
-export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard, onReleased }) {
+export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard, onReleased, onContacted }) {
   const [releasing, setReleasing] = useState(false);
   const [releaseError, setReleaseError] = useState("");
+  const [waOpened, setWaOpened] = useState(false);
+  const [history, setHistory] = useState(0);  // bumped to reload the contact list
+  async function contactDone() {
+    setReleaseError("");
+    try {
+      await api.post("/contacts", { lead_id: lead.id, channel: "whatsapp" });
+      setWaOpened(false);
+      setHistory((n) => n + 1);
+      onContacted?.();
+    } catch (e) { setReleaseError(errorMessage(e)); }
+  }
   async function release() {
     setReleasing(true);
     try {
@@ -36,8 +47,9 @@ export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard
       </div>
       <div className="customer-panel-actions">
         {wa
-          ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+          ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>WhatsApp</a>
           : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
+        {waOpened && <button type="button" className="btn btn-primary" onClick={contactDone}>Contato feito</button>}
         {isAdmin && lead.status === "pending" && (
           <button type="button" className="btn btn-primary" disabled={releasing} onClick={release}>Liberar</button>
         )}
@@ -56,7 +68,7 @@ export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard
         <dt>Endereço</dt><dd>{lead.address || "—"}</dd>
         {isAdmin && <><dt>Vendedor</dt><dd>{lead.seller_name || "Sem vendedor"}</dd></>}
       </dl>
-      <ContactHistory target={{ lead_id: lead.id }} />
+      <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} />
     </aside>
   );
 }

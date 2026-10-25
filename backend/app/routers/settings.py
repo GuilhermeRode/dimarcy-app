@@ -47,7 +47,7 @@ def update_settings(data: AppSettingsIn, db: Session = Depends(get_db)):
     if data.lead_cnaes is not None:
         s.lead_cnaes = data.lead_cnaes
     for field in ("lead_sizes", "lead_exclude_mei", "lead_head_office_only", "lead_require_contact", "lead_min_age_months",
-                  "lead_states", "lead_weekly_release"):
+                  "lead_states", "lead_area_codes", "lead_weekly_release"):
         value = getattr(data, field)
         if value is not None:
             setattr(s, field, value)

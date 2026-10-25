@@ -133,11 +133,15 @@ class CustomerOut(CustomerIn):
 
 
 class DiscardIn(BaseModel):
-    reason: Literal["closed", "not_target", "competitor", "other"]  # models.DISCARD_REASONS
+    reason: Literal["closed", "not_target", "competitor", "not_recommended", "other"]  # models.DISCARD_REASONS
 
 
 class ReleaseIn(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=500)
+
+
+class BulkDiscardIn(ReleaseIn, DiscardIn):
+    pass
 
 
 class ContactIn(BaseModel):
@@ -241,6 +245,7 @@ class AppSettingsIn(BaseModel):
     lead_require_contact: bool | None = None
     lead_min_age_months: int | None = Field(default=None, ge=0, le=120)
     lead_states: str | None = None
+    lead_area_codes: str | None = None  # "" = every DDD of the states
     lead_weekly_release: int | None = Field(default=None, ge=0, le=500)
 
     @field_validator("lead_states")
@@ -254,6 +259,16 @@ class AppSettingsIn(BaseModel):
         if len(ufs) > 10:  # column size
             raise ValueError("No máximo 10 estados.")
         return ",".join(ufs)
+
+    @field_validator("lead_area_codes")
+    @classmethod
+    def _area_codes(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        codes = sorted({p.strip() for p in v.split(",") if p.strip()})
+        if any(not (len(c) == 2 and c.isdigit() and c[0] != "0") for c in codes) or len(codes) > 20:
+            raise ValueError("Informe DDDs de 2 dígitos separados por vírgula (ex.: 47, 49).")
+        return ",".join(codes)
 
     @field_validator("lead_cnaes")
     @classmethod
@@ -297,6 +312,7 @@ class AppSettingsAdminOut(AppSettingsOut):
     lead_require_contact: bool
     lead_min_age_months: int
     lead_states: str
+    lead_area_codes: str
     lead_weekly_release: int
     lead_import_started_at: datetime | None = None
     lead_import_error: str | None = None

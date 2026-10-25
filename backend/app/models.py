@@ -26,7 +26,7 @@ ENTRY_KINDS = ["receivable", "payable"]
 # Business content, so in Portuguese; a payable's category must be one of these
 PAYABLE_CATEGORIES = ["Matéria-prima", "Aluguel", "Salários", "Impostos", "Energia", "Manutenção", "Outros"]
 LEAD_STATUSES = ["pending", "new", "converted", "discarded"]  # pending = aguardando liberação (admin only)
-DISCARD_REASONS = ["closed", "not_target", "competitor", "other"]
+DISCARD_REASONS = ["closed", "not_target", "competitor", "not_recommended", "other"]
 CONTACT_CHANNELS = ["whatsapp", "call", "visit", "email"]
 
 # Customer status by days since the last sale (see customer_status)
@@ -212,6 +212,7 @@ class AppSettings(Base):
     lead_require_contact: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     lead_min_age_months: Mapped[int] = mapped_column(Integer, default=6, server_default="6")
     lead_states: Mapped[str] = mapped_column(String(30), default="PR,RS,SC", server_default="PR,RS,SC")  # UFs imported
+    lead_area_codes: Mapped[str] = mapped_column(String(60), default="", server_default="")  # DDDs imported; "" = all
     lead_weekly_release: Mapped[int] = mapped_column(Integer, default=20, server_default="20")  # suggested releases per seller
     lead_import_started_at: Mapped[datetime | None] = mapped_column(DateTime)  # naive UTC (the UI appends "Z"); set while an import runs
     lead_import_pid: Mapped[int | None] = mapped_column(Integer)  # the running importer's process id

@@ -56,7 +56,7 @@ export function ContactModal({ target, onClose, onSaved }) {
   );
 }
 
-export function ContactHistory({ target }) {
+export function ContactHistory({ target, onSaved }) {
   const query = target.lead_id ? `lead_id=${target.lead_id}` : `customer_id=${target.customer_id}`;
   const [list, setList] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -82,7 +82,7 @@ export function ContactHistory({ target }) {
         </div>
       )) : <p className="customer-panel-empty">Nenhum contato registrado ainda.</p>)}
       {adding && <ContactModal target={target} onClose={() => setAdding(false)}
-        onSaved={() => { setAdding(false); load(); }} />}
+        onSaved={() => { setAdding(false); load(); onSaved?.(); }} />}
     </div>
   );
 }

@@ -100,6 +100,9 @@ def check_settings(ctx):
     assert (r.json()["lead_states"], r.json()["lead_weekly_release"]) == ("PR,SC", 30), r.text
     assert c.put("/api/settings", headers=admin, json={**base, "lead_states": "XX"}).status_code == 422
     assert c.put("/api/settings", headers=admin, json={**base, "lead_weekly_release": -1}).status_code == 422
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_area_codes": "49, 47,47"}).json()["lead_area_codes"] == "47,49"
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_area_codes": "4"}).status_code == 422
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_area_codes": ""}).json()["lead_area_codes"] == ""
     c.put("/api/settings", headers=admin, json={**base, "lead_states": "PR,RS,SC", "lead_weekly_release": 20})
     r = c.put("/api/settings", headers=admin, json=base)  # omitted: unchanged
     assert r.json()["lead_sizes"] == "01,03,05" and r.json()["lead_exclude_mei"] is False
@@ -259,6 +262,16 @@ def check_convert(ctx):
         assert db.get(Lead, ids["j_no_contact"]).discard_reason == "competitor"
     assert [x["name"] for x in c.get("/api/leads", headers=ctx["a"]).json()["items"]] == []
 
+    # "Não recomendar": admin only, several at once, already-handled ones are skipped
+    p1 = add_lead("30000000000101", "Fila Um", status="pending")
+    p2 = add_lead("30000000000102", "Fila Dois", status="pending")
+    body = {"ids": [p1, p2, ids["j_no_contact"]], "reason": "not_recommended"}
+    assert c.post("/api/leads/discard", headers=ctx["a"], json=body).status_code == 403
+    assert c.post("/api/leads/discard", headers=admin, json=body).json() == {"discarded": 2}
+    with SessionLocal() as db:
+        assert {db.get(Lead, i).discard_reason for i in (p1, p2)} == {"not_recommended"}
+        assert db.get(Lead, ids["j_no_contact"]).discard_reason == "competitor"
+
 
 def check_contacts(ctx):
     c, admin = ctx["c"], ctx["admin"]
@@ -283,6 +296,8 @@ def check_contacts(ctx):
     # the latest contact replaces the reminder: future date -> not due; no date -> no reminder
     contact(ctx["a"], lead_id=jl, next_action_date=tomorrow)
     assert c.get("/api/contacts/due", headers=ctx["a"]).json() == []
+    row = next(x for x in c.get("/api/leads", headers=ctx["a"]).json()["items"] if x["id"] == jl)
+    assert row["next_action_date"] == tomorrow and row["last_contact_at"], row  # the list shows where Ana left off
     contact(ctx["a"], lead_id=jl, next_action_date=yesterday)
     assert len(c.get("/api/contacts/due", headers=ctx["a"]).json()) == 1
     contact(ctx["a"], lead_id=jl)

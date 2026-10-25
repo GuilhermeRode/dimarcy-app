@@ -93,6 +93,7 @@ async def lifespan(app: FastAPI):
                                      "lead_require_contact": "BOOLEAN DEFAULT TRUE",
                                      "lead_min_age_months": "INTEGER DEFAULT 6",
                                      "lead_states": "VARCHAR(30) DEFAULT 'PR,RS,SC'",
+                                     "lead_area_codes": "VARCHAR(60) DEFAULT ''",
                                      "lead_weekly_release": "INTEGER DEFAULT 20",
                                      "lead_import_started_at": "TIMESTAMP",
                                      "lead_import_pid": "INTEGER",

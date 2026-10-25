@@ -79,8 +79,10 @@ def check_parsing():
     assert len(attempts) == 3 and naps == [30, 30]
 
     cn, st = {"4781400"}, {"SC"}
-    off = {"sizes": set(), "exclude_mei": False, "head_office_only": False, "require_contact": False, "min_age_months": 0}
-    on = {"sizes": {"01", "03"}, "exclude_mei": True, "head_office_only": True, "require_contact": True, "min_age_months": 6}
+    off = {"sizes": set(), "exclude_mei": False, "head_office_only": False, "require_contact": False, "min_age_months": 0,
+           "area_codes": set()}
+    on = {"sizes": {"01", "03"}, "exclude_mei": True, "head_office_only": True, "require_contact": True, "min_age_months": 6,
+          "area_codes": set()}
     now = date(2026, 10, 16)
     lead = li.pick(estab(), cn, st, towns, on, now)
     assert lead == {"cnpj": "10000000000101", "basico": "10000000", "name": "LOJA A", "phone": "47 33330000",
@@ -99,6 +101,8 @@ def check_parsing():
     assert li.pick(estab(inicio="20260701"), cn, st, towns, {**on, "min_age_months": 3}, now)
     assert li.pick(estab(phone="", email=""), cn, st, towns, {**on, "require_contact": False}, now)
     assert li.pick(estab(phone=""), cn, st, towns, on, now) is None  # an e-mail alone isn't enough: sellers use WhatsApp
+    assert li.pick(estab(ddd="047"), cn, st, towns, {**on, "area_codes": {"47", "49"}}, now)
+    assert li.pick(estab(ddd="48"), cn, st, towns, {**on, "area_codes": {"47", "49"}}, now) is None
 
     spellings = {("jaragua do sul", "SC"): "Jaraguá do Sul"}
     assert li.display_city("JARAGUA DO SUL", "SC", spellings) == "Jaraguá do Sul"
@@ -213,6 +217,10 @@ def check_run():
     db.commit()
     assert li.run(db, lambda: "2026-10", download).startswith("imported 2026-10")  # scope changed
     assert db.query(AppSettings).first().last_lead_import_scope == "PR,RS,SC|4642701,4781400|01,03|mei1|ho1|ct1|age6"
+    s.lead_area_codes = "47"  # every test lead is "47": same leads, but a new scope
+    db.commit()
+    assert li.run(db, lambda: "2026-10", download).startswith("imported 2026-10")
+    assert db.query(AppSettings).first().last_lead_import_scope.endswith("|age6|ddd47")
 
     # a run that finds nothing is refused: leads and the stamped month stay as they were
     n_leads = db.query(Lead).count()

@@ -116,6 +116,8 @@ def pick(row: list[str], cnaes: set[str], states: set[str], towns: dict[str, str
         return None
     if filters["require_contact"] and not row[22].strip():  # a phone: sellers prospect by WhatsApp
         return None
+    if filters["area_codes"] and row[21].strip().lstrip("0") not in filters["area_codes"]:
+        return None
     street = " ".join(p for p in (row[13].strip(), row[14].strip()) if p)
     address = ", ".join(p for p in (street, row[15].strip(), row[16].strip(), row[17].strip(), row[18].strip()) if p)
     return {
@@ -176,10 +178,12 @@ def current_scope(db: Session) -> tuple[set[str], set[str], dict, str]:
     cnaes = {c for c in cfg.lead_cnaes.split(",") if c}
     filters = {"sizes": {c for c in cfg.lead_sizes.split(",") if c}, "exclude_mei": bool(cfg.lead_exclude_mei),
                "head_office_only": bool(cfg.lead_head_office_only), "require_contact": bool(cfg.lead_require_contact),
-               "min_age_months": int(cfg.lead_min_age_months)}
+               "min_age_months": int(cfg.lead_min_age_months),
+               "area_codes": {c for c in cfg.lead_area_codes.split(",") if c}}
     text = (f"{','.join(sorted(states))}|{','.join(sorted(cnaes))}|{','.join(sorted(filters['sizes']))}"
             f"|mei{int(filters['exclude_mei'])}|ho{int(filters['head_office_only'])}"
-            f"|ct{int(filters['require_contact'])}|age{filters['min_age_months']}")
+            f"|ct{int(filters['require_contact'])}|age{filters['min_age_months']}"
+            + (f"|ddd{','.join(sorted(filters['area_codes']))}" if filters["area_codes"] else ""))
     return states, cnaes, filters, text
 
 

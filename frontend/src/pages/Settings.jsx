@@ -3,6 +3,15 @@ import { api, errorMessage } from "../api";
 import { ErrorBox, Field } from "../components/ui";
 
 const LEAD_SIZES = [["01", "ME"], ["03", "EPP"], ["05", "Grande"], ["00", "Não informado"]];
+const AREA_CODES = {
+  PR: ["41", "42", "43", "44", "45", "46"], RS: ["51", "53", "54", "55"], SC: ["47", "48", "49"],
+  SP: ["11", "12", "13", "14", "15", "16", "17", "18", "19"], RJ: ["21", "22", "24"], ES: ["27", "28"],
+  MG: ["31", "32", "33", "34", "35", "37", "38"], MS: ["67"], MT: ["65", "66"], GO: ["62", "64"], DF: ["61"],
+  BA: ["71", "73", "74", "75", "77"], SE: ["79"], AL: ["82"], PE: ["81", "87"], PB: ["83"], RN: ["84"],
+  CE: ["85", "88"], PI: ["86", "89"], MA: ["98", "99"], PA: ["91", "93", "94"], AP: ["96"], AM: ["92", "97"],
+  RR: ["95"], AC: ["68"], RO: ["69"], TO: ["63"],
+};
+const stateList = (states) => (states || "").toUpperCase().split(",").map((uf) => uf.trim()).filter((uf) => AREA_CODES[uf]);
 
 export default function Settings() {
   const [form, setForm] = useState(null);
@@ -13,6 +22,12 @@ export default function Settings() {
   useEffect(() => {
     api.get("/settings").then((r) => setForm(r.data)).catch((e) => setError(errorMessage(e)));
   }, []);
+
+  function toggleAreaCode(code) {
+    const current = (form.lead_area_codes || "").split(",").filter(Boolean);
+    const next = current.includes(code) ? current.filter((c) => c !== code) : [...current, code];
+    setForm({ ...form, lead_area_codes: next.join(",") });
+  }
 
   function toggleSize(code) {
     const current = (form.lead_sizes || "").split(",").filter(Boolean);
@@ -36,6 +51,9 @@ export default function Settings() {
         lead_require_contact: form.lead_require_contact,
         lead_min_age_months: Number(form.lead_min_age_months) || 0,
         lead_states: form.lead_states,
+        // a DDD of a state taken off the list would leave the other states empty
+        lead_area_codes: (form.lead_area_codes || "").split(",")
+          .filter((c) => stateList(form.lead_states).some((uf) => AREA_CODES[uf].includes(c))).join(","),
         lead_weekly_release: Number(form.lead_weekly_release) || 0,
       });
       setForm(data);
@@ -103,6 +121,25 @@ export default function Settings() {
                   onChange={(e) => setForm({ ...form, lead_states: e.target.value })} />
                 <small className="muted">Siglas separadas por vírgula. A importação traz as lojas desses estados.</small>
               </Field>
+              <div className="span-2">
+                <span>DDDs da prospecção</span>
+                {stateList(form.lead_states).map((uf) => (
+                  <div key={uf} style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 6 }}>
+                    <strong style={{ minWidth: 28 }}>{uf}</strong>
+                    {AREA_CODES[uf].map((code) => (
+                      <label className="check" key={code}>
+                        <input type="checkbox" checked={(form.lead_area_codes || "").split(",").includes(code)}
+                          onChange={() => toggleAreaCode(code)} />
+                        {code}
+                      </label>
+                    ))}
+                  </div>
+                ))}
+                <small className="muted">
+                  Nenhum marcado = todos os DDDs dos estados acima. Marcando algum, a importação traz só as lojas
+                  com telefone desses DDDs.
+                </small>
+              </div>
               <Field label="CNAEs da prospecção" span={2}>
                 <input placeholder="4781-4/00" value={form.lead_cnaes || ""}
                   onChange={(e) => setForm({ ...form, lead_cnaes: e.target.value })} />

@@ -2,14 +2,23 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
-import { LEAD_SIZES, formatCnpj, initials } from "../format";
+import { LEAD_SIZES, dateBR, formatCnpj, initials } from "../format";
 import { ErrorBox, Field, Modal } from "../components/ui";
 import LeadPanel, { isNewStore } from "../components/LeadPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
 
 const PAGE_SIZE = 50;
 // Keys match the backend's DISCARD_REASONS
-const DISCARD_REASONS = { closed: "Loja fechou", not_target: "Não é o nosso público", competitor: "Já compra de concorrente", other: "Outro" };
+const DISCARD_REASONS = { closed: "Loja fechou", not_target: "Não é o nosso público", competitor: "Já compra de concorrente",
+  not_recommended: "Não recomendada", other: "Outro" };
+
+// Where the seller left off: the latest contact's follow-up date, or how long ago it was
+function contactText(lead) {
+  if (lead.next_action_date) return `Retorno ${dateBR(lead.next_action_date)}`;
+  if (!lead.last_contact_at) return "";
+  const days = Math.floor((Date.now() - new Date(`${lead.last_contact_at}Z`)) / 86400000);
+  return days < 1 ? "Contatado hoje" : `Contatado há ${days} ${days === 1 ? "dia" : "dias"}`;
+}
 
 function openedText(openedAt) {
   if (!openedAt) return "—";
@@ -118,6 +127,28 @@ export default function Leads() {
     setNotice(`${r.released} ${r.released === 1 ? "loja liberada" : "lojas liberadas"} para os vendedores.`
       + (r.skipped_no_seller > 0 ? ` ${r.skipped_no_seller} sem vendedor — cadastre a cidade em Usuários.` : ""));
   }
+  async function selectSuggested() {
+    // only PAGE_SIZE rows are loaded: fetch the rest of the suggestion first (in pages of up to 200)
+    let rows = items;
+    try {
+      while (rows.length < Math.min(suggested, data.total)) {
+        const { data: d } = await api.get("/leads", { params: {
+          status: "pending", seller_id: filters.seller, search: filters.search, city: filters.city,
+          offset: rows.length, limit: Math.min(suggested - rows.length, 200) } });
+        if (!d.items.length) break;
+        rows = [...rows, ...d.items];
+      }
+    } catch (e) { setError(errorMessage(e)); return; }
+    setData((d) => ({ ...d, items: rows }));
+    setChecked(new Set(rows.slice(0, suggested).map((l) => l.id)));
+  }
+  async function refreshContact(id) {
+    try {
+      const { data: [ct] } = await api.get(`/contacts?lead_id=${id}`);  // newest first
+      setData((d) => ({ ...d, items: d.items.map((l) => (l.id === id
+        ? { ...l, last_contact_at: ct?.created_at ?? null, next_action_date: ct?.next_action_date ?? null } : l)) }));
+    } catch { /* the list is only a hint; the panel already shows the contact */ }
+  }
   const toggle = (id) => setChecked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   function alreadyHandled(id) {
@@ -132,6 +163,16 @@ export default function Leads() {
     if (discarding.busy) return;
     setDiscarding({ ...discarding, busy: true, error: "" });
     try {
+      if (discarding.ids) {  // "Não recomendar" on the checked rows
+        const { data: r } = await api.post("/leads/discard", { ids: discarding.ids, reason: discarding.reason });
+        const gone = new Set(discarding.ids);
+        setData((d) => ({ ...d, items: d.items.filter((l) => !gone.has(l.id)), total: d.total - gone.size }));
+        setChecked(new Set());
+        setSelectedId(null);
+        setDiscarding(null);
+        setNotice(`${r.discarded} ${r.discarded === 1 ? "loja tirada" : "lojas tiradas"} da fila. Elas não voltam nas próximas importações.`);
+        return;
+      }
       await api.post(`/leads/${discarding.id}/discard`, { reason: discarding.reason });
       drop(discarding.id);
       setDiscarding(null);
@@ -221,7 +262,7 @@ export default function Leads() {
                       Esta semana: {week.released} de {week.quota} liberados para {sellers.find((s) => String(s.id) === filters.seller)?.name.split(" ")[0]}
                     </span>
                     <button type="button" className="btn" disabled={!suggested}
-                      onClick={() => setChecked(new Set(items.slice(0, suggested).map((l) => l.id)))}>
+                      onClick={selectSuggested}>
                       Selecionar os {suggested} sugeridos
                     </button>
                   </>
@@ -229,6 +270,10 @@ export default function Leads() {
                   <button type="button" className="btn" onClick={() => setChecked(new Set(items.slice(0, 20).map((l) => l.id)))}>Selecionar os 20 primeiros</button>
                 )}
                 <button type="button" className="btn" onClick={() => setChecked(new Set())}>Limpar seleção</button>
+                <button type="button" className="btn danger" disabled={!checked.size || busy}
+                  onClick={() => setDiscarding({ ids: [...checked], name: `${checked.size} ${checked.size === 1 ? "loja" : "lojas"}`, reason: "not_recommended" })}>
+                  Não recomendar ({checked.size})
+                </button>
                 <button type="button" className="btn btn-primary" disabled={!checked.size || busy}
                   onClick={() => release([...checked])}>Liberar ({checked.size})</button>
               </div>
@@ -240,7 +285,8 @@ export default function Leads() {
                 className={`customers-row leads-row ${isAdmin ? "admin" : ""} ${l.id === selectedId ? "on" : ""}`}>
                 <span className="customers-cell-main">
                   <span className="customer-avatar">{initials(l.name)}</span>
-                  <span><strong>{l.name}</strong><small>{l.city}/{l.state} · {formatCnpj(l.cnpj)} · {LEAD_SIZES[l.size] || "—"}{l.in_debt ? " · dívida ativa" : ""}</small></span>
+                  <span><strong>{l.name}</strong><small>{l.city}/{l.state} · {formatCnpj(l.cnpj)} · {LEAD_SIZES[l.size] || "—"}{l.in_debt ? " · dívida ativa" : ""}</small>
+                    {contactText(l) && <small className="contact-due">{contactText(l)}</small>}</span>
                 </span>
                 <span>{l.phone || "—"}</span>
                 {isAdmin && <span>{l.seller_name?.split(" ")[0] || "Sem vendedor"}</span>}
@@ -264,6 +310,7 @@ export default function Leads() {
           {selected && (
             <LeadPanel key={selected.id} lead={selected} isAdmin={isAdmin} onClose={() => setSelectedId(null)}
               onReleased={(r) => afterRelease([selected.id], r)}
+              onContacted={() => refreshContact(selected.id)}
               onDiscard={() => setDiscarding({ id: selected.id, name: selected.name, reason: "closed" })}
               onConvert={() => setConverting({
                 ...EMPTY_CUSTOMER, name: selected.name, document: formatCnpj(selected.cnpj),
@@ -282,7 +329,7 @@ export default function Leads() {
       )}
 
       {discarding && (
-        <Modal title={`Descartar ${discarding.name}?`} onClose={() => setDiscarding(null)}>
+        <Modal title={discarding.ids ? `Não recomendar ${discarding.name}?` : `Descartar ${discarding.name}?`} onClose={() => setDiscarding(null)}>
           <form onSubmit={discard} className="form-grid">
             <Field label="Motivo" span={2}>
               <select value={discarding.reason} onChange={(e) => setDiscarding({ ...discarding, reason: e.target.value })}>
@@ -290,7 +337,7 @@ export default function Leads() {
               </select>
             </Field>
             <div className="span-2"><ErrorBox msg={discarding.error} /></div>
-            <div className="actions span-2"><button className="btn danger" disabled={discarding.busy}>Descartar lead</button></div>
+            <div className="actions span-2"><button className="btn danger" disabled={discarding.busy}>{discarding.ids ? "Tirar da fila" : "Descartar lead"}</button></div>
           </form>
         </Modal>
       )}

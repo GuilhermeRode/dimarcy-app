@@ -1170,7 +1170,7 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
 .contact-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
 .contact-item p { margin: 0; white-space: pre-wrap; }
 .contact-item small { color: var(--muted); }
-.contact-item .contact-due { color: var(--accent-strong); font-weight: 600; }
+.contact-item .contact-due, .customers-cell-main small.contact-due { color: var(--accent-strong); font-weight: 600; }
 .contact-next { display: flex; gap: 8px; flex-wrap: wrap; }
 .contact-next input { flex: 1 1 150px; }
 .leads-row { grid-template-columns: minmax(220px, 2fr) minmax(120px, 1fr) 190px; }
