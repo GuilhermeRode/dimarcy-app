@@ -5,7 +5,7 @@ import { useAuth } from "../auth";
 import { customerFieldError, localDate, maskDocument, maskPhone, money, orderNumber, sortSizes, tablePrice } from "../format";
 import { Field, ErrorBox, Modal, Swatch, PhotoZoom, ConfirmDialog } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
-import { StateRegistrationField } from "../components/CustomerFormModal";
+import { CnpjNote, StateRegistrationField, useCnpjAutofill } from "../components/CustomerFormModal";
 
 // "09/37 - Nuvem/Marrom Terra" -> the card number stands out, the name goes small underneath,
 // so long two-tone names don't push the size columns off screen
@@ -131,6 +131,7 @@ const missingCustomerFields = (c) =>
 // Full customer form, used both to create and to edit without leaving the order
 function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
   const [f, setF] = useState(() => (customer ? { ...customer, owner_id: customer.owner_id || "" } : { ...EMPTY_CUSTOMER }));
+  const cnpjNote = useCnpjAutofill(f.document, customer?.document, setF);
   const missing = customer?.id ? missingCustomerFields(customer) : [];
   const [error, setError] = useState(missing.length ? `Faltam campos obrigatórios: ${missing.join(", ")}.` : "");
   const editing = Boolean(customer?.id);
@@ -157,7 +158,7 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
         <div className="span-2"><ErrorBox msg={error} /></div>
         <Field label="Nome / razão social" span={2}><input required autoFocus {...field("name")} /></Field>
         <Field label="CPF/CNPJ"><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...field("document")}
-          onChange={(e) => setF({ ...f, document: maskDocument(e.target.value) })} /></Field>
+          onChange={(e) => setF({ ...f, document: maskDocument(e.target.value) })} /><CnpjNote note={cnpjNote} /></Field>
         <StateRegistrationField value={f.state_registration} uf={f.state} onChange={(v) => setF({ ...f, state_registration: v })} />
         {isAdmin && (
           <Field label="Vendedor responsável" span={2}>
