@@ -3,7 +3,7 @@
 A systemd timer runs it daily; it only does real work when the Receita published a new month or
 the scope (Configurações' states, CNAE list and filters) changed. Any error writes nothing.
 Each lead also gets its capital social and whether it has federal debt being collected (PGFN dívida ativa,
-quarterly) — ranking signals, not filters. Every run then tops up each seller's weekly release (release_weekly).
+quarterly) — ranking signals, not filters.
 Spec: docs/superpowers/specs/2026-10-16-prospeccao-crm-design.md (Importação)"""
 import base64
 import csv
@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from . import clock
 from .config import settings
 from .database import SessionLocal
-from .leads import customer_cnpjs, normalize_cnpj, release_weekly
+from .leads import customer_cnpjs, normalize_cnpj
 from .models import Contact, Customer, Lead
 from .sales import _city_key
 from .settings_store import get_app_settings
@@ -364,14 +364,12 @@ def run_and_record(db: Session, latest_month, download, force: bool = False) -> 
 def main(argv: list[str] | None = None) -> int:
     force = "--force" in (sys.argv[1:] if argv is None else argv)
     with SessionLocal() as db:
-        code = 0
         try:
             print(f"[lead_import] {run_and_record(db, latest_month, download, force)}", flush=True)
+            return 0
         except Exception as e:  # logged by systemd; tomorrow's run tries again
             print(f"[lead_import] failed, nothing written: {e!r}", file=sys.stderr, flush=True)
-            code = 1
-        print(f"[lead_import] released this week's leads: {release_weekly(db, clock.today_br())}", flush=True)
-        return code
+            return 1
 
 
 if __name__ == "__main__":

@@ -37,6 +37,8 @@ export default function Leads() {
   const [busy, setBusy] = useState(false);
   const [importCfg, setImportCfg] = useState(null);
   const pending = isAdmin && filters.tab === "pending";
+  const week = pending && data?.week;  // only when a seller is picked
+  const suggested = week ? Math.max(week.quota - week.released, 0) : 0;
 
   const [statusError, setStatusError] = useState(false);
   const loadStatus = () => api.get("/settings")
@@ -213,7 +215,19 @@ export default function Leads() {
             </div>
             {pending && (
               <div className="leads-toolbar">
-                <button type="button" className="btn" onClick={() => setChecked(new Set(items.slice(0, 20).map((l) => l.id)))}>Selecionar os 20 primeiros</button>
+                {week ? (
+                  <>
+                    <span className="muted">
+                      Esta semana: {week.released} de {week.quota} liberados para {sellers.find((s) => String(s.id) === filters.seller)?.name.split(" ")[0]}
+                    </span>
+                    <button type="button" className="btn" disabled={!suggested}
+                      onClick={() => setChecked(new Set(items.slice(0, suggested).map((l) => l.id)))}>
+                      Selecionar os {suggested} sugeridos
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="btn" onClick={() => setChecked(new Set(items.slice(0, 20).map((l) => l.id)))}>Selecionar os 20 primeiros</button>
+                )}
                 <button type="button" className="btn" onClick={() => setChecked(new Set())}>Limpar seleção</button>
                 <button type="button" className="btn btn-primary" disabled={!checked.size || busy}
                   onClick={() => release([...checked])}>Liberar ({checked.size})</button>

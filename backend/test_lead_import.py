@@ -327,26 +327,6 @@ def check_filters():
     assert leads()["DEVEDORA"].in_debt is None
     assert li.run(db, lambda: "2026-10", download, force=True).startswith("imported 2026-10")
 
-    # weekly release: tops Bia up to the quota with the best-ranked pending leads; the debtor comes last
-    from app.leads import release_weekly
-    s = db.query(AppSettings).first()
-    s.lead_weekly_release = 3
-    db.commit()
-    assert release_weekly(db, date(2026, 10, 16)) == 3
-    got = leads()
-    assert {n for n, l in got.items() if l.status == "new"} == {"ME", "EPP", "MEI"}, got
-    assert all(l.released_at for l in got.values() if l.status == "new")
-    assert release_weekly(db, date(2026, 10, 16)) == 0  # quota used this week
-    s.lead_weekly_release = 4
-    db.commit()
-    assert release_weekly(db, date(2026, 10, 16)) == 1 and leads()["DEVEDORA"].status == "new"
-    s.lead_weekly_release = 0
-    db.commit()
-    for l in db.query(Lead):
-        l.status, l.released_at = "pending", None
-    db.commit()
-    assert release_weekly(db, date(2026, 10, 16)) == 0  # 0 = off
-
     # run status: started_at cleared, error kept after a failure and cleared by the next success
     def failing(month, name, dest):
         raise OSError("boom")

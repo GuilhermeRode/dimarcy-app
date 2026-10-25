@@ -89,8 +89,7 @@ Se a Receita mudar o endereço, ajuste `RECEITA_WEBDAV_URL` / `RECEITA_SHARE_TOK
 
 **Atenção no primeiro deploy:** a primeira importação depois desta atualização aplica os novos filtros e remove os
 leads liberados que não passam neles (filiais, MEI, sem telefone, abertas há menos de 6 meses), a não ser que já
-tenham contatos. Depois disso, toda madrugada cada vendedor recebe as melhores lojas da região dele até completar a
-cota semanal (Configurações → "Liberar por vendedor, por semana", padrão 20). A ordem usa celular, dívida ativa na
-União (dados abertos da PGFN), capital social, idade da loja e clientes ativos na cidade; o admin também pode liberar
-à mão em Prospecção → Aguardando liberação.
+tenham contatos. Depois disso, o administrador libera as lojas em Prospecção → Aguardando liberação: escolhendo um
+vendedor, a tela sugere as melhores da região dele até completar a cota semanal (Configurações, padrão 20). A ordem
+usa celular, dívida ativa na União (dados abertos da PGFN), capital social, idade da loja e clientes ativos na cidade.
 O botão "Atualizar agora" roda a importação em segundo plano e a tela mostra o andamento/status.

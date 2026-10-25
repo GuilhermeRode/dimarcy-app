@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 
 from .models import SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
 from .sales import _city_key
-from .settings_store import get_app_settings
 
 ESTABLISHED_DAYS = 5 * 365  # opened within 5 years: past the first months, still choosing suppliers
 
@@ -119,23 +118,12 @@ def ranked_leads(db: Session, user: User, today: date, city: str = "", search: s
     return sorted(rows, key=rank)
 
 
-def release_weekly(db: Session, today: date) -> int:
-    """Tops each active seller up to the weekly quota (Configurações): the best-ranked pending leads of
-    their region, so nobody gets thousands at once. Leads the admin released by hand count too."""
-    quota = get_app_settings(db).lead_weekly_release
-    if not quota:
-        return 0
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    released = 0
-    for seller in db.query(User).filter(User.role == "seller", User.active.is_(True)):
-        recent = db.query(Lead).join(SellerCity, and_(SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state)) \
-                   .filter(SellerCity.user_id == seller.id, Lead.released_at >= now - timedelta(days=7)).count()
-        best = ranked_leads(db, seller, today, status="pending")[:max(quota - recent, 0)]
-        for lead, _ in best:
-            lead.status, lead.released_at = "new", now
-        released += len(best)
-    db.commit()
-    return released
+def released_this_week(db: Session, seller_id: int) -> int:
+    """Leads released (pending -> new) in the last 7 days in the seller's region: Prospecção suggests
+    the admin release the rest of the weekly quota (Configurações), so nobody gets thousands at once."""
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
+    return db.query(Lead).join(SellerCity, and_(SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state)) \
+             .filter(SellerCity.user_id == seller_id, Lead.released_at >= since).count()
 
 
 def lead_out(lead: Lead, owner: User | None) -> dict:

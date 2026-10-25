@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 
 from .. import clock, lead_import
 from ..database import get_db
-from ..leads import city_owners, lead_out, lead_owner, ranked_leads, visible_lead
+from ..leads import city_owners, lead_out, lead_owner, ranked_leads, released_this_week, visible_lead
 from ..models import Contact, Lead, User
 from ..schemas import CustomerIn, CustomerOut, DiscardIn, ReleaseIn
 from ..security import get_current_user, require_admin
+from ..settings_store import get_app_settings
 from .customers import add_customer, geocode_later
 
 router = APIRouter(prefix="/leads", tags=["leads"])
@@ -23,8 +24,11 @@ def list_leads(city: str = "", search: str = "", seller_id: int | None = None,
     admin = user.role == "admin"  # only the admin may list pending leads
     rows = ranked_leads(db, user, clock.today_br(), city, search, seller_id if admin else None,
                         status if admin else "new")
-    return {"items": [lead_out(lead, owner) for lead, owner in rows[offset:offset + limit]], "total": len(rows),
-            "cities": sorted({lead.city for lead, _ in rows})}  # for the screen's city filter
+    out = {"items": [lead_out(lead, owner) for lead, owner in rows[offset:offset + limit]], "total": len(rows),
+           "cities": sorted({lead.city for lead, _ in rows})}  # for the screen's city filter
+    if admin and status == "pending" and seller_id:  # the weekly suggestion for that seller
+        out["week"] = {"released": released_this_week(db, seller_id), "quota": get_app_settings(db).lead_weekly_release}
+    return out
 
 
 @router.post("/release", dependencies=[Depends(require_admin)])

@@ -140,13 +140,13 @@ export default function Settings() {
                   onChange={(e) => setForm({ ...form, lead_min_age_months: e.target.value })} />
                 <small className="muted">Mudar um filtro faz a próxima importação buscar as lojas de novo.</small>
               </Field>
-              <Field label="Liberar por vendedor, por semana" span={2}>
+              <Field label="Sugestão de lojas por vendedor, por semana" span={2}>
                 <input type="number" min="0" max="500" step="1" value={form.lead_weekly_release ?? ""}
                   onChange={(e) => setForm({ ...form, lead_weekly_release: e.target.value })} />
                 <small className="muted">
-                  Toda madrugada o sistema completa esse número com as melhores lojas da região de cada vendedor
-                  (celular, sem dívida ativa, maior capital social, aberta há até 5 anos, cidade onde já vendemos).
-                  Lojas com dívida ou capital baixo não são excluídas, só vão para o fim da fila. 0 desliga.
+                  Em Prospecção → Aguardando, escolha um vendedor: o sistema mostra quantas lojas ele já recebeu na
+                  semana e sugere as melhores da região dele até completar esse número (celular, sem dívida ativa, maior
+                  capital social, aberta há até 5 anos, cidade onde já vendemos). Nada é liberado sem o administrador.
                 </small>
               </Field>
             </div>

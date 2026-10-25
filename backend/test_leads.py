@@ -375,8 +375,12 @@ def check_pending_release(ctx):
     assert set(got) == {pa, pb, pn} and got[pa]["size"] == "me", got
     assert c.post("/api/leads/release", headers=a, json={"ids": [pa]}).status_code == 403
     assert c.post("/api/leads/release", headers=admin, json={"ids": []}).status_code == 422
+    week = lambda uid: c.get("/api/leads", headers=admin, params={"status": "pending", "seller_id": uid}).json()["week"]  # noqa: E731
+    assert week(ctx["a_id"]) == {"released": 0, "quota": 20}
     r = c.post("/api/leads/release", headers=admin, json={"ids": [pa, pb, pn]})
     assert r.json() == {"released": 2, "skipped_no_seller": 1}, r.text
+    assert week(ctx["a_id"]) == {"released": 1, "quota": 20}  # nothing is released automatically: only counted
+    assert "week" not in c.get("/api/leads", headers=admin, params={"status": "pending"}).json()
     assert c.get(f"/api/leads/{pa}", headers=a).status_code == 200
     assert c.get(f"/api/leads/{pb}", headers=b).status_code == 200
     r = c.post("/api/leads/release", headers=admin, json={"ids": [pa, pb, pn]})
