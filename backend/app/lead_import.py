@@ -1,7 +1,9 @@
 """Imports leads from the Receita Federal's open CNPJ data. Run from backend/:  python -m app.lead_import
 
 A systemd timer runs it daily; it only does real work when the Receita published a new month or
-the scope (states in seller_cities + Configurações' CNAE list) changed. Any error writes nothing.
+the scope (Configurações' states, CNAE list and filters) changed. Any error writes nothing.
+Each lead also gets its capital social and whether it has federal debt being collected (PGFN dívida ativa,
+quarterly) — ranking signals, not filters. Every run then tops up each seller's weekly release (release_weekly).
 Spec: docs/superpowers/specs/2026-10-16-prospeccao-crm-design.md (Importação)"""
 import base64
 import csv
@@ -24,8 +26,8 @@ from sqlalchemy.orm import Session
 from . import clock
 from .config import settings
 from .database import SessionLocal
-from .leads import customer_cnpjs, normalize_cnpj
-from .models import Contact, Customer, Lead, SellerCity
+from .leads import customer_cnpjs, normalize_cnpj, release_weekly
+from .models import Contact, Customer, Lead
 from .sales import _city_key
 from .settings_store import get_app_settings
 
@@ -35,6 +37,8 @@ SIZES = {"01": "me", "03": "epp", "05": "large"}  # Empresas porte -> leads.size
 CONNECTORS = {"da", "das", "de", "do", "dos", "e"}
 
 
+PGFN_URL = "https://dadosabertos.pgfn.gov.br"
+PGFN_FILES = ("Dados_abertos_Nao_Previdenciario.zip", "Dados_abertos_Previdenciario.zip", "Dados_abertos_FGTS.zip")
 IMPORT_STALE = timedelta(hours=4)  # a run older than this is considered dead
 
 
@@ -110,7 +114,7 @@ def pick(row: list[str], cnaes: set[str], states: set[str], towns: dict[str, str
     age = filters["min_age_months"]
     if age and (opened_at is None or opened_at > today - timedelta(days=30 * age)):
         return None
-    if filters["require_contact"] and not (row[22].strip() or row[27].strip()):
+    if filters["require_contact"] and not row[22].strip():  # a phone: sellers prospect by WhatsApp
         return None
     street = " ".join(p for p in (row[13].strip(), row[14].strip()) if p)
     address = ", ".join(p for p in (street, row[15].strip(), row[16].strip(), row[17].strip(), row[18].strip()) if p)
@@ -137,10 +141,34 @@ def display_city(raw: str, state: str, spellings: dict[tuple[str, str], str]) ->
                     for w in raw.lower().split())
 
 
+def capital(value: str) -> float:
+    """Empresas' capital social, "1000,00" -> 1000.0 (0 when blank or unreadable)."""
+    try:
+        return float(value.strip().replace(".", "").replace(",", "."))
+    except ValueError:
+        return 0.0
+
+
+def debtors(zip_path: str, wanted: set[str], states: set[str]) -> set[str]:
+    """CNPJ bases among `wanted` with a PGFN debt being collected ("Em cobrança"); debts paid in
+    installments ("Benefício Fiscal") or guaranteed don't count. The zips hold several ';' CSVs with a header."""
+    found = set()
+    with zipfile.ZipFile(zip_path) as z:
+        for name in z.namelist():
+            with z.open(name) as raw:
+                # CPF_CNPJ;TIPO_PESSOA;TIPO_DEVEDOR;NOME_DEVEDOR;UF_DEVEDOR;...;TIPO_SITUACAO_INSCRICAO (9);...
+                for row in csv.reader(io.TextIOWrapper(raw, encoding="latin-1", newline=""), delimiter=";"):
+                    if len(row) > 9 and row[4] in states and row[9] == "Em cobrança":
+                        base = normalize_cnpj(row[0])[:8]
+                        if base in wanted:
+                            found.add(base)
+    return found
+
+
 def current_scope(db: Session) -> tuple[set[str], set[str], dict, str]:
-    """States that have a seller city, the CNAE list, the quality filters, and all of it as text for comparison."""
-    states = {s for (s,) in db.query(SellerCity.state).distinct()}
+    """The states, the CNAE list, the quality filters, and all of it as text for comparison."""
     cfg = get_app_settings(db)
+    states = {s for s in cfg.lead_states.split(",") if s}
     cnaes = {c for c in cfg.lead_cnaes.split(",") if c}
     filters = {"sizes": {c for c in cfg.lead_sizes.split(",") if c}, "exclude_mei": bool(cfg.lead_exclude_mei),
                "head_office_only": bool(cfg.lead_head_office_only), "require_contact": bool(cfg.lead_require_contact),
@@ -165,7 +193,7 @@ def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: da
         city = display_city(d["raw_city"], d["state"], spellings)
         fields = {"name": (d["name"] or cnpj)[:160], "phone": d["phone"], "email": (d["email"] or "")[:160] or None, "address": d["address"],
                   "city": city, "state": d["state"], "city_key": _city_key(city), "opened_at": d["opened_at"],
-                  "size": d["size"], "seen_at": today}
+                  "size": d["size"], "capital": d["capital"], "in_debt": d["in_debt"], "seen_at": today}
         lead = existing.get(cnpj)
         if lead:
             for k, v in fields.items():
@@ -219,11 +247,13 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
         unnamed = {d["basico"] for d in found.values() if not d["name"]}
         names: dict[str, str] = {}
         portes: dict[str, str] = {}
+        capitals: dict[str, float] = {}
         for i in range(parts):
             path = fetch(f"Empresas{i}.zip")
             for row in read_rows(path, COMPANY_COLUMNS):
                 if row[0] in wanted:
                     portes[row[0]] = row[5]
+                    capitals[row[0]] = capital(row[4])
                     if row[0] in unnamed:
                         names[row[0]] = row[1].strip()
             print(f"[lead_import] Empresas{i}.zip: {len(portes)} sizes so far", flush=True)
@@ -232,11 +262,25 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
         mei = {row[0] for row in read_rows(path, SIMPLES_COLUMNS) if row[4] == "S" and row[0] in wanted}
         print(f"[lead_import] Simples.zip: {len(mei)} MEI", flush=True)
         os.remove(path)
+        in_debt: set[str] | None = set()
+        try:
+            quarter = latest_quarter()
+            for name in PGFN_FILES:
+                path = os.path.join(tmp, name)
+                download_pgfn(quarter, name, path)
+                in_debt |= debtors(path, wanted, states)
+                os.remove(path)
+            print(f"[lead_import] PGFN {quarter}: {len(in_debt)} with dívida ativa", flush=True)
+        except Exception as e:  # only a ranking signal: import anyway, as "not checked"
+            in_debt = None
+            print(f"[lead_import] PGFN unavailable, debt not checked: {e!r}", file=sys.stderr, flush=True)
         for cnpj, d in list(found.items()):
             if not d["name"]:
                 d["name"] = names.get(d["basico"], "")
             porte = portes.get(d["basico"], "00")
             d["size"] = "mei" if d["basico"] in mei else SIZES.get(porte, "")
+            d["capital"] = capitals.get(d["basico"])
+            d["in_debt"] = None if in_debt is None else d["basico"] in in_debt
             if (filters["exclude_mei"] and d["size"] == "mei") or (d["size"] != "mei" and porte not in filters["sizes"]):
                 del found[cnpj]
     existing_new = db.query(Lead).filter(Lead.status.in_(("pending", "new")), Lead.state.in_(states)).count()
@@ -272,16 +316,30 @@ def latest_month() -> str:
     return months[-1]
 
 
-def download(month: str, name: str, dest: str, attempts: int = 3, sleep: Callable[[float], None] = time.sleep) -> None:
+def download(month: str, name: str, dest: str, attempts: int = 3, sleep: Callable[[float], None] = time.sleep,
+             request: Callable[[str], urllib.request.Request] | None = None) -> None:
     for attempt in range(1, attempts + 1):
         try:
-            with urllib.request.urlopen(_request(f"{month}/{name}"), timeout=120) as r, open(dest, "wb") as f:
+            with urllib.request.urlopen((request or _request)(f"{month}/{name}"), timeout=120) as r, open(dest, "wb") as f:
                 shutil.copyfileobj(r, f, 1024 * 1024)
             return
         except Exception as e:
             if attempt == attempts:
                 raise RuntimeError(f"{month}/{name}: {e!r}") from e
             sleep(30)
+
+
+def latest_quarter() -> str:
+    """Newest PGFN folder, e.g. "2026_trimestre_03"."""
+    with urllib.request.urlopen(PGFN_URL + "/", timeout=60) as r:
+        quarters = re.findall(r'href="(\d{4}_trimestre_\d{2})/?"', r.read().decode("latin-1"))
+    if not quarters:
+        raise RuntimeError("No YYYY_trimestre_NN folder in the PGFN open data")
+    return max(quarters)
+
+
+def download_pgfn(quarter: str, name: str, dest: str) -> None:
+    download(quarter, name, dest, request=lambda path: urllib.request.Request(f"{PGFN_URL}/{path}"))
 
 
 def run_and_record(db: Session, latest_month, download, force: bool = False) -> str:
@@ -306,12 +364,14 @@ def run_and_record(db: Session, latest_month, download, force: bool = False) -> 
 def main(argv: list[str] | None = None) -> int:
     force = "--force" in (sys.argv[1:] if argv is None else argv)
     with SessionLocal() as db:
+        code = 0
         try:
             print(f"[lead_import] {run_and_record(db, latest_month, download, force)}", flush=True)
-            return 0
         except Exception as e:  # logged by systemd; tomorrow's run tries again
             print(f"[lead_import] failed, nothing written: {e!r}", file=sys.stderr, flush=True)
-            return 1
+            code = 1
+        print(f"[lead_import] released this week's leads: {release_weekly(db, clock.today_br())}", flush=True)
+        return code
 
 
 if __name__ == "__main__":

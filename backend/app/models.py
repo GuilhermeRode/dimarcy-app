@@ -211,6 +211,8 @@ class AppSettings(Base):
     lead_head_office_only: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     lead_require_contact: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     lead_min_age_months: Mapped[int] = mapped_column(Integer, default=6, server_default="6")
+    lead_states: Mapped[str] = mapped_column(String(30), default="PR,RS,SC", server_default="PR,RS,SC")  # UFs imported
+    lead_weekly_release: Mapped[int] = mapped_column(Integer, default=20, server_default="20")  # per seller; 0 = off
     lead_import_started_at: Mapped[datetime | None] = mapped_column(DateTime)  # naive UTC (the UI appends "Z"); set while an import runs
     lead_import_pid: Mapped[int | None] = mapped_column(Integer)  # the running importer's process id
     lead_import_error: Mapped[str | None] = mapped_column(String(300))  # last failure, cleared on success
@@ -271,6 +273,9 @@ class Lead(Base):
     discard_reason: Mapped[str | None] = mapped_column(String(30))  # see DISCARD_REASONS
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"))
     seen_at: Mapped[_dt.date] = mapped_column(Date)  # last import that listed this CNPJ
+    capital: Mapped[float | None] = mapped_column(Numeric(14, 2))  # capital social (Receita Empresas)
+    in_debt: Mapped[bool | None] = mapped_column(Boolean)  # PGFN dívida ativa "em cobrança"; None = not checked
+    released_at: Mapped[datetime | None] = mapped_column(DateTime)  # naive UTC, pending -> new
 
 
 class Contact(Base):

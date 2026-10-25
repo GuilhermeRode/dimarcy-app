@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError  # noqa: E402
 
 from app import clock  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
-from app.leads import normalize_cnpj  # noqa: E402
+from app.leads import is_mobile, lead_score, normalize_cnpj  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import AppSettings, Contact, Customer, Lead, SellerCity, User  # noqa: E402
 from app.sales import _city_key  # noqa: E402
@@ -96,6 +96,11 @@ def check_settings(ctx):
     assert c.put("/api/settings", headers=admin, json={**base, "lead_sizes": "02"}).status_code == 422
     assert c.put("/api/settings", headers=admin, json={**base, "lead_sizes": ""}).status_code == 422
     assert c.put("/api/settings", headers=admin, json={**base, "lead_min_age_months": 121}).status_code == 422
+    r = c.put("/api/settings", headers=admin, json={**base, "lead_states": "sc, pr ,SC", "lead_weekly_release": 30})
+    assert (r.json()["lead_states"], r.json()["lead_weekly_release"]) == ("PR,SC", 30), r.text
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_states": "XX"}).status_code == 422
+    assert c.put("/api/settings", headers=admin, json={**base, "lead_weekly_release": -1}).status_code == 422
+    c.put("/api/settings", headers=admin, json={**base, "lead_states": "PR,RS,SC", "lead_weekly_release": 20})
     r = c.put("/api/settings", headers=admin, json=base)  # omitted: unchanged
     assert r.json()["lead_sizes"] == "01,03,05" and r.json()["lead_exclude_mei"] is False
     assert "lead_sizes" not in c.get("/api/settings", headers=ctx["a"]).json()
@@ -156,10 +161,12 @@ def check_listing(ctx):
 
     r = c.get("/api/leads", headers=ctx["a"])
     assert r.status_code == 200, r.text
-    assert names(r) == ["Jota Moda", "Antiga Modas", "Jaraguá Sem Fone"], names(r)  # contact, then new store
+    # lead_score: landline + opened within 5 years 4 (+1 debt not checked), 5-year store alone 3, landline alone 2
+    assert names(r) == ["Jota Moda", "Jaraguá Sem Fone", "Antiga Modas"], names(r)
+    assert [x["score"] for x in r.json()["items"]] == [4, 3, 2]
     assert r.json()["total"] == 3 and r.json()["cities"] == ["Jaraguá do Sul"]
     assert names(c.get("/api/leads", headers=ctx["b"])) == ["Corupá Store"]
-    assert names(c.get("/api/leads", headers=ctx["a"], params={"limit": 1, "offset": 1})) == ["Antiga Modas"]
+    assert names(c.get("/api/leads", headers=ctx["a"], params={"limit": 1, "offset": 1})) == ["Jaraguá Sem Fone"]
     assert names(c.get("/api/leads", headers=ctx["a"], params={"search": "antiga"})) == ["Antiga Modas"]
     assert names(c.get("/api/leads", headers=ctx["a"], params={"search": "0000000000103"})) == ["Antiga Modas"]
 
@@ -193,6 +200,15 @@ def check_listing(ctx):
     c.put(f"/api/users/{ctx['a_id']}/cities", headers=admin, json=[{"city": "Jaraguá do Sul", "state": "SC"}])
     c.put(f"/api/users/{ctx['b_id']}/cities", headers=admin, json=[{"city": "Corupá", "state": "SC"}])
     ctx["leads"] = ids
+
+
+def check_score():
+    assert is_mobile("47 991234567") and not is_mobile("47 33330000") and not is_mobile(None)
+    best = Lead(phone="47 991234567", email="a@b.c", in_debt=False, capital=60000, opened_at=TODAY - timedelta(days=400))
+    assert lead_score(best, 5, TODAY) == 3 + 3 + 3 + 2 + 1 + 3
+    debtor = Lead(phone="47 991234567", in_debt=True, capital=10000, opened_at=TODAY - timedelta(days=4000))
+    assert lead_score(debtor, 0, TODAY) == 3 + 0 + 2
+    assert lead_score(Lead(capital=999), 0, TODAY) == 1  # debt not checked: 1
 
 
 def check_ranking_by_active_customers(ctx):
@@ -434,6 +450,7 @@ with TestClient(app) as c:
     check_models(ctx)
     check_settings(ctx)
     check_regions(ctx)
+    check_score()
     check_listing(ctx)
     check_ranking_by_active_customers(ctx)
     check_convert(ctx)

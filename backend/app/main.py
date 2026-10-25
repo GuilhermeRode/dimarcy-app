@@ -92,13 +92,16 @@ async def lifespan(app: FastAPI):
                                      "lead_head_office_only": "BOOLEAN DEFAULT TRUE",
                                      "lead_require_contact": "BOOLEAN DEFAULT TRUE",
                                      "lead_min_age_months": "INTEGER DEFAULT 6",
+                                     "lead_states": "VARCHAR(30) DEFAULT 'PR,RS,SC'",
+                                     "lead_weekly_release": "INTEGER DEFAULT 20",
                                      "lead_import_started_at": "TIMESTAMP",
                                      "lead_import_pid": "INTEGER",
                                      "lead_import_error": "VARCHAR(300)"})
     if engine.dialect.name == "postgresql":  # the scope column was created as VARCHAR(300)
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE app_settings ALTER COLUMN last_lead_import_scope TYPE VARCHAR(500)"))
-    _ensure_columns("leads", {"size": "VARCHAR(5) DEFAULT ''"})
+    _ensure_columns("leads", {"size": "VARCHAR(5) DEFAULT ''", "capital": "NUMERIC(14,2)", "in_debt": "BOOLEAN",
+                              "released_at": "TIMESTAMP"})
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator
             db.add(User(name="Administrador", email=settings.admin_email,

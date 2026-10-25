@@ -226,7 +226,7 @@ export default function Leads() {
                 className={`customers-row leads-row ${isAdmin ? "admin" : ""} ${l.id === selectedId ? "on" : ""}`}>
                 <span className="customers-cell-main">
                   <span className="customer-avatar">{initials(l.name)}</span>
-                  <span><strong>{l.name}</strong><small>{l.city}/{l.state} · {formatCnpj(l.cnpj)} · {LEAD_SIZES[l.size] || "—"}</small></span>
+                  <span><strong>{l.name}</strong><small>{l.city}/{l.state} · {formatCnpj(l.cnpj)} · {LEAD_SIZES[l.size] || "—"}{l.in_debt ? " · dívida ativa" : ""}</small></span>
                 </span>
                 <span>{l.phone || "—"}</span>
                 {isAdmin && <span>{l.seller_name?.split(" ")[0] || "Sem vendedor"}</span>}

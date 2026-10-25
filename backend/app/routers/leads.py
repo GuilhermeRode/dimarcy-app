@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
-from .. import clock
+from .. import clock, lead_import
 from ..database import get_db
 from ..leads import city_owners, lead_out, lead_owner, ranked_leads, visible_lead
 from ..models import Contact, Lead, User
@@ -35,7 +35,7 @@ def release(data: ReleaseIn, db: Session = Depends(get_db)):
     ok = [lead.id for lead in leads if lead_owner(owners, lead)]
     if ok:
         db.query(Lead).filter(Lead.id.in_(ok), Lead.status == "pending").update(
-            {"status": "new"}, synchronize_session=False)
+            {"status": "new", "released_at": lead_import.utcnow()}, synchronize_session=False)
         db.commit()
     return {"released": len(ok), "skipped_no_seller": len(leads) - len(ok)}
 

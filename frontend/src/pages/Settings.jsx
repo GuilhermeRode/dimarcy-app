@@ -35,6 +35,8 @@ export default function Settings() {
         lead_head_office_only: form.lead_head_office_only,
         lead_require_contact: form.lead_require_contact,
         lead_min_age_months: Number(form.lead_min_age_months) || 0,
+        lead_states: form.lead_states,
+        lead_weekly_release: Number(form.lead_weekly_release) || 0,
       });
       setForm(data);
       setOk("Configurações salvas com sucesso.");
@@ -96,6 +98,11 @@ export default function Settings() {
           <section className="panel">
             <h3>Prospecção</h3>
             <div className="form-grid">
+              <Field label="Estados da prospecção" span={2}>
+                <input placeholder="PR, RS, SC" value={form.lead_states || ""}
+                  onChange={(e) => setForm({ ...form, lead_states: e.target.value })} />
+                <small className="muted">Siglas separadas por vírgula. A importação traz as lojas desses estados.</small>
+              </Field>
               <Field label="CNAEs da prospecção" span={2}>
                 <input placeholder="4781-4/00" value={form.lead_cnaes || ""}
                   onChange={(e) => setForm({ ...form, lead_cnaes: e.target.value })} />
@@ -124,7 +131,7 @@ export default function Settings() {
                   onChange={(e) => setForm({ ...form, lead_head_office_only: e.target.checked })} />
               </label>
               <label className="switch-row span-2">
-                <span>Só lojas com telefone ou e-mail</span>
+                <span>Só lojas com telefone</span>
                 <input type="checkbox" role="switch" className="switch" checked={form.lead_require_contact}
                   onChange={(e) => setForm({ ...form, lead_require_contact: e.target.checked })} />
               </label>
@@ -132,6 +139,15 @@ export default function Settings() {
                 <input type="number" min="0" max="120" step="1" value={form.lead_min_age_months ?? ""}
                   onChange={(e) => setForm({ ...form, lead_min_age_months: e.target.value })} />
                 <small className="muted">Mudar um filtro faz a próxima importação buscar as lojas de novo.</small>
+              </Field>
+              <Field label="Liberar por vendedor, por semana" span={2}>
+                <input type="number" min="0" max="500" step="1" value={form.lead_weekly_release ?? ""}
+                  onChange={(e) => setForm({ ...form, lead_weekly_release: e.target.value })} />
+                <small className="muted">
+                  Toda madrugada o sistema completa esse número com as melhores lojas da região de cada vendedor
+                  (celular, sem dívida ativa, maior capital social, aberta há até 5 anos, cidade onde já vendemos).
+                  Lojas com dívida ou capital baixo não são excluídas, só vão para o fim da fila. 0 desliga.
+                </small>
               </Field>
             </div>
           </section>

@@ -5,7 +5,7 @@ lead's city, so moving a city between sellers moves its leads with no migration.
 Spec: docs/superpowers/specs/2026-10-16-prospeccao-crm-design.md"""
 import re
 from collections import Counter
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_
@@ -13,8 +13,9 @@ from sqlalchemy.orm import Session
 
 from .models import SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
 from .sales import _city_key
+from .settings_store import get_app_settings
 
-NEW_STORE_DAYS = 730  # "abriu recentemente": a new store is still choosing its suppliers
+ESTABLISHED_DAYS = 5 * 365  # opened within 5 years: past the first months, still choosing suppliers
 
 
 def normalize_cnpj(value: str | None) -> str:
@@ -61,10 +62,29 @@ def active_customers_by_city(db: Session, today: date) -> Counter:
     return counts
 
 
+def is_mobile(phone: str | None) -> bool:
+    """Receita phones are "DDD number"; a 9-digit number starting with 9 is a mobile (likely WhatsApp)."""
+    number = re.sub(r"\D", "", (phone or "").split(" ")[-1])
+    return len(number) == 9 and number[0] == "9"
+
+
+def lead_score(lead: Lead, active_in_city: int, today: date) -> int:
+    """Points that order the queue; nothing here removes a lead (0-15):
+    mobile phone 3 (landline 1) · no federal debt 3 (not checked 1) · capital ≥ R$ 50 mil 3, ≥ R$ 10 mil 2,
+    ≥ R$ 1 mil 1 · opened within ESTABLISHED_DAYS 2 · e-mail 1 · active Di Marcy customers in the city, up to 3."""
+    capital = float(lead.capital or 0)
+    return ((3 if is_mobile(lead.phone) else 1 if lead.phone else 0)
+            + (3 if lead.in_debt is False else 1 if lead.in_debt is None else 0)
+            + (3 if capital >= 50_000 else 2 if capital >= 10_000 else 1 if capital >= 1_000 else 0)
+            + (2 if lead.opened_at and (today - lead.opened_at).days <= ESTABLISHED_DAYS else 0)
+            + (1 if lead.email else 0)
+            + min(active_in_city, 3))
+
+
 def ranked_leads(db: Session, user: User, today: date, city: str = "", search: str = "",
                  seller_id: int | None = None, status: str = "new") -> list[tuple[Lead, User | None]]:
-    """New leads the user may see, best first: has phone/e-mail, opened within NEW_STORE_DAYS,
-    more active customers in the city, opened most recently, name. `seller_id` (admin) 0 = no seller."""
+    """Leads the user may see, best first: lead_score, then more active customers in the city,
+    opened most recently, name. `seller_id` (admin) 0 = no seller."""
     q = db.query(Lead).filter(Lead.status == status)
     if user.role != "admin":
         q = q.join(SellerCity, and_(SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state)) \
@@ -88,18 +108,41 @@ def ranked_leads(db: Session, user: User, today: date, city: str = "", search: s
             continue
         rows.append((lead, owner))
 
+    for lead, _ in rows:
+        n = active[(lead.city_key, lead.state)]
+        lead.score = lead_score(lead, n, today)  # plain attribute, read by lead_out
+
     def rank(row):
         lead = row[0]
-        recent = lead.opened_at is not None and (today - lead.opened_at).days <= NEW_STORE_DAYS
-        return (not (lead.phone or lead.email), not recent, -active[(lead.city_key, lead.state)],
+        return (-lead.score, -active[(lead.city_key, lead.state)],
                 -(lead.opened_at.toordinal() if lead.opened_at else 0), lead.name, lead.id)
     return sorted(rows, key=rank)
+
+
+def release_weekly(db: Session, today: date) -> int:
+    """Tops each active seller up to the weekly quota (Configurações): the best-ranked pending leads of
+    their region, so nobody gets thousands at once. Leads the admin released by hand count too."""
+    quota = get_app_settings(db).lead_weekly_release
+    if not quota:
+        return 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    released = 0
+    for seller in db.query(User).filter(User.role == "seller", User.active.is_(True)):
+        recent = db.query(Lead).join(SellerCity, and_(SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state)) \
+                   .filter(SellerCity.user_id == seller.id, Lead.released_at >= now - timedelta(days=7)).count()
+        best = ranked_leads(db, seller, today, status="pending")[:max(quota - recent, 0)]
+        for lead, _ in best:
+            lead.status, lead.released_at = "new", now
+        released += len(best)
+    db.commit()
+    return released
 
 
 def lead_out(lead: Lead, owner: User | None) -> dict:
     return {"id": lead.id, "cnpj": lead.cnpj, "name": lead.name, "phone": lead.phone, "email": lead.email,
             "address": lead.address, "city": lead.city, "state": lead.state, "opened_at": lead.opened_at, "size": lead.size,
-            "status": lead.status, "seller_id": owner.id if owner else None,
+            "capital": float(lead.capital) if lead.capital is not None else None, "in_debt": lead.in_debt,
+            "score": getattr(lead, "score", None), "status": lead.status, "seller_id": owner.id if owner else None,
             "seller_name": owner.name if owner else None}
 
 

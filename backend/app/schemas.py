@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
-from .br_format import format_document, format_phone, format_state_registration
+from .br_format import IE_MASKS as UFS, format_document, format_phone, format_state_registration
 from .models import size_key
 from .uploads import thumb_name
 
@@ -240,6 +240,20 @@ class AppSettingsIn(BaseModel):
     lead_head_office_only: bool | None = None
     lead_require_contact: bool | None = None
     lead_min_age_months: int | None = Field(default=None, ge=0, le=120)
+    lead_states: str | None = None
+    lead_weekly_release: int | None = Field(default=None, ge=0, le=500)
+
+    @field_validator("lead_states")
+    @classmethod
+    def _states(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        ufs = sorted({p.strip().upper() for p in v.split(",") if p.strip()})
+        if not ufs or any(uf not in UFS for uf in ufs):
+            raise ValueError("Informe as siglas dos estados separadas por vírgula (ex.: PR, RS, SC).")
+        if len(ufs) > 10:  # column size
+            raise ValueError("No máximo 10 estados.")
+        return ",".join(ufs)
 
     @field_validator("lead_cnaes")
     @classmethod
@@ -282,6 +296,8 @@ class AppSettingsAdminOut(AppSettingsOut):
     lead_head_office_only: bool
     lead_require_contact: bool
     lead_min_age_months: int
+    lead_states: str
+    lead_weekly_release: int
     lead_import_started_at: datetime | None = None
     lead_import_error: str | None = None
 

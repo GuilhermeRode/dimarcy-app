@@ -14,6 +14,17 @@ os.environ.update(DATABASE_URL=f"sqlite:///{db_file}", ADMIN_EMAIL="admin@test.c
 
 from app import lead_import as li  # noqa: E402
 
+PGFN_HEADER = ["CPF_CNPJ", "TIPO_PESSOA", "TIPO_DEVEDOR", "NOME_DEVEDOR", "UF_DEVEDOR", "UNIDADE_RESPONSAVEL",
+               "ENTIDADE_RESPONSAVEL", "UNIDADE_INSCRICAO", "NUMERO_INSCRICAO", "TIPO_SITUACAO_INSCRICAO",
+               "SITUACAO_INSCRICAO", "RECEITA_PRINCIPAL", "DATA_INSCRICAO", "INDICADOR_AJUIZADO", "VALOR_CONSOLIDADO"]
+pgfn_files: dict[str, list] = {}  # PGFN file name -> rows; no internet in tests
+li.latest_quarter = lambda: "2026_trimestre_03"
+li.download_pgfn = lambda quarter, name, dest: make_zip(dest, [PGFN_HEADER] + pgfn_files.get(name, []))
+
+
+def debt(cnpj, situation="Em cobrança", uf="SC"):
+    return [cnpj, "Pessoa jurídica", "Principal", "X", uf, "", "PGFN", "", "1", situation, "", "", "", "NAO", "1000.00"]
+
 
 def make_zip(path, rows, inner="K3241.K03200Y3.D61010.ESTABELE"):
     buf = io.StringIO()
@@ -87,12 +98,18 @@ def check_parsing():
     assert li.pick(estab(inicio="20260701"), cn, st, towns, on, now) is None
     assert li.pick(estab(inicio="20260701"), cn, st, towns, {**on, "min_age_months": 3}, now)
     assert li.pick(estab(phone="", email=""), cn, st, towns, {**on, "require_contact": False}, now)
+    assert li.pick(estab(phone=""), cn, st, towns, on, now) is None  # an e-mail alone isn't enough: sellers use WhatsApp
 
     spellings = {("jaragua do sul", "SC"): "Jaraguá do Sul"}
     assert li.display_city("JARAGUA DO SUL", "SC", spellings) == "Jaraguá do Sul"
     assert li.display_city("SAO BENTO DO SUL", "SC", spellings) == "Sao Bento do Sul"
     assert li.display_city("GUAJARA-MIRIM", "RO", spellings) == "Guajara-Mirim"
     assert li.display_city("SAO FELIPE D'OESTE", "RO", spellings) == "Sao Felipe D'oeste"
+
+    assert (li.capital("10000,00"), li.capital("1.500,50"), li.capital(""), li.capital("x")) == (10000, 1500.5, 0, 0)
+    z = make_zip(os.path.join(tmp, "pgfn.zip"), [PGFN_HEADER, debt("10.000.000/0001-01"), debt("20.000.000/0001-01", "Benefício Fiscal"),
+                                                 debt("30.000.000/0001-01", uf="SP"), debt("40.000.000/0001-01"), ["short"]])
+    assert li.debtors(z, {"10000000", "20000000", "30000000"}, {"SC"}) == {"10000000"}
 
 
 def check_months():
@@ -183,7 +200,7 @@ def check_run():
     assert lead("40000000000101") is None  # gone from the Receita, no contacts
     assert lead("50000000000101") is not None  # gone, but has contacts: kept
     s = db.query(AppSettings).first()
-    assert (s.last_lead_import_month, s.last_lead_import_scope) == ("2026-10", "SC|4781400|01,03|mei1|ho1|ct1|age6")
+    assert (s.last_lead_import_month, s.last_lead_import_scope) == ("2026-10", "PR,RS,SC|4781400|01,03|mei1|ho1|ct1|age6")
 
     calls.clear()
     assert li.run(db, lambda: "2026-10", download) == "up-to-date"
@@ -192,7 +209,7 @@ def check_run():
     s.lead_cnaes = "4781400,4642701"
     db.commit()
     assert li.run(db, lambda: "2026-10", download).startswith("imported 2026-10")  # scope changed
-    assert db.query(AppSettings).first().last_lead_import_scope == "SC|4642701,4781400|01,03|mei1|ho1|ct1|age6"
+    assert db.query(AppSettings).first().last_lead_import_scope == "PR,RS,SC|4642701,4781400|01,03|mei1|ho1|ct1|age6"
 
     # a run that finds nothing is refused: leads and the stamped month stay as they were
     n_leads = db.query(Lead).count()
@@ -223,9 +240,12 @@ def check_run():
     assert li.run(db, lambda: "2026-10", download) == "up-to-date"
     assert li.run(db, lambda: "2026-10", download, force=True).startswith("imported 2026-10")
 
-    db.query(SellerCity).delete()
+    s = db.query(AppSettings).first()
+    s.lead_states = ""
     db.commit()
     assert li.run(db, lambda: "2026-11", download) == "no-scope"
+    s.lead_states = "PR,RS,SC"
+    db.commit()
     db.close()
 
 
@@ -258,12 +278,13 @@ def check_filters():
             estab(basico=b(4), fantasia="SEM CONTATO", phone="", email=""),
             estab(basico=b(5), fantasia="NOVA", inicio="20260701"),
             estab(basico=b(6), fantasia="GRANDE"), estab(basico=b(7), fantasia="NAOINF"),
-            estab(basico=b(8), fantasia="MEI"),
+            estab(basico=b(8), fantasia="MEI"), estab(basico=b(9), fantasia="DEVEDORA"),
         ],
         "Empresas0.zip": [[b(1), "x", "", "", "", "01", ""], [b(2), "x", "", "", "", "03", ""],
                           [b(3), "x", "", "", "", "01", ""], [b(4), "x", "", "", "", "01", ""],
                           [b(5), "x", "", "", "", "01", ""], [b(6), "x", "", "", "", "05", ""],
-                          [b(7), "x", "", "", "", "00", ""], [b(8), "x", "", "", "", "01", ""]],
+                          [b(7), "x", "", "", "", "00", ""], [b(8), "x", "", "", "", "01", ""],
+                          [b(9), "x", "", "", "5000,00", "01", ""]],
         "Simples.zip": [[b(8), "S", "", "", "S", "", ""], [b(1), "S", "", "", "N", "", ""]],
     }
 
@@ -274,10 +295,14 @@ def check_filters():
         db.expire_all()
         return {l.name: l for l in db.query(Lead)}
 
-    assert li.run(db, lambda: "2026-10", download) == "imported 2026-10: 2 new"
+    pgfn_files["Dados_abertos_FGTS.zip"] = [debt(f"{b(9)[:2]}.{b(9)[2:5]}.{b(9)[5:]}/0001-01"),
+                                            debt(f"{b(1)}000101", "Benefício Fiscal")]  # in installments: no flag
+    assert li.run(db, lambda: "2026-10", download) == "imported 2026-10: 3 new"
     got = leads()
-    assert set(got) == {"ME", "EPP"}, set(got)
+    assert set(got) == {"ME", "EPP", "DEVEDORA"}, set(got)  # debt and capital rank leads, never remove them
     assert (got["ME"].size, got["EPP"].size) == ("me", "epp")
+    assert (got["DEVEDORA"].in_debt, float(got["DEVEDORA"].capital)) == (True, 5000)
+    assert got["ME"].in_debt is False and got["ME"].capital == 0
     assert all(l.status == "pending" for l in got.values())
 
     s = db.query(AppSettings).first()
@@ -285,12 +310,42 @@ def check_filters():
     db.commit()
     assert li.run(db, lambda: "2026-10", download).startswith("imported 2026-10")  # scope changed
     got = leads()
-    assert set(got) == {"ME", "EPP", "MEI"} and got["MEI"].size == "mei" and got["MEI"].status == "pending"
+    assert set(got) == {"ME", "EPP", "MEI", "DEVEDORA"} and got["MEI"].size == "mei" and got["MEI"].status == "pending"
 
     # a refreshed lead whose porte changed gets its size updated
     files["Empresas0.zip"][0][5] = "03"
     assert li.run(db, lambda: "2026-10", download, force=True).startswith("imported 2026-10")
     assert leads()["ME"].size == "epp"
+
+    # PGFN down: the import still runs, debt marked as not checked
+    real_pgfn = li.download_pgfn
+    li.download_pgfn = lambda quarter, name, dest: (_ for _ in ()).throw(OSError("pgfn down"))
+    try:
+        assert li.run(db, lambda: "2026-10", download, force=True).startswith("imported 2026-10")
+    finally:
+        li.download_pgfn = real_pgfn
+    assert leads()["DEVEDORA"].in_debt is None
+    assert li.run(db, lambda: "2026-10", download, force=True).startswith("imported 2026-10")
+
+    # weekly release: tops Bia up to the quota with the best-ranked pending leads; the debtor comes last
+    from app.leads import release_weekly
+    s = db.query(AppSettings).first()
+    s.lead_weekly_release = 3
+    db.commit()
+    assert release_weekly(db, date(2026, 10, 16)) == 3
+    got = leads()
+    assert {n for n, l in got.items() if l.status == "new"} == {"ME", "EPP", "MEI"}, got
+    assert all(l.released_at for l in got.values() if l.status == "new")
+    assert release_weekly(db, date(2026, 10, 16)) == 0  # quota used this week
+    s.lead_weekly_release = 4
+    db.commit()
+    assert release_weekly(db, date(2026, 10, 16)) == 1 and leads()["DEVEDORA"].status == "new"
+    s.lead_weekly_release = 0
+    db.commit()
+    for l in db.query(Lead):
+        l.status, l.released_at = "pending", None
+    db.commit()
+    assert release_weekly(db, date(2026, 10, 16)) == 0  # 0 = off
 
     # run status: started_at cleared, error kept after a failure and cleared by the next success
     def failing(month, name, dest):
