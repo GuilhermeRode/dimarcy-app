@@ -156,9 +156,13 @@ def debtors(zip_path: str, wanted: set[str], states: set[str]) -> set[str]:
     with zipfile.ZipFile(zip_path) as z:
         for name in z.namelist():
             with z.open(name) as raw:
-                # CPF_CNPJ;TIPO_PESSOA;TIPO_DEVEDOR;NOME_DEVEDOR;UF_DEVEDOR;...;TIPO_SITUACAO_INSCRICAO (9);...
-                for row in csv.reader(io.TextIOWrapper(raw, encoding="latin-1", newline=""), delimiter=";"):
-                    if len(row) > 9 and row[4] in states and row[9] == "Em cobrança":
+                rows = csv.reader(io.TextIOWrapper(raw, encoding="latin-1", newline=""), delimiter=";")
+                header = next(rows, [])  # the situation column moves between files (7 or 9)
+                if "TIPO_SITUACAO_INSCRICAO" not in header:
+                    continue
+                situation = header.index("TIPO_SITUACAO_INSCRICAO")
+                for row in rows:
+                    if len(row) > situation and row[4] in states and row[situation] == "Em cobrança":
                         base = normalize_cnpj(row[0])[:8]
                         if base in wanted:
                             found.add(base)

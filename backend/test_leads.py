@@ -204,6 +204,7 @@ def check_listing(ctx):
 
 def check_score():
     assert is_mobile("47 991234567") and not is_mobile("47 33330000") and not is_mobile(None)
+    assert is_mobile("46 99735351") and is_mobile("51 85205934") and not is_mobile("41 32926931")
     best = Lead(phone="47 991234567", email="a@b.c", in_debt=False, capital=60000, opened_at=TODAY - timedelta(days=400))
     assert lead_score(best, 5, TODAY) == 3 + 3 + 3 + 2 + 1 + 3
     debtor = Lead(phone="47 991234567", in_debt=True, capital=10000, opened_at=TODAY - timedelta(days=4000))

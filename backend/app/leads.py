@@ -62,9 +62,10 @@ def active_customers_by_city(db: Session, today: date) -> Counter:
 
 
 def is_mobile(phone: str | None) -> bool:
-    """Receita phones are "DDD number"; a 9-digit number starting with 9 is a mobile (likely WhatsApp)."""
+    """Receita phones are "DDD number", mobiles mostly still in the old 8-digit form ("47 99735351"):
+    9 digits starting with 9, or 8 starting with 6-9, is a mobile (likely WhatsApp)."""
     number = re.sub(r"\D", "", (phone or "").split(" ")[-1])
-    return len(number) == 9 and number[0] == "9"
+    return (len(number) == 9 and number[0] == "9") or (len(number) == 8 and number[0] in "6789")
 
 
 def lead_score(lead: Lead, active_in_city: int, today: date) -> int:

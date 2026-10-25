@@ -110,6 +110,9 @@ def check_parsing():
     z = make_zip(os.path.join(tmp, "pgfn.zip"), [PGFN_HEADER, debt("10.000.000/0001-01"), debt("20.000.000/0001-01", "Benefício Fiscal"),
                                                  debt("30.000.000/0001-01", uf="SP"), debt("40.000.000/0001-01"), ["short"]])
     assert li.debtors(z, {"10000000", "20000000", "30000000"}, {"SC"}) == {"10000000"}
+    short_header = [c for c in PGFN_HEADER if c not in ("ENTIDADE_RESPONSAVEL", "UNIDADE_INSCRICAO")]  # Não Previdenciário
+    z = make_zip(os.path.join(tmp, "pgfn2.zip"), [short_header, ["10.000.000/0001-01", "", "", "", "SC", "", "1", "Em cobrança"]])
+    assert li.debtors(z, {"10000000"}, {"SC"}) == {"10000000"}
 
 
 def check_months():
