@@ -1,9 +1,10 @@
 import subprocess
 import sys
 import threading
+import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -53,6 +54,43 @@ def update_settings(data: AppSettingsIn, db: Session = Depends(get_db)):
             setattr(s, field, value)
     db.commit()
     db.refresh(s)
+    return s
+
+
+CATALOG_DIR = BACKEND_DIR / "uploads" / "catalog"
+CATALOG_MAX_BYTES = 40 * 1024 * 1024
+
+
+def _delete_catalog(url: str | None) -> None:
+    if url and url.startswith("/uploads/catalog/"):
+        (CATALOG_DIR / Path(url).name).unlink(missing_ok=True)
+
+
+@router.post("/catalog", response_model=AppSettingsAdminOut, dependencies=[Depends(require_admin)])
+def upload_catalog(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    content = file.file.read(CATALOG_MAX_BYTES + 1)
+    if len(content) > CATALOG_MAX_BYTES:
+        raise HTTPException(400, "Arquivo grande demais (máximo 40 MB).")
+    if not content.startswith(b"%PDF"):  # by content, not by name: only a PDF is served from /uploads
+        raise HTTPException(400, "Envie o catálogo em PDF.")
+    CATALOG_DIR.mkdir(parents=True, exist_ok=True)
+    name = f"catalogo-dimarcy-{uuid.uuid4().hex[:8]}.pdf"  # new name per upload: no stale copy in caches
+    (CATALOG_DIR / name).write_bytes(content)
+    s = get_app_settings(db)
+    old, s.catalog_url = s.catalog_url, f"/uploads/catalog/{name}"
+    db.commit()
+    db.refresh(s)
+    _delete_catalog(old)
+    return s
+
+
+@router.delete("/catalog", response_model=AppSettingsAdminOut, dependencies=[Depends(require_admin)])
+def delete_catalog(db: Session = Depends(get_db)):
+    s = get_app_settings(db)
+    old, s.catalog_url = s.catalog_url, None
+    db.commit()
+    db.refresh(s)
+    _delete_catalog(old)
     return s
 
 

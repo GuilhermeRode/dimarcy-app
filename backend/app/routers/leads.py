@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
@@ -89,6 +90,27 @@ def convert(lid: int, data: CustomerIn, background_tasks: BackgroundTasks,
     db.refresh(c)
     geocode_later(c, background_tasks)
     return c
+
+
+NO_ANSWER = "Não respondeu"
+NO_ANSWER_RETRY_DAYS, NO_ANSWER_LIMIT = 7, 3
+
+
+@router.post("/{lid}/no-answer")
+def no_answer(lid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Logs a WhatsApp attempt with no reply and a retry in 7 days; the 3rd one discards the lead."""
+    if visible_lead(db, user, lid).status not in ("pending", "new"):
+        raise HTTPException(409, ALREADY_HANDLED)
+    retry = clock.today_br() + timedelta(days=NO_ANSWER_RETRY_DAYS)
+    db.add(Contact(lead_id=lid, user_id=user.id, channel="whatsapp", notes=NO_ANSWER, next_action_date=retry))
+    db.flush()
+    tries = db.query(Contact).filter(Contact.lead_id == lid, Contact.notes == NO_ANSWER).count()
+    discarded = tries >= NO_ANSWER_LIMIT
+    if discarded:
+        db.query(Lead).filter(Lead.id == lid).update({"status": "discarded", "discard_reason": "no_answer"},
+                                                     synchronize_session=False)
+    db.commit()
+    return {"tries": tries, "discarded": discarded, "retry_on": None if discarded else retry}
 
 
 @router.post("/{lid}/discard", status_code=204)

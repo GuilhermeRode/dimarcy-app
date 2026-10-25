@@ -10,7 +10,8 @@ import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormMod
 const PAGE_SIZE = 50;
 // Keys match the backend's DISCARD_REASONS
 const DISCARD_REASONS = { closed: "Loja fechou", not_target: "Não é o nosso público", competitor: "Já compra de concorrente",
-  not_recommended: "Não recomendada", other: "Outro" };
+  not_recommended: "Não recomendada", no_answer: "Não respondeu (3 tentativas)", other: "Outro" };
+const AUTO_REASONS = ["not_recommended", "no_answer"];  // set by the admin's queue / the "Não respondeu" button
 
 // Where the seller left off: the latest contact's follow-up date, or how long ago it was
 function contactText(lead) {
@@ -83,6 +84,9 @@ export default function Leads() {
     if (!y) return "Ainda não houve importação.";
     return `Última importação: dados de ${m}/${y} (${utc(importCfg.last_lead_import_at).toLocaleDateString("pt-BR")})`;
   }
+
+  const [catalogUrl, setCatalogUrl] = useState(null);
+  useEffect(() => { api.get("/settings").then((r) => setCatalogUrl(r.data.catalog_url)).catch(() => {}); }, []);
 
   useEffect(() => {
     if (isAdmin) api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller" && u.active)));
@@ -311,6 +315,11 @@ export default function Leads() {
             <LeadPanel key={selected.id} lead={selected} isAdmin={isAdmin} onClose={() => setSelectedId(null)}
               onReleased={(r) => afterRelease([selected.id], r)}
               onContacted={() => refreshContact(selected.id)}
+              catalogUrl={catalogUrl}
+              onNoAnswer={(r) => {
+                if (r.discarded) { drop(selected.id); setNotice("3 tentativas sem resposta: a loja foi descartada."); }
+                else { refreshContact(selected.id); setNotice(`Tentativa ${r.tries} de 3 registrada. Retorno em ${dateBR(r.retry_on)}.`); }
+              }}
               onDiscard={() => setDiscarding({ id: selected.id, name: selected.name, reason: "closed" })}
               onConvert={() => setConverting({
                 ...EMPTY_CUSTOMER, name: selected.name, document: formatCnpj(selected.cnpj),
@@ -333,7 +342,8 @@ export default function Leads() {
           <form onSubmit={discard} className="form-grid">
             <Field label="Motivo" span={2}>
               <select value={discarding.reason} onChange={(e) => setDiscarding({ ...discarding, reason: e.target.value })}>
-                {Object.entries(DISCARD_REASONS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                {Object.entries(DISCARD_REASONS).filter(([k]) => !AUTO_REASONS.includes(k) || (discarding.ids && k === "not_recommended"))
+                  .map(([k, label]) => <option key={k} value={k}>{label}</option>)}
               </select>
             </Field>
             <div className="span-2"><ErrorBox msg={discarding.error} /></div>

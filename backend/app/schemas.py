@@ -133,7 +133,7 @@ class CustomerOut(CustomerIn):
 
 
 class DiscardIn(BaseModel):
-    reason: Literal["closed", "not_target", "competitor", "not_recommended", "other"]  # models.DISCARD_REASONS
+    reason: Literal["closed", "not_target", "competitor", "not_recommended", "no_answer", "other"]  # models.DISCARD_REASONS
 
 
 class ReleaseIn(BaseModel):
@@ -299,6 +299,7 @@ class AppSettingsOut(ORM):
     allow_price_override: bool
     max_discount_percent: float
     retail_markup_percent: float
+    catalog_url: str | None = None  # sellers send it to stores
 
 
 class AppSettingsAdminOut(AppSettingsOut):

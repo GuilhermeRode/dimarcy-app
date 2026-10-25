@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, errorMessage } from "../api";
+import { api, errorMessage, fileUrl } from "../api";
 import { ErrorBox, Field } from "../components/ui";
 
 const LEAD_SIZES = [["01", "ME"], ["03", "EPP"], ["05", "Grande"], ["00", "Não informado"]];
@@ -18,10 +18,28 @@ export default function Settings() {
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [busy, setBusy] = useState(false);
+  const [catalogBusy, setCatalogBusy] = useState(false);
 
   useEffect(() => {
     api.get("/settings").then((r) => setForm(r.data)).catch((e) => setError(errorMessage(e)));
   }, []);
+
+  // The catalog is saved on its own (not by "Salvar"), so unsaved edits in the form are kept
+  async function catalogRequest(request) {
+    setError(""); setOk(""); setCatalogBusy(true);
+    try {
+      const { data } = await request();
+      setForm((f) => ({ ...f, catalog_url: data.catalog_url }));
+      setOk(data.catalog_url ? "Catálogo enviado." : "Catálogo removido.");
+    } catch (err) { setError(errorMessage(err)); } finally { setCatalogBusy(false); }
+  }
+  function uploadCatalog(file) {
+    if (!file) return;
+    const body = new FormData();
+    body.append("file", file);
+    catalogRequest(() => api.post("/settings/catalog", body));
+  }
+  const removeCatalog = () => catalogRequest(() => api.delete("/settings/catalog"));
 
   function toggleAreaCode(code) {
     const current = (form.lead_area_codes || "").split(",").filter(Boolean);
@@ -110,6 +128,28 @@ export default function Settings() {
                   onChange={(e) => setForm({ ...form, annual_goal: e.target.value })} />
                 <small className="muted">O ano da meta vai de outubro a setembro. As metas dos vendedores ficam em Usuários.</small>
               </Field>
+            </div>
+          </section>
+
+          <section className="panel">
+            <h3>Catálogo</h3>
+            <div className="form-grid">
+              <div className="span-2">
+                {form.catalog_url
+                  ? <p><a href={fileUrl(form.catalog_url)} target="_blank" rel="noopener noreferrer">Abrir catálogo atual</a></p>
+                  : <p className="muted">Nenhum catálogo enviado.</p>}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <label className="btn">
+                    {catalogBusy ? "Enviando…" : form.catalog_url ? "Trocar PDF" : "Enviar PDF"}
+                    <input type="file" accept=".pdf,application/pdf" hidden disabled={catalogBusy}
+                      onChange={(e) => { uploadCatalog(e.target.files[0]); e.target.value = ""; }} />
+                  </label>
+                  {form.catalog_url && <button type="button" className="btn" disabled={catalogBusy} onClick={removeCatalog}>Remover</button>}
+                </div>
+                <small className="muted">
+                  PDF de até 40 MB. Os vendedores mandam o link para as lojas pelo botão "Enviar catálogo" em Prospecção.
+                </small>
+              </div>
             </div>
           </section>
 

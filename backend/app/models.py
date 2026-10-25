@@ -26,7 +26,7 @@ ENTRY_KINDS = ["receivable", "payable"]
 # Business content, so in Portuguese; a payable's category must be one of these
 PAYABLE_CATEGORIES = ["Matéria-prima", "Aluguel", "Salários", "Impostos", "Energia", "Manutenção", "Outros"]
 LEAD_STATUSES = ["pending", "new", "converted", "discarded"]  # pending = aguardando liberação (admin only)
-DISCARD_REASONS = ["closed", "not_target", "competitor", "not_recommended", "other"]
+DISCARD_REASONS = ["closed", "not_target", "competitor", "not_recommended", "no_answer", "other"]
 CONTACT_CHANNELS = ["whatsapp", "call", "visit", "email"]
 
 # Customer status by days since the last sale (see customer_status)
@@ -217,6 +217,7 @@ class AppSettings(Base):
     lead_import_started_at: Mapped[datetime | None] = mapped_column(DateTime)  # naive UTC (the UI appends "Z"); set while an import runs
     lead_import_pid: Mapped[int | None] = mapped_column(Integer)  # the running importer's process id
     lead_import_error: Mapped[str | None] = mapped_column(String(300))  # last failure, cleared on success
+    catalog_url: Mapped[str | None] = mapped_column(String(200))  # PDF sellers send to stores (/uploads/catalog/...)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 

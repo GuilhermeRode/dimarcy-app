@@ -97,7 +97,8 @@ async def lifespan(app: FastAPI):
                                      "lead_weekly_release": "INTEGER DEFAULT 20",
                                      "lead_import_started_at": "TIMESTAMP",
                                      "lead_import_pid": "INTEGER",
-                                     "lead_import_error": "VARCHAR(300)"})
+                                     "lead_import_error": "VARCHAR(300)",
+                                     "catalog_url": "VARCHAR(200)"})
     if engine.dialect.name == "postgresql":  # the scope column was created as VARCHAR(300)
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE app_settings ALTER COLUMN last_lead_import_scope TYPE VARCHAR(500)"))
@@ -117,7 +118,8 @@ async def lifespan(app: FastAPI):
 docs = {} if settings.enable_docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}
 app = FastAPI(title="Di Marcy — Pedidos", lifespan=lifespan, **docs)
 
-MAX_BODY_BYTES = 6 * 1024 * 1024  # largest legit request is a 5 MB image upload
+MAX_BODY_BYTES = 6 * 1024 * 1024  # largest legit request is a 5 MB image upload...
+LARGE_BODY_PATHS = {"/api/settings/catalog": 41 * 1024 * 1024}  # ...except the catalog PDF (40 MB)
 
 
 class BodySizeLimit:
@@ -131,12 +133,13 @@ class BodySizeLimit:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         received, too_large = 0, False
+        limit = LARGE_BODY_PATHS.get(scope["path"], MAX_BODY_BYTES)
 
         async def limited_receive():
             nonlocal received, too_large
             message = await receive()
             received += len(message.get("body", b""))
-            if received > MAX_BODY_BYTES:
+            if received > limit:
                 too_large = True
                 raise RuntimeError("request body too large")
             return message

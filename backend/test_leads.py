@@ -103,6 +103,16 @@ def check_settings(ctx):
     assert c.put("/api/settings", headers=admin, json={**base, "lead_area_codes": "49, 47,47"}).json()["lead_area_codes"] == "47,49"
     assert c.put("/api/settings", headers=admin, json={**base, "lead_area_codes": "4"}).status_code == 422
     assert c.put("/api/settings", headers=admin, json={**base, "lead_area_codes": ""}).json()["lead_area_codes"] == ""
+
+    # catalog PDF: admin uploads, everyone reads the link, only a real PDF
+    pdf = {"file": ("x.pdf", b"%PDF-1.4 catalog", "application/pdf")}
+    assert c.post("/api/settings/catalog", headers=ctx["a"], files=pdf).status_code == 403
+    assert c.post("/api/settings/catalog", headers=admin, files={"file": ("x.pdf", b"<html>", "application/pdf")}).status_code == 400
+    url = c.post("/api/settings/catalog", headers=admin, files=pdf).json()["catalog_url"]
+    assert url.startswith("/uploads/catalog/catalogo-dimarcy-") and c.get(url).content == b"%PDF-1.4 catalog"
+    assert c.get("/api/settings", headers=ctx["a"]).json()["catalog_url"] == url
+    assert c.delete("/api/settings/catalog", headers=admin).json()["catalog_url"] is None
+    assert c.get(url).status_code == 404  # the old file is removed
     c.put("/api/settings", headers=admin, json={**base, "lead_states": "PR,RS,SC", "lead_weekly_release": 20})
     r = c.put("/api/settings", headers=admin, json=base)  # omitted: unchanged
     assert r.json()["lead_sizes"] == "01,03,05" and r.json()["lead_exclude_mei"] is False
@@ -271,6 +281,19 @@ def check_convert(ctx):
     with SessionLocal() as db:
         assert {db.get(Lead, i).discard_reason for i in (p1, p2)} == {"not_recommended"}
         assert db.get(Lead, ids["j_no_contact"]).discard_reason == "competitor"
+
+    # "Não respondeu": retry in 7 days; the 3rd one discards
+    nr = add_lead("40000000000101", "Sem Resposta", phone="47 99999-1111")
+    assert c.post(f"/api/leads/{nr}/no-answer", headers=ctx["b"]).status_code == 404  # not Bruno's region
+    r = c.post(f"/api/leads/{nr}/no-answer", headers=ctx["a"]).json()
+    assert r == {"tries": 1, "discarded": False, "retry_on": (TODAY + timedelta(days=7)).isoformat()}, r
+    row = next(x for x in c.get("/api/leads", headers=ctx["a"]).json()["items"] if x["id"] == nr)
+    assert row["next_action_date"] == r["retry_on"]
+    assert c.post(f"/api/leads/{nr}/no-answer", headers=ctx["a"]).json()["tries"] == 2
+    assert c.post(f"/api/leads/{nr}/no-answer", headers=ctx["a"]).json() == {"tries": 3, "discarded": True, "retry_on": None}
+    with SessionLocal() as db:
+        assert (db.get(Lead, nr).status, db.get(Lead, nr).discard_reason) == ("discarded", "no_answer")
+    assert c.post(f"/api/leads/{nr}/no-answer", headers=ctx["a"]).status_code == 409
 
 
 def check_contacts(ctx):

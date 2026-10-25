@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, errorMessage } from "../api";
+import { api, errorMessage, fileUrl } from "../api";
 import { useAuth } from "../auth";
 import { LEAD_SIZES, dateBR, formatCnpj, initials, money, whatsappUrl } from "../format";
 import { ContactHistory } from "./Contacts";
@@ -7,7 +7,7 @@ import { ContactHistory } from "./Contacts";
 export const isNewStore = (openedAt) =>
   !!openedAt && (Date.now() - new Date(`${openedAt}T00:00:00`)) / 86400000 <= 730; // opened within 2 years
 
-export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard, onReleased, onContacted }) {
+export default function LeadPanel({ lead, isAdmin, catalogUrl, onClose, onConvert, onDiscard, onReleased, onContacted, onNoAnswer }) {
   const [releasing, setReleasing] = useState(false);
   const [releaseError, setReleaseError] = useState("");
   const [waOpened, setWaOpened] = useState(false);
@@ -19,6 +19,15 @@ export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard
       setWaOpened(false);
       setHistory((n) => n + 1);
       onContacted?.();
+    } catch (e) { setReleaseError(errorMessage(e)); }
+  }
+  async function noAnswer() {
+    setReleaseError("");
+    try {
+      const { data } = await api.post(`/leads/${lead.id}/no-answer`);
+      setWaOpened(false);
+      setHistory((n) => n + 1);
+      onNoAnswer?.(data);
     } catch (e) { setReleaseError(errorMessage(e)); }
   }
   async function release() {
@@ -33,6 +42,8 @@ export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard
   const firstName = (user?.name || "").split(" ")[0];
   const wa = whatsappUrl(lead.phone, `Olá, tudo bem? Sou ${firstName} da Di Marcy. Gostaria de apresentar nossa `
     + `coleção para a ${lead.name}. Posso te enviar o catálogo?`);
+  const waCatalog = catalogUrl && whatsappUrl(lead.phone, `Olá, tudo bem? Sou ${firstName} da Di Marcy. `
+    + `Segue o nosso catálogo: ${fileUrl(catalogUrl)}\nQualquer dúvida estou à disposição!`);
   return (
     <aside className="customer-panel" aria-label={`Lead ${lead.name}`}>
       <button type="button" className="customer-panel-close" onClick={onClose} aria-label="Fechar">×</button>
@@ -49,7 +60,9 @@ export default function LeadPanel({ lead, isAdmin, onClose, onConvert, onDiscard
         {wa
           ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>WhatsApp</a>
           : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
+        {waCatalog && <a className="btn" href={waCatalog} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>Enviar catálogo</a>}
         {waOpened && <button type="button" className="btn btn-primary" onClick={contactDone}>Contato feito</button>}
+        {wa && <button type="button" className="btn" onClick={noAnswer} title="Agenda nova tentativa em 7 dias; na 3ª a loja é descartada">Não respondeu</button>}
         {isAdmin && lead.status === "pending" && (
           <button type="button" className="btn btn-primary" disabled={releasing} onClick={release}>Liberar</button>
         )}
