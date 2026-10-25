@@ -1,9 +1,46 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../api";
 import { Field, ErrorBox, Modal, useConfirm } from "./ui";
 import { customerFieldError, maskDocument, maskPhone, maskStateRegistration, stateRegistrationHint } from "../format";
 
 export const EMPTY_CUSTOMER = { name: "", document: "", state_registration: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
+
+// Pre-fills the customer form from the CNPJ (Receita Federal) once its 14th digit is typed: only empty fields,
+// never what was already typed. Purely a help: it never blocks typing or saving, and a failure is a quiet note.
+const CNPJ_FILLS = ["name", "address", "city", "state", "phone", "email"];
+const onlyDigits = (s) => (s || "").replace(/\D/g, "");
+export function useCnpjAutofill(document, initialDocument, setForm) {
+  const [note, setNote] = useState(null); // { tone: "" | "warn", text }
+  const last = useRef(onlyDigits(initialDocument)); // an existing customer's own CNPJ isn't looked up again
+  useEffect(() => {
+    const d = onlyDigits(document);
+    if (d.length !== 14) { setNote(null); return; }
+    if (d === last.current) return;
+    last.current = d;
+    let alive = true;
+    setNote({ tone: "", text: "Buscando dados do CNPJ…" });
+    api.get(`/customers/cnpj/${d}`).then(({ data }) => {
+      if (!alive) return;
+      setForm((f) => {
+        const out = { ...f };
+        for (const k of CNPJ_FILLS) if (!String(f[k] || "").trim() && data[k]) out[k] = data[k];
+        return out;
+      });
+      setNote(data.status && data.status !== "ATIVA"
+        ? { tone: "warn", text: `Atenção: este CNPJ está com situação ${data.status} na Receita Federal.` }
+        : { tone: "", text: "Dados preenchidos pela Receita Federal. Confira antes de salvar." });
+    }).catch((err) => {
+      if (!alive) return;
+      setNote({ tone: "", text: err.response?.status === 404
+        ? "CNPJ não encontrado na Receita Federal. Preencha os dados manualmente."
+        : "Não foi possível buscar os dados agora. Preencha os dados manualmente." });
+    });
+    return () => { alive = false; };
+  }, [document]);
+  return note;
+}
+
+export const CnpjNote = ({ note }) => (note ? <small className={`field-note ${note.tone}`} role="status">{note.text}</small> : null);
 
 // Inscrição estadual: a number, or the "Isento" box for customers exempt from it (stored as "ISENTO")
 // formatted with the customer's UF mask (re-applied when the UF changes)
@@ -26,6 +63,7 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved }
   const [confirmDialog, ask] = useConfirm();
   const [form, setForm] = useState({ ...initial, owner_id: initial.owner_id || "" });
   const [sellers, setSellers] = useState([]);
+  const cnpjNote = useCnpjAutofill(form.document, initial.document, setForm);
   const [error, setError] = useState("");
 
   useEffect(() => { if (isAdmin) api.get("/users").then((r) => setSellers(r.data)); }, [isAdmin]);
@@ -56,7 +94,7 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved }
       <form onSubmit={save} className="form-grid">
         <Field label="Nome / razão social" span={2}><input required {...f("name")} /></Field>
         <Field label="CPF/CNPJ"><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...f("document")}
-          onChange={(e) => setForm({ ...form, document: maskDocument(e.target.value) })} /></Field>
+          onChange={(e) => setForm({ ...form, document: maskDocument(e.target.value) })} /><CnpjNote note={cnpjNote} /></Field>
         <StateRegistrationField value={form.state_registration} uf={form.state} onChange={(v) => setForm({ ...form, state_registration: v })} />
         {isAdmin && (
           <Field label="Vendedor responsável" span={2}>

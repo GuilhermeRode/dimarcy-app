@@ -3,7 +3,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .. import clock
+from .. import clock, cnpj_lookup
 from ..config import settings
 from ..database import get_db
 from ..geocoding import geocode_and_cache_background, lookup_cached_city
@@ -63,6 +63,20 @@ def overview(db: Session = Depends(get_db), user: User = Depends(get_current_use
 def by_city(days: int = Query(365, ge=1, le=731), owner_id: int | None = None, db: Session = Depends(get_db)):
     """Map data: registered/active customers, revenue and average ticket per city."""
     return customers_by_city(db, clock.today_br(), days, owner_id)
+
+
+@router.get("/cnpj/{cnpj}", dependencies=[Depends(get_current_user)])
+def company_by_cnpj(cnpj: str):
+    """Public registry data for a CNPJ, to pre-fill the customer form (nothing is saved)."""
+    digits = "".join(ch for ch in cnpj if ch.isdigit())
+    if len(digits) != 14:
+        raise HTTPException(400, "CNPJ incompleto: informe os 14 dígitos.")
+    try:
+        return cnpj_lookup.lookup(digits)
+    except cnpj_lookup.NotFound:
+        raise HTTPException(404, "CNPJ não encontrado na Receita Federal.")
+    except Exception:
+        raise HTTPException(503, "Consulta de CNPJ indisponível agora. Preencha os dados manualmente.")
 
 
 @router.get("/{cid}", response_model=CustomerOut)

@@ -187,6 +187,9 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .field > span { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
 .field-row { display: flex; gap: 8px; align-items: center; }
 .field-row .check { flex: none; white-space: nowrap; }
+/* quiet line under a field (e.g. the CNPJ lookup result): informs, never blocks */
+.field-note { font-size: 0.82rem; color: var(--muted); font-weight: 400; }
+.field-note.warn { color: var(--amber); font-weight: 600; }
 .check { display: flex; gap: 8px; align-items: center; }
 /* On/off switch (phone-settings style): a native checkbox, restyled */
 .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; cursor: pointer; line-height: 1.35; }
