@@ -17,6 +17,22 @@ const SORTS = {
 };
 const uniqSorted = (list) => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
 
+// Excel (pt-BR) opens ";"-separated files with a BOM straight into columns, accents intact
+const CSV_COLUMNS = [["name", "Nome / razão social"], ["document", "CPF/CNPJ"], ["state_registration", "Inscrição estadual"],
+  ["phone", "Telefone"], ["email", "E-mail"], ["city", "Cidade"], ["state", "UF"], ["address", "Endereço"],
+  ["owner_name", "Vendedor"], ["notes", "Observações"]];
+// exports what the list shows (filters and order), with the full records for email/address/notes
+async function exportCsv(ids) {
+  const byId = new Map((await api.get("/customers")).data.map((c) => [c.id, c]));
+  const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const rows = [CSV_COLUMNS.map(([, label]) => label),
+    ...ids.filter((id) => byId.has(id)).map((id) => CSV_COLUMNS.map(([k]) => byId.get(id)[k]))];
+  const blob = new Blob(["﻿" + rows.map((r) => r.map(cell).join(";")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `clientes-${new Date().toISOString().slice(0, 10)}.csv` });
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 export default function Customers() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -114,6 +130,12 @@ export default function Customers() {
         <div className="header-actions">
           {isAdmin && !EXCLUDE_MAP && (
             <button className="btn" onClick={() => nav("/customers-by-city")}>Mapa de clientes</button>
+          )}
+          {isAdmin && !EXCLUDE_MAP && ( // the Android WebView can't save blob downloads
+            <button className="btn" disabled={!visible.length} title={chips.length ? "Exporta só os clientes filtrados" : undefined}
+              onClick={() => exportCsv(visible.map((r) => r.id)).catch((e) => setError(errorMessage(e)))}>
+              Exportar CSV{chips.length ? ` (${visible.length})` : ""}
+            </button>
           )}
           <button className="btn btn-primary" onClick={() => setForm(EMPTY_CUSTOMER)}>+ Cadastrar cliente</button>
         </div>
