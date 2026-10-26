@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from sqlalchemy import and_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from .models import LATE_STATUSES, SALE_STATUSES, Customer, Order, User, customer_status
+from .models import LATE_STATUSES, SALE_STATUSES, Customer, Order, PastOrder, User, customer_status
 
 
 def late_filter(today: date):
@@ -86,6 +86,9 @@ def customer_overview(db: Session, user: User, today: date) -> list[dict]:
     by_customer: dict[int, list[Order]] = defaultdict(list)
     for o in sales:
         by_customer[o.customer_id].append(o)
+    past: dict[int, list[PastOrder]] = defaultdict(list)
+    for p in db.query(PastOrder).order_by(PastOrder.date.desc()):
+        past[p.customer_id].append(p)
 
     rows = []
     for c in visible_customers(db, user):
@@ -104,5 +107,6 @@ def customer_overview(db: Session, user: User, today: date) -> list[dict]:
             "colors": [name for name, _ in colors.most_common()],
             "recent_orders": [{"id": o.id, "date": o.date, "pieces": o.pieces, "total": o.total}
                               for o in orders[:3]],
+            "past_orders": [{"date": p.date, "amount": float(p.amount)} for p in past.get(c.id, [])],
         })
     return rows

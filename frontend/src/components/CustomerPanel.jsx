@@ -49,6 +49,17 @@ export default function CustomerPanel({ customer: c, isAdmin, onClose, onEdit })
           </button>
         )) : <p className="customer-panel-empty">Sem histórico de compras no app ainda.</p>}
       </div>
+      {c.past_orders.length > 0 && (
+        <div>
+          <h3>Compras anteriores · {money(c.past_orders.reduce((s, p) => s + p.amount, 0))}</h3>
+          {c.past_orders.map((p, i) => (
+            <div key={i} className="customer-panel-order">
+              <span><small>{dateBR(p.date)}</small></span>
+              <strong>{money(p.amount)}</strong>
+            </div>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }

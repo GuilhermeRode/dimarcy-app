@@ -5,6 +5,8 @@ backend/uploads/
 
 # --- customer lists / business documents (personal data) ---
 pdfs/
+/*.xlsx
+/*.csv
 
 # --- backend (Python) ---
 backend/.venv/

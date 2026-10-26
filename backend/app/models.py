@@ -181,6 +181,16 @@ class OrderItem(Base):
         return round(float(self.unit_price) * self.quantity, 2)
 
 
+class PastOrder(Base):
+    """Purchase history from before the app (spreadsheet import): date and amount only, no items.
+    Shown on the customer panel; kept out of dashboard, revenue and customer status on purpose."""
+    __tablename__ = "past_orders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    date: Mapped[_dt.date] = mapped_column(Date)
+    amount: Mapped[float] = mapped_column(Numeric(10, 2))
+
+
 class City(Base):
     """Geocoding cache keyed by (name, state) — see geocoding.lookup_cached_city."""
     __tablename__ = "cities"
