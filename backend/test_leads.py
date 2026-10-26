@@ -417,14 +417,29 @@ def check_pending_release(ctx):
     week = lambda uid: c.get("/api/leads", headers=admin, params={"status": "pending", "seller_id": uid}).json()["week"]  # noqa: E731
     assert week(ctx["a_id"]) == {"released": 0, "quota": 20}
     r = c.post("/api/leads/release", headers=admin, json={"ids": [pa, pb, pn]})
-    assert r.json() == {"released": 2, "skipped_no_seller": 1}, r.text
+    assert r.json() == {"released": 2, "skipped_no_seller": 1, "skipped_other_seller": {}, "cities_added": []}, r.text
     assert week(ctx["a_id"]) == {"released": 1, "quota": 20}  # nothing is released automatically: only counted
     assert "week" not in c.get("/api/leads", headers=admin, params={"status": "pending"}).json()
     assert c.get(f"/api/leads/{pa}", headers=a).status_code == 200
     assert c.get(f"/api/leads/{pb}", headers=b).status_code == 200
     r = c.post("/api/leads/release", headers=admin, json={"ids": [pa, pb, pn]})
     assert r.json()["released"] == 0, r.text
-    assert c.post(f"/api/leads/{pn}/discard", headers=admin, json={"reason": "other"}).status_code == 204
+
+    # "Liberar para": a city with no seller joins the chosen seller's region; another seller's city stays theirs
+    pz = add_lead("80000000000191", "Pend Cidade Livre", city="Cidade Livre", status="pending")
+    pg = add_lead("80000000000192", "Pend Guaramirim 2", city="Guaramirim", status="pending")
+    assert c.post("/api/leads/release", headers=admin, json={"ids": [pz], "seller_id": 99999}).status_code == 400
+    r = c.post("/api/leads/release", headers=admin, json={"ids": [pz, pg], "seller_id": ctx["a_id"]})
+    got = r.json()
+    assert got["released"] == 1 and got["skipped_no_seller"] == 0 and got["cities_added"] == ["Cidade Livre/SC"], got
+    assert list(got["skipped_other_seller"].values()) == [1], got  # Guaramirim is b's
+    assert c.get(f"/api/leads/{pz}", headers=a).status_code == 200
+    assert "Cidade Livre" in [x["city"] for x in c.get(f"/api/users/{ctx['a_id']}/cities", headers=admin).json()]
+    assert c.post("/api/leads/release", headers=admin, json={"ids": [pg]}).json()["released"] == 1  # to its city's seller
+    for lid in (pz, pg, pn):
+        assert c.post(f"/api/leads/{lid}/discard", headers=admin, json={"reason": "other"}).status_code == 204
+    assert c.put(f"/api/users/{ctx['a_id']}/cities", headers=admin, json=[  # back to a's original region
+        x for x in c.get(f"/api/users/{ctx['a_id']}/cities", headers=admin).json() if x["city"] != "Cidade Livre"]).status_code == 200
 
     import app.routers.settings as settings_router
     calls = []

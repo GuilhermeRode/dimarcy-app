@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { LEAD_SIZES, dateBR, formatCnpj, initials } from "../format";
-import { ErrorBox, Field, Modal } from "../components/ui";
+import { ErrorBox, Field, Modal, PillSelect } from "../components/ui";
 import LeadPanel, { isNewStore } from "../components/LeadPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
 
@@ -45,6 +45,7 @@ export default function Leads() {
   const [notice, setNotice] = useState("");
   const [checked, setChecked] = useState(new Set());
   const [busy, setBusy] = useState(false);
+  const [releaseTo, setReleaseTo] = useState("");  // "" = each lead's city seller
   const [importCfg, setImportCfg] = useState(null);
   const pending = isAdmin && filters.tab === "pending";
   const week = pending && data?.week;  // only when a seller is picked
@@ -112,24 +113,30 @@ export default function Leads() {
     setSelectedId(null);
   };
 
-  async function release(ids) {
+  // sellerId: who gets the leads whose city has no seller yet (their city joins that seller's region)
+  async function release(ids, sellerId = "") {
     if (busy || !ids.length) return;
     setBusy(true);
     try {
-      const { data: r } = await api.post("/leads/release", { ids });
+      const { data: r } = await api.post("/leads/release", { ids, seller_id: sellerId ? Number(sellerId) : null });
       afterRelease(ids, r);
     } catch (e) { setError(errorMessage(e)); }
     setBusy(false);
   }
   function afterRelease(ids, r) {
-    // skipped (no seller) rows stay pending on the server, so reload instead of dropping them locally
     const gone = new Set(ids);
+    const others = Object.entries(r.skipped_other_seller || {});
     setChecked(new Set());
     setSelectedId(null);
-    if (r.skipped_no_seller > 0) load(0);
+    // skipped rows stay pending on the server, so reload instead of dropping them locally
+    if (r.skipped_no_seller > 0 || others.length) load(0);
     else setData((d) => ({ ...d, items: d.items.filter((l) => !gone.has(l.id)), total: d.total - ids.length }));
-    setNotice(`${r.released} ${r.released === 1 ? "loja liberada" : "lojas liberadas"} para os vendedores.`
-      + (r.skipped_no_seller > 0 ? ` ${r.skipped_no_seller} sem vendedor — cadastre a cidade em Usuários.` : ""));
+    setNotice([
+      `${r.released} ${r.released === 1 ? "loja liberada" : "lojas liberadas"}.`,
+      r.cities_added?.length && `Cidade${r.cities_added.length > 1 ? "s" : ""} adicionada${r.cities_added.length > 1 ? "s" : ""} ao vendedor: ${r.cities_added.join(", ")}.`,
+      others.length && `Não liberadas por serem de outro vendedor: ${others.map(([n, k]) => `${k} de ${n}`).join(", ")}.`,
+      r.skipped_no_seller > 0 && `${r.skipped_no_seller} sem vendedor — escolha para quem liberar ou cadastre a cidade em Usuários.`,
+    ].filter(Boolean).join(" "));
   }
   async function selectSuggested() {
     // only PAGE_SIZE rows are loaded: fetch the rest of the suggestion first (in pages of up to 200)
@@ -187,13 +194,6 @@ export default function Leads() {
     }
   }
 
-  const pill = (label, value, onChange, opts) => (
-    <label className={`pill-select ${value !== "" ? "on" : ""}`}>
-      <span>{label}:</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>{opts}</select>
-    </label>
-  );
-
   return (
     <div className="page">
       <header className="page-header">
@@ -231,13 +231,12 @@ export default function Leads() {
           <input className="filters-search" placeholder="Buscar por nome ou CNPJ" aria-label="Buscar por nome ou CNPJ"
             value={searchText} onChange={(e) => setSearchText(e.target.value)}
             onBlur={() => searchText.trim() !== filters.search && setFilters({ ...filters, search: searchText.trim() })} />
-          {pill("Cidade", filters.city, (v) => setFilters({ ...filters, city: v }), <>
-            <option value="">Todas</option>{allCities.map((c) => <option key={c}>{c}</option>)}
-          </>)}
-          {isAdmin && pill("Vendedor", filters.seller, (v) => setFilters({ ...filters, seller: v }), <>
-            <option value="">Todos</option><option value="0">Sem vendedor</option>
-            {sellers.map((s) => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
-          </>)}
+          <PillSelect label="Cidade" value={filters.city} onChange={(v) => setFilters({ ...filters, city: v })}
+            options={[["", "Todas"], ...allCities.map((c) => [c, c])]} />
+          {isAdmin && (
+            <PillSelect label="Vendedor" value={filters.seller} onChange={(v) => setFilters({ ...filters, seller: v })}
+              options={[["", "Todos"], ["0", "Sem vendedor"], ...sellers.map((s) => [String(s.id), s.name])]} />
+          )}
         </form>
       </section>
 
@@ -278,12 +277,16 @@ export default function Leads() {
                   onClick={() => setDiscarding({ ids: [...checked], name: `${checked.size} ${checked.size === 1 ? "loja" : "lojas"}`, reason: "not_recommended" })}>
                   Não recomendar ({checked.size})
                 </button>
+                <PillSelect label="Liberar para" value={releaseTo} onChange={setReleaseTo} className="pill-release"
+                  options={[["", "Vendedor da cidade"], ...sellers.map((s) => [String(s.id), s.name])]} />
                 <button type="button" className="btn btn-primary" disabled={!checked.size || busy}
-                  onClick={() => release([...checked])}>Liberar ({checked.size})</button>
+                  title={releaseTo ? "Lojas de cidades sem vendedor vão para este vendedor, e a cidade entra na região dele" : undefined}
+                  onClick={() => release([...checked], releaseTo)}>Liberar ({checked.size})</button>
               </div>
             )}
             {items.map((l) => (
-              <div key={l.id} className={pending ? "lead-pick" : undefined} style={pending ? undefined : { display: "contents" }}>
+              <div key={l.id} className={pending ? `lead-pick ${l.id === selectedId ? "on" : ""}` : undefined}
+                style={pending ? undefined : { display: "contents" }}>
               {pending && <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Selecionar ${l.name}`} />}
               <button type="button" onClick={() => { setSelectedId(l.id); setNotice(""); }}
                 className={`customers-row leads-row ${isAdmin ? "admin" : ""} ${l.id === selectedId ? "on" : ""}`}>
@@ -312,7 +315,7 @@ export default function Leads() {
           </section>
 
           {selected && (
-            <LeadPanel key={selected.id} lead={selected} isAdmin={isAdmin} onClose={() => setSelectedId(null)}
+            <LeadPanel key={selected.id} lead={selected} isAdmin={isAdmin} sellers={sellers} onClose={() => setSelectedId(null)}
               onReleased={(r) => afterRelease([selected.id], r)}
               onContacted={() => refreshContact(selected.id)}
               catalogUrl={catalogUrl}

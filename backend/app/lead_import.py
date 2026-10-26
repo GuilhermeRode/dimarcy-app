@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from . import clock
 from .config import settings
 from .database import SessionLocal
-from .leads import customer_cnpjs, normalize_cnpj
+from .leads import customer_cnpjs, normalize_cnpj, refresh_scores
 from .models import Contact, Customer, Lead
 from .sales import _city_key
 from .settings_store import get_app_settings
@@ -374,6 +374,8 @@ def main(argv: list[str] | None = None) -> int:
     with SessionLocal() as db:
         try:
             print(f"[lead_import] {run_and_record(db, latest_month, download, force)}", flush=True)
+            # every daily run, imported or not: the score depends on today and on the active customers per city
+            print(f"[lead_import] scores refreshed: {refresh_scores(db, clock.today_br())} leads", flush=True)
             return 0
         except Exception as e:  # logged by systemd; tomorrow's run tries again
             print(f"[lead_import] failed, nothing written: {e!r}", file=sys.stderr, flush=True)

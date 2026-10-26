@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, errorMessage, screenCache } from "../api";
 import { useAuth } from "../auth";
 import { CUSTOMER_STATUS, compactMoney, initials, normalize } from "../format";
-import { ErrorBox } from "../components/ui";
+import { ErrorBox, PillSelect } from "../components/ui";
 import CustomerPanel from "../components/CustomerPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
 
@@ -151,16 +151,8 @@ export default function Customers() {
     catch (e) { setError(errorMessage(e)); }
   }
 
-  // A pill-shaped menu: "Status: Todos ▾". Highlighted while it filters something.
-  // The real <select> is invisible and covers the whole pill, so a click anywhere on it opens the list.
-  const select = (label, key, value, opts, extraClass = "") => (
-    <label className={`pill-select ${value ? "on" : ""} ${extraClass}`}>
-      <span>{label}:</span>
-      <strong className="pill-value">{opts.find(([v]) => v === value)?.[1]}</strong>
-      <select value={value} onChange={(e) => setFilter(key, e.target.value)} aria-label={label}>
-        {opts.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
-      </select>
-    </label>
+  const select = (label, key, value, options, className) => (
+    <PillSelect label={label} value={value} options={options} onChange={(v) => setFilter(key, v)} className={className} />
   );
 
   return (

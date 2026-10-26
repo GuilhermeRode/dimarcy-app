@@ -8,7 +8,7 @@ from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from .models import SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
@@ -81,14 +81,55 @@ def lead_score(lead: Lead, active_in_city: int, today: date) -> int:
             + min(active_in_city, 3))
 
 
-def ranked_leads(db: Session, user: User, today: date, city: str = "", search: str = "",
-                 seller_id: int | None = None, status: str = "new") -> list[tuple[Lead, User | None]]:
-    """Leads the user may see, best first: lead_score, then more active customers in the city,
-    opened most recently, name. `seller_id` (admin) 0 = no seller."""
-    q = db.query(Lead).filter(Lead.status == status)
+QUEUE = ("pending", "new")  # the statuses the Prospecção list shows (and that get a score)
+
+
+def refresh_scores(db: Session, today: date) -> int:
+    """Stores lead_score and the city's active-customer count on every queued lead, so the list ranks in
+    SQL (ORDER BY ... LIMIT) instead of loading ~55k leads per request (that took ~5 s and ~200 MB).
+    Runs on every daily import (lead_import.main) and whenever a queued lead has no score yet."""
+    active = active_customers_by_city(db, today)
+    rows = db.query(Lead.id, Lead.phone, Lead.email, Lead.capital, Lead.in_debt, Lead.opened_at,
+                    Lead.city_key, Lead.state).filter(Lead.status.in_(QUEUE)).all()
+    updates = []
+    for r in rows:
+        n = active[(r.city_key, r.state)]
+        updates.append({"id": r.id, "score": lead_score(r, n, today), "city_active": n})
+    if updates:
+        db.execute(update(Lead), updates)  # ORM bulk UPDATE by primary key
+    db.commit()
+    return len(updates)
+
+
+def ensure_scores(db: Session, today: date) -> None:
+    """New leads (an import, the first run after the deploy) have no score until the next refresh."""
+    if db.query(Lead.id).filter(Lead.status.in_(QUEUE), Lead.score.is_(None)).first():
+        refresh_scores(db, today)
+
+
+def _normalized_document():
+    """Customer.document as digits/letters only, in SQL — matches Lead.cnpj (normalize_cnpj)."""
+    d = Customer.document
+    for ch in (".", "/", "-", " "):
+        d = func.replace(d, ch, "")
+    return func.upper(d)
+
+
+def ranked_leads(db: Session, user: User, city: str = "", search: str = "",
+                 seller_id: int | None = None, status: str = "new"):
+    """Query of the leads the user may see, best first: stored score, then more active customers in the
+    city, opened most recently, name. `seller_id` (admin) 0 = no seller. Callers .count() / .offset().limit()."""
+    q = db.query(Lead).filter(Lead.status == status,
+                              ~Lead.cnpj.in_(select(_normalized_document()).where(Customer.document.isnot(None))))
+    # a lead's seller: the ACTIVE seller whose region has its city (see city_owners)
+    owner = select(SellerCity.id).join(User, SellerCity.user_id == User.id).where(
+        SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state, User.active.is_(True), User.role == "seller")
     if user.role != "admin":
-        q = q.join(SellerCity, and_(SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state)) \
-             .filter(SellerCity.user_id == user.id)
+        q = q.filter(owner.where(SellerCity.user_id == user.id).exists())
+    elif seller_id == 0:
+        q = q.filter(~owner.exists())
+    elif seller_id is not None:
+        q = q.filter(owner.where(SellerCity.user_id == seller_id).exists())
     if city.strip():
         q = q.filter(Lead.city_key == _city_key(city))
     text = search.strip()
@@ -96,27 +137,13 @@ def ranked_leads(db: Session, user: User, today: date, city: str = "", search: s
         cnpj = normalize_cnpj(text)
         cond = Lead.name.ilike(f"%{text}%")
         q = q.filter(or_(cond, Lead.cnpj.contains(cnpj)) if len(cnpj) >= 3 else cond)
-    known, owners, active = customer_cnpjs(db), city_owners(db), active_customers_by_city(db, today)
+    return q
 
-    rows = []
-    # ponytail: ranks in Python (~60k new leads per state for the admin); SQL window function if slow
-    for lead in q.all():
-        if lead.cnpj in known:
-            continue
-        owner = lead_owner(owners, lead)
-        if seller_id is not None and (owner.id if owner else 0) != seller_id:
-            continue
-        rows.append((lead, owner))
 
-    for lead, _ in rows:
-        n = active[(lead.city_key, lead.state)]
-        lead.score = lead_score(lead, n, today)  # plain attribute, read by lead_out
-
-    def rank(row):
-        lead = row[0]
-        return (-lead.score, -active[(lead.city_key, lead.state)],
-                -(lead.opened_at.toordinal() if lead.opened_at else 0), lead.name, lead.id)
-    return sorted(rows, key=rank)
+def rank_order(q):
+    # coalesce: SQLite and Postgres disagree on where NULLs go in DESC
+    return q.order_by(func.coalesce(Lead.score, -1).desc(), func.coalesce(Lead.city_active, 0).desc(),
+                      func.coalesce(Lead.opened_at, date(1900, 1, 1)).desc(), Lead.name, Lead.id)
 
 
 def released_this_week(db: Session, seller_id: int) -> int:
