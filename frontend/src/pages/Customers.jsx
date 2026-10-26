@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, errorMessage, screenCache } from "../api";
 import { useAuth } from "../auth";
 import { CUSTOMER_STATUS, compactMoney, initials, normalize } from "../format";
-import { ErrorBox, PillSelect } from "../components/ui";
+import { CityFilter, ErrorBox, PillSelect } from "../components/ui";
 import CustomerPanel from "../components/CustomerPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
 
@@ -31,45 +31,6 @@ async function exportCsv(ids) {
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `clientes-${new Date().toISOString().slice(0, 10)}.csv` });
   a.click();
   URL.revokeObjectURL(a.href);
-}
-
-// "Cidade:" pill: type part of a name or pick one from our own list (the native <datalist> popup is a dark
-// OS-styled box that doesn't match the app). Typing already filters; picking sets the exact city.
-function CityFilter({ value, cities, onChange }) {
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-  const typed = normalize(value.trim());
-  const items = ["", ...cities.filter((c) => normalize(c).includes(typed))];  // "" = Todas
-  const pick = (c) => { onChange(c); setOpen(false); };
-  function onKeyDown(e) {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      setOpen(true);
-      setActive((i) => (i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length);
-    } else if (e.key === "Enter" && open) { e.preventDefault(); pick(items[active] ?? ""); }
-    else if (e.key === "Escape") setOpen(false);
-  }
-  return (
-    <label className={`pill-select ${value ? "on" : ""}`}>
-      <span>Cidade:</span>
-      <input className="pill-input" placeholder="Todas" role="combobox" aria-label="Cidade" aria-expanded={open}
-        aria-controls="city-menu" autoComplete="off" value={value}
-        onFocus={() => { setOpen(true); setActive(0); }} onBlur={() => setOpen(false)} onKeyDown={onKeyDown}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); setActive(0); }} />
-      {open && (
-        <ul className="pill-menu" id="city-menu" role="listbox">
-          {items.map((c, i) => (
-            // mousedown + preventDefault: picks before the input's blur closes the list
-            <li key={c || "all"} role="option" aria-selected={i === active} className={i === active ? "active" : ""}
-              onMouseDown={(e) => { e.preventDefault(); pick(c); }} onMouseEnter={() => setActive(i)}>
-              {c || "Todas"}
-            </li>
-          ))}
-          {items.length === 1 && <li className="pill-menu-empty">Nenhuma cidade com “{value}”</li>}
-        </ul>
-      )}
-    </label>
-  );
 }
 
 export default function Customers() {
