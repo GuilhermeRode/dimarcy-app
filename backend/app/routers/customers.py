@@ -8,7 +8,7 @@ from ..config import settings
 from ..database import get_db
 from ..geocoding import geocode_and_cache_background, lookup_cached_city
 from ..leads import city_owners, lead_owner
-from ..models import Contact, Customer, Lead, Order, User
+from ..models import Contact, Customer, Lead, Order, PastOrder, User
 from ..schemas import CustomerIn, CustomerOut
 from ..sales import customer_overview, customers_by_city
 from ..security import get_current_user, require_admin
@@ -140,7 +140,8 @@ def update(cid: int, data: CustomerIn, background_tasks: BackgroundTasks,
 @router.delete("/{cid}", status_code=204)
 def delete(cid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     c = _visible(cid, db, user)
-    if db.query(Order).filter(Order.customer_id == cid).first():
+    if (db.query(Order).filter(Order.customer_id == cid).first()
+            or db.query(PastOrder).filter(PastOrder.customer_id == cid).first()):
         raise HTTPException(400, "This customer has orders and cannot be deleted.")
     # no FK cascades on SQLite here: clean up dependents by hand
     # a converted lead goes back to 'new' and gets its contact history back; otherwise contacts are deleted

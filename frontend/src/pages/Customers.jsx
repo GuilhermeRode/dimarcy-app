@@ -33,6 +33,45 @@ async function exportCsv(ids) {
   URL.revokeObjectURL(a.href);
 }
 
+// "Cidade:" pill: type part of a name or pick one from our own list (the native <datalist> popup is a dark
+// OS-styled box that doesn't match the app). Typing already filters; picking sets the exact city.
+function CityFilter({ value, cities, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const typed = normalize(value.trim());
+  const items = ["", ...cities.filter((c) => normalize(c).includes(typed))];  // "" = Todas
+  const pick = (c) => { onChange(c); setOpen(false); };
+  function onKeyDown(e) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setOpen(true);
+      setActive((i) => (i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length);
+    } else if (e.key === "Enter" && open) { e.preventDefault(); pick(items[active] ?? ""); }
+    else if (e.key === "Escape") setOpen(false);
+  }
+  return (
+    <label className={`pill-select ${value ? "on" : ""}`}>
+      <span>Cidade:</span>
+      <input className="pill-input" placeholder="Todas" role="combobox" aria-label="Cidade" aria-expanded={open}
+        aria-controls="city-menu" autoComplete="off" value={value}
+        onFocus={() => { setOpen(true); setActive(0); }} onBlur={() => setOpen(false)} onKeyDown={onKeyDown}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setActive(0); }} />
+      {open && (
+        <ul className="pill-menu" id="city-menu" role="listbox">
+          {items.map((c, i) => (
+            // mousedown + preventDefault: picks before the input's blur closes the list
+            <li key={c || "all"} role="option" aria-selected={i === active} className={i === active ? "active" : ""}
+              onMouseDown={(e) => { e.preventDefault(); pick(c); }} onMouseEnter={() => setActive(i)}>
+              {c || "Todas"}
+            </li>
+          ))}
+          {items.length === 1 && <li className="pill-menu-empty">Nenhuma cidade com “{value}”</li>}
+        </ul>
+      )}
+    </label>
+  );
+}
+
 export default function Customers() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -87,7 +126,7 @@ export default function Customers() {
     return rows.filter((r) =>
       (!f.status || r.status === f.status)
       && (!f.state || r.state === f.state)
-      && (!f.city || r.city === f.city)
+      && (!f.city || normalize(r.city || "").includes(normalize(f.city.trim())))
       && (!f.seller || (f.seller === "none" ? !r.owner_id : String(r.owner_id) === f.seller))
       && (!text || normalize(`${r.name} ${r.city || ""}`).includes(text)
         || (digits.length >= 3 && (r.document || "").replace(/\D/g, "").includes(digits)))
@@ -113,10 +152,14 @@ export default function Customers() {
   }
 
   // A pill-shaped menu: "Status: Todos ▾". Highlighted while it filters something.
+  // The real <select> is invisible and covers the whole pill, so a click anywhere on it opens the list.
   const select = (label, key, value, opts, extraClass = "") => (
     <label className={`pill-select ${value ? "on" : ""} ${extraClass}`}>
       <span>{label}:</span>
-      <select value={value} onChange={(e) => setFilter(key, e.target.value)}>{opts}</select>
+      <strong className="pill-value">{opts.find(([v]) => v === value)?.[1]}</strong>
+      <select value={value} onChange={(e) => setFilter(key, e.target.value)} aria-label={label}>
+        {opts.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+      </select>
     </label>
   );
 
@@ -146,23 +189,15 @@ export default function Customers() {
           <input className="filters-search" placeholder="Buscar cliente" title="Busca por nome, cidade ou CPF/CNPJ"
             aria-label="Buscar por nome, cidade ou CPF/CNPJ"
             value={f.q} onChange={(e) => setFilter("q", e.target.value)} />
-          {select("Status", "status", f.status, <>
-            <option value="">Todos</option>
-            {Object.entries(CUSTOMER_STATUS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
-          </>)}
-          {select("Estado", "state", f.state, <>
-            <option value="">Todos</option>{options.states.map((s) => <option key={s}>{s}</option>)}
-          </>)}
-          {select("Cidade", "city", f.city, <>
-            <option value="">Todas</option>{cities.map((c) => <option key={c}>{c}</option>)}
-          </>)}
-          {isAdmin && select("Vendedor", "seller", f.seller, <>
-            <option value="">Todos</option><option value="none">Sem vendedor</option>
-            {options.sellers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-          </>)}
+          {select("Status", "status", f.status,
+            [["", "Todos"], ...Object.entries(CUSTOMER_STATUS).map(([k, s]) => [k, s.label])])}
+          {select("Estado", "state", f.state, [["", "Todos"], ...options.states.map((s) => [s, s])])}
+          {/* matches part of the name ("rio" → Rio do Sul, Rio Negrinho) */}
+          <CityFilter value={f.city} cities={cities} onChange={(c) => setFilter("city", c)} />
+          {isAdmin && select("Vendedor", "seller", f.seller,
+            [["", "Todos"], ["none", "Sem vendedor"], ...options.sellers])}
           {select("Ordenar", "sort", f.sort === "total" ? "" : f.sort,
-            Object.entries(SORTS).map(([k, s]) => <option key={k} value={k === "total" ? "" : k}>{s.label}</option>),
-            "pill-sort")}
+            Object.entries(SORTS).map(([k, s]) => [k === "total" ? "" : k, s.label]), "pill-sort")}
         </div>
         {chips.length > 0 && (
           <div className="filters-chips">

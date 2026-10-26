@@ -818,13 +818,26 @@ section.item-group { margin-top: 0; }
 .filters-search { flex: 1 1 260px; min-width: 180px; max-width: 420px; height: 40px; border-radius: 999px; padding: 0 16px 0 40px;
   background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 15px center;
   border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(13, 42, 82, .06); }
-.pill-select { display: inline-flex; align-items: center; gap: 2px; height: 40px; padding: 0 4px 0 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 13px; white-space: nowrap; cursor: pointer; box-shadow: 0 1px 2px rgba(13, 42, 82, .06); }
+.pill-select { position: relative; display: inline-flex; align-items: center; gap: 4px; height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 13px; white-space: nowrap; cursor: pointer; box-shadow: 0 1px 2px rgba(13, 42, 82, .06); }
 .pill-select:hover { border-color: #bcd2fb; }
+.pill-select:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
 .pill-sort { margin-left: auto; }
 .pill-select > span { color: var(--muted); }
-.pill-select select { border: 0; background: transparent; padding: 0 2px; width: auto; max-width: 106px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.pill-value { max-width: 106px; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.pill-value::after { content: " ▾"; color: var(--muted); }
+/* invisible, on top of the whole pill: any click on the pill opens the native list */
+.pill-select select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.pill-input { width: 120px; border: 0; background: transparent; padding: 0 2px; font: inherit; font-weight: 600; outline: none; box-shadow: none; }
+.pill-input::placeholder { color: inherit; font-weight: 600; }
+.pill-select .pill-input:focus-visible { outline: none; }  /* the pill's :focus-within ring already shows it */
+.pill-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 100%; width: max-content; max-width: 280px;
+  max-height: 280px; overflow-y: auto; margin: 0; padding: 6px; list-style: none; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(13, 42, 82, .14); cursor: default; }
+.pill-menu li { padding: 8px 12px; border-radius: 8px; color: var(--ink); font-weight: 500; cursor: pointer; overflow: hidden; text-overflow: ellipsis; }
+.pill-menu li.active { background: var(--accent-light); color: var(--accent-strong); }
+.pill-menu .pill-menu-empty { color: var(--muted); cursor: default; white-space: normal; }
 .pill-select.on { background: var(--accent-light); border-color: #bcd2fb; }
-.pill-select.on select, .pill-select.on > span { color: var(--accent-strong); }
+.pill-select.on .pill-value, .pill-select.on .pill-input, .pill-select.on > span { color: var(--accent-strong); }
 .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 600px) {
   .header-actions { width: 100%; }
@@ -835,7 +848,7 @@ section.item-group { margin-top: 0; }
   .filters-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .filters-search { grid-column: 1 / -1; }
   .pill-select { width: 100%; min-width: 0; }
-  .pill-select select { flex: 1; min-width: 0; max-width: none; }
+  .pill-value, .pill-input { flex: 1; min-width: 0; max-width: none; }
   .pill-sort { margin-left: 0; }
   .filters-row > .pill-sort:nth-child(even) { grid-column: 1 / -1; }  /* full row only when it'd be alone (admins have one more filter) */
   .filters-search { max-width: none; }
@@ -883,6 +896,7 @@ section.item-group { margin-top: 0; }
 .customer-panel-order { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 0; border: 0; border-top: 1px solid var(--line); background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .customer-panel-order span { display: flex; flex-direction: column; }
 .customer-panel-order small { color: var(--muted); }
+div.customer-panel-order { cursor: default; } /* past orders: no detail screen to open */
 .customer-panel-empty { font-size: 13px; color: var(--muted); padding: 10px 12px; background: var(--surface-2); border-radius: 8px; margin: 0; }
 @media (max-width: 860px) {
   .customers-layout.with-panel { grid-template-columns: minmax(0, 1fr); }
@@ -981,9 +995,10 @@ section.item-group { margin-top: 0; }
   .month-chart { flex-direction: column; }
   .month-card { flex-basis: auto; }
 }
-.vbars { display: flex; gap: 10px; height: 150px; align-items: flex-end; }
-.vbars > div { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; font-size: 12px; }
-.vbars > div > span { width: 100%; background: #cfe0fb; border-radius: 6px 6px 2px 2px; }
+/* capped columns, centered as a group: 2 sizes or 6, the bars keep the same look instead of stretching to fill the panel */
+.vbars { display: flex; gap: 14px; height: 150px; align-items: flex-end; justify-content: center; }
+.vbars > div { flex: 1 1 0; max-width: 64px; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; font-size: 12px; }
+.vbars > div > span { width: 100%; max-width: 44px; min-height: 3px; background: #cfe0fb; border-radius: 6px 6px 2px 2px; }
 .vbars > div > span.top { background: #0c2140; }
 .hbars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .hbars li > div { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
