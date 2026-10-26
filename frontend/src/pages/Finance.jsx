@@ -597,7 +597,7 @@ export default function Finance({ kind }) {
           </span>
         </td>
         <td>{receivable
-          ? (x.order_id ? <Link className="ref" to={`/orders/${x.order_id}`} onClick={(e) => e.stopPropagation()}>{orderNumber(x.order_id)}</Link> : "—")
+          ? (x.order_id ? <Link className="ref" to={`/orders/${x.order_id}`} state={{ back: { to: "/revenue/receivables", label: "Contas a receber" } }} onClick={(e) => e.stopPropagation()}>{orderNumber(x.order_id)}</Link> : "—")
           : <span className="cat-tag">{x.category}</span>}</td>
         <td className="muted">{x.installments ? `${x.installment}/${x.installments}` : "—"}</td>
         <td className="num"><strong>{money(x.amount)}</strong></td>

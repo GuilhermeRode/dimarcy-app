@@ -10,8 +10,9 @@ from sqlalchemy import inspect, text
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .br_format import extract_state_registration, format_document, format_phone, format_state_registration
+from .lead_import import clear_interrupted
 from .models import Customer, Product, User, size_key
-from .routers import auth, colors, customers, dashboard, finance, orders, products, settings as settings_router, users
+from .routers import auth, colors, contacts, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
 from .uploads import backfill_thumbs
@@ -81,12 +82,34 @@ async def lifespan(app: FastAPI):
     _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'",
                                "notify_customer": "BOOLEAN DEFAULT TRUE"})
     _ensure_columns("app_settings", {"annual_goal": "NUMERIC(12,2) DEFAULT 0",
-                                     "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50"})
+                                     "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50",
+                                     "lead_cnaes": "VARCHAR(200) DEFAULT '4781400'",
+                                     "last_lead_import_month": "VARCHAR(7)",
+                                     "last_lead_import_scope": "VARCHAR(500)",
+                                     "last_lead_import_at": "TIMESTAMP",
+                                     "lead_sizes": "VARCHAR(20) DEFAULT '01,03'",
+                                     "lead_exclude_mei": "BOOLEAN DEFAULT TRUE",
+                                     "lead_head_office_only": "BOOLEAN DEFAULT TRUE",
+                                     "lead_require_contact": "BOOLEAN DEFAULT TRUE",
+                                     "lead_min_age_months": "INTEGER DEFAULT 6",
+                                     "lead_states": "VARCHAR(30) DEFAULT 'PR,RS,SC'",
+                                     "lead_area_codes": "VARCHAR(60) DEFAULT ''",
+                                     "lead_weekly_release": "INTEGER DEFAULT 20",
+                                     "lead_import_started_at": "TIMESTAMP",
+                                     "lead_import_pid": "INTEGER",
+                                     "lead_import_error": "VARCHAR(300)",
+                                     "catalog_url": "VARCHAR(200)"})
+    if engine.dialect.name == "postgresql":  # the scope column was created as VARCHAR(300)
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE app_settings ALTER COLUMN last_lead_import_scope TYPE VARCHAR(500)"))
+    _ensure_columns("leads", {"size": "VARCHAR(5) DEFAULT ''", "capital": "NUMERIC(14,2)", "in_debt": "BOOLEAN",
+                              "released_at": "TIMESTAMP"})
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator
             db.add(User(name="Administrador", email=settings.admin_email,
                         password_hash=hash_password(settings.admin_password), role="admin"))
             db.commit()
+        clear_interrupted(db)  # an import killed by the last restart
         get_app_settings(db)  # first run: create the single settings row with its defaults
     backfill_thumbs(products.UPLOAD_DIR)  # photos uploaded before thumbnails existed
     yield
@@ -95,7 +118,8 @@ async def lifespan(app: FastAPI):
 docs = {} if settings.enable_docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}
 app = FastAPI(title="Di Marcy — Pedidos", lifespan=lifespan, **docs)
 
-MAX_BODY_BYTES = 6 * 1024 * 1024  # largest legit request is a 5 MB image upload
+MAX_BODY_BYTES = 6 * 1024 * 1024  # largest legit request is a 5 MB image upload...
+LARGE_BODY_PATHS = {"/api/settings/catalog": 41 * 1024 * 1024}  # ...except the catalog PDF (40 MB)
 
 
 class BodySizeLimit:
@@ -109,12 +133,13 @@ class BodySizeLimit:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         received, too_large = 0, False
+        limit = LARGE_BODY_PATHS.get(scope["path"], MAX_BODY_BYTES)
 
         async def limited_receive():
             nonlocal received, too_large
             message = await receive()
             received += len(message.get("body", b""))
-            if received > MAX_BODY_BYTES:
+            if received > limit:
                 too_large = True
                 raise RuntimeError("request body too large")
             return message
@@ -151,7 +176,7 @@ app.add_middleware(
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-for r in (auth, users, customers, colors, products, orders, dashboard, finance, settings_router):
+for r in (auth, users, customers, colors, products, orders, dashboard, finance, leads, contacts, settings_router):
     app.include_router(r.router, prefix="/api")
 
 

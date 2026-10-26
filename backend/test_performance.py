@@ -51,8 +51,9 @@ with TestClient(app) as c:
         "email": "admin@test.com", "password": "admin-pass-123"}).json()["access_token"]}
 
     # 300 orders, 60 customers, 20 products: each list must stay at a fixed handful of queries
-    # (the dashboard runs ~20 distinct ones; one query per row would be 60+ here)
-    LIMIT = 25
+    # (the dashboard runs ~26 distinct ones, incl. customer_overview's single past_orders query;
+    # one query per row would be 60+ here)
+    LIMIT = 27
     for path in ("/api/orders", "/api/dashboard", "/api/customers", "/api/customers/overview",
                  "/api/customers/by-city", "/api/products"):
         queries = 0

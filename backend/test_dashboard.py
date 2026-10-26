@@ -75,7 +75,7 @@ with TestClient(app) as c:
     r = c.get("/api/dashboard", headers=admin)
     assert r.status_code == 200, r.text
     assert r.json()["alerts"] == {"customers_at_risk": 0, "customers_never_ordered": 0,
-                                  "late_orders": 0, "oldest_late_days": None}
+                                  "late_orders": 0, "oldest_late_days": None, "follow_ups_due": 0}
     assert c.get("/api/customers/overview", headers=admin).json() == []
 
     # ---- catalog ----
@@ -142,7 +142,7 @@ with TestClient(app) as c:
     # ---- dashboard alerts agree with the overview ----
     d = c.get("/api/dashboard", headers=seller_a).json()
     assert d["alerts"] == {"customers_at_risk": 2, "customers_never_ordered": 3,
-                           "late_orders": 2, "oldest_late_days": 3}, d["alerts"]
+                           "late_orders": 2, "oldest_late_days": 3, "follow_ups_due": 0}, d["alerts"]
     da = c.get("/api/dashboard", headers=admin).json()
     assert da["alerts"]["customers_at_risk"] == sum(r["status"] == "at_risk" for r in ov_admin.values())
 

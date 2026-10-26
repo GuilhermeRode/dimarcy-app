@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { dateBR, money, orderNumber, sortSizes, STATUS } from "../format";
@@ -10,6 +10,9 @@ export default function OrderDetail() {
   const [confirmDialog, ask] = useConfirm();
   const { id } = useParams();
   const nav = useNavigate();
+  // Screens that open an order (Produção, Clientes...) pass { back } so "‹" returns there, not always to Pedidos.
+  const { state } = useLocation();
+  const back = state?.back || { to: "/orders", label: "Pedidos" };
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [o, setO] = useState(null);
@@ -47,7 +50,7 @@ export default function OrderDetail() {
 
   async function remove() {
     if (!(await ask({ title: "Excluir este pedido?", message: "Esta ação não pode ser desfeita.", confirmLabel: "Excluir", danger: true }))) return;
-    try { await api.delete(`/orders/${id}`); nav("/orders"); }
+    try { await api.delete(`/orders/${id}`); nav(back.to); }
     catch (e) { setError(errorMessage(e)); }
   }
 
@@ -61,7 +64,7 @@ export default function OrderDetail() {
     <div className="page">
       <header className="page-header">
         <div>
-          <Link to="/orders" className="back-link">‹ Pedidos</Link>
+          <Link to={back.to} className="back-link">‹ {back.label}</Link>
           <h1>Pedido {orderNumber(o.id)}</h1>
           <p className="muted">{o.customer_name} · {dateBR(o.date)} · vendedor {o.seller_name}</p>
         </div>
@@ -73,7 +76,7 @@ export default function OrderDetail() {
               </select>
               <button className="btn" onClick={() => nav(`/orders/${id}/client-print`)}>Imprimir p/ cliente</button>
               <button className="btn" onClick={() => nav(`/orders/${id}/production-print`)}>Imprimir produção</button>
-              <button className="btn" onClick={() => nav(`/orders/${id}/edit`)}>Editar</button>
+              <button className="btn" onClick={() => nav(`/orders/${id}/edit`, { state })}>Editar</button>
               <button className="btn danger" onClick={remove}>Excluir</button>
             </>
           ) : (

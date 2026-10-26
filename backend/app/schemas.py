@@ -1,10 +1,11 @@
 import datetime as _dt
+import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
-from .br_format import format_document, format_phone, format_state_registration
+from .br_format import IE_MASKS as UFS, format_document, format_phone, format_state_registration
 from .models import size_key
 from .uploads import thumb_name
 
@@ -43,6 +44,16 @@ class UserIn(UserBase):
 class UserOut(UserBase):
     id: int
     quick_quantity: bool = True  # personal preference, set in Meu perfil (not by the admin's user form)
+
+
+class CityIn(BaseModel):
+    city: str = Field(min_length=1, max_length=100)
+    state: str = Field(min_length=2, max_length=2)
+
+
+class CityOut(ORM):
+    city: str
+    state: str
 
 
 class TokenOut(BaseModel):
@@ -119,6 +130,32 @@ class CustomerOut(CustomerIn):
     created_at: datetime | None = None
     lat: float | None = None
     lng: float | None = None
+
+
+class DiscardIn(BaseModel):
+    reason: Literal["closed", "not_target", "competitor", "not_recommended", "no_answer", "other"]  # models.DISCARD_REASONS
+
+
+class ReleaseIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+
+
+class BulkDiscardIn(ReleaseIn, DiscardIn):
+    pass
+
+
+class ContactIn(BaseModel):
+    lead_id: int | None = None
+    customer_id: int | None = None
+    channel: Literal["whatsapp", "call", "visit", "email"]  # models.CONTACT_CHANNELS
+    notes: str | None = Field(default=None, max_length=2000)
+    next_action_date: _dt.date | None = None
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        if (self.lead_id is None) == (self.customer_id is None):
+            raise ValueError("Informe o lead ou o cliente do contato.")
+        return self
 
 
 # ---------- Colors / products ----------
@@ -201,6 +238,60 @@ class AppSettingsIn(BaseModel):
     max_discount_percent: float = Field(ge=0, le=100)
     retail_markup_percent: float = Field(default=50, ge=0, le=1000)
     annual_goal: Goal = None
+    lead_cnaes: str | None = None  # None = keep the current list
+    lead_sizes: str | None = None  # None = keep the current filters below
+    lead_exclude_mei: bool | None = None
+    lead_head_office_only: bool | None = None
+    lead_require_contact: bool | None = None
+    lead_min_age_months: int | None = Field(default=None, ge=0, le=120)
+    lead_states: str | None = None
+    lead_area_codes: str | None = None  # "" = every DDD of the states
+    lead_weekly_release: int | None = Field(default=None, ge=0, le=500)
+
+    @field_validator("lead_states")
+    @classmethod
+    def _states(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        ufs = sorted({p.strip().upper() for p in v.split(",") if p.strip()})
+        if not ufs or any(uf not in UFS for uf in ufs):
+            raise ValueError("Informe as siglas dos estados separadas por vírgula (ex.: PR, RS, SC).")
+        if len(ufs) > 10:  # column size
+            raise ValueError("No máximo 10 estados.")
+        return ",".join(ufs)
+
+    @field_validator("lead_area_codes")
+    @classmethod
+    def _area_codes(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        codes = sorted({p.strip() for p in v.split(",") if p.strip()})
+        if any(not (len(c) == 2 and c.isdigit() and c[0] != "0") for c in codes) or len(codes) > 20:
+            raise ValueError("Informe DDDs de 2 dígitos separados por vírgula (ex.: 47, 49).")
+        return ",".join(codes)
+
+    @field_validator("lead_cnaes")
+    @classmethod
+    def _cnaes(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        codes = [re.sub(r"\D", "", part) for part in v.split(",") if part.strip()]
+        if not codes or any(len(code) != 7 for code in codes):
+            raise ValueError("Informe códigos CNAE de 7 dígitos, separados por vírgula.")
+        joined = ",".join(dict.fromkeys(codes))  # dedup, keep order
+        if len(joined) > 200:  # column size
+            raise ValueError("No máximo 25 códigos CNAE.")
+        return joined
+
+    @field_validator("lead_sizes")
+    @classmethod
+    def _sizes(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        codes = sorted({p.strip() for p in v.split(",") if p.strip()})
+        if not codes or any(c not in ("00", "01", "03", "05") for c in codes):
+            raise ValueError("Escolha pelo menos um porte de empresa.")
+        return ",".join(codes)
 
 
 class AppSettingsOut(ORM):
@@ -208,10 +299,24 @@ class AppSettingsOut(ORM):
     allow_price_override: bool
     max_discount_percent: float
     retail_markup_percent: float
+    catalog_url: str | None = None  # sellers send it to stores
 
 
 class AppSettingsAdminOut(AppSettingsOut):
     annual_goal: float | None = None
+    lead_cnaes: str
+    last_lead_import_month: str | None = None
+    last_lead_import_at: datetime | None = None
+    lead_sizes: str
+    lead_exclude_mei: bool
+    lead_head_office_only: bool
+    lead_require_contact: bool
+    lead_min_age_months: int
+    lead_states: str
+    lead_area_codes: str
+    lead_weekly_release: int
+    lead_import_started_at: datetime | None = None
+    lead_import_error: str | None = None
 
 
 # ---------- Finance ----------
