@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { STATUS } from "../format";
+import { STATUS, normalize } from "../format";
 import { fileUrl } from "../api";
 import { EyeIcon, EyeOffIcon, WarningIcon } from "./icons";
 
@@ -114,6 +114,51 @@ export function PillSelect({ label, value, options, onChange, className = "" }) 
       <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
         {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
       </select>
+    </label>
+  );
+}
+
+// "Cidade:" pill: type part of a name or pick one from our own list (the native <datalist> popup is a dark
+// OS-styled box that doesn't match the app). Typing already filters; picking sets the exact city.
+const CITY_MENU_MAX = 100;  // Prospecção has 1,000+ cities: show the first ones, typing narrows the rest
+export function CityFilter({ value, cities, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const typed = normalize(value.trim());
+  const matches = cities.filter((c) => normalize(c).includes(typed));
+  const items = ["", ...matches.slice(0, CITY_MENU_MAX)];  // "" = Todas
+  const pick = (c) => { onChange(c); setOpen(false); };
+  function onKeyDown(e) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setOpen(true);
+      setActive((i) => (i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length);
+    } else if (e.key === "Enter" && open) { e.preventDefault(); pick(items[active] ?? value); }
+    else if (e.key === "Escape") setOpen(false);
+  }
+  return (
+    <label className={`pill-select ${value ? "on" : ""}`}>
+      <span>Cidade:</span>
+      <input className="pill-input" placeholder="Todas" role="combobox" aria-label="Cidade" aria-expanded={open}
+        aria-controls="city-menu" autoComplete="off" value={value}
+        onFocus={() => { setOpen(true); setActive(0); }} onBlur={() => setOpen(false)} onKeyDown={onKeyDown}
+        // typing: the first matching city is highlighted, so Enter picks it (not "Todas")
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setActive(e.target.value.trim() ? 1 : 0); }} />
+      {open && (
+        <ul className="pill-menu" id="city-menu" role="listbox">
+          {items.map((c, i) => (
+            // mousedown + preventDefault: picks before the input's blur closes the list
+            <li key={c || "all"} role="option" aria-selected={i === active} className={i === active ? "active" : ""}
+              onMouseDown={(e) => { e.preventDefault(); pick(c); }} onMouseEnter={() => setActive(i)}>
+              {c || "Todas"}
+            </li>
+          ))}
+          {!matches.length && <li className="pill-menu-empty">Nenhuma cidade com “{value}”</li>}
+          {matches.length > CITY_MENU_MAX && (
+            <li className="pill-menu-empty">e mais {matches.length - CITY_MENU_MAX} cidades — digite para filtrar</li>
+          )}
+        </ul>
+      )}
     </label>
   );
 }

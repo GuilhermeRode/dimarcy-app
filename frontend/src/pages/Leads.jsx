@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { LEAD_SIZES, dateBR, formatCnpj, initials } from "../format";
-import { ErrorBox, Field, Modal, PillSelect } from "../components/ui";
+import { CityFilter, ErrorBox, Field, Modal, PillSelect } from "../components/ui";
 import LeadPanel, { isNewStore } from "../components/LeadPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
 
@@ -35,6 +35,12 @@ export default function Leads() {
   const nav = useNavigate();
   const [filters, setFilters] = useState({ search: "", city: "", seller: "", tab: "pending" });
   const [searchText, setSearchText] = useState("");
+  const [cityText, setCityText] = useState("");
+  // the city is matched on the server: wait for a pause in typing instead of one request per letter
+  useEffect(() => {
+    const t = setTimeout(() => setFilters((f) => (f.city === cityText.trim() ? f : { ...f, city: cityText.trim() })), 300);
+    return () => clearTimeout(t);
+  }, [cityText]);
   const [data, setData] = useState(null); // {items, total, cities}
   const [allCities, setAllCities] = useState([]);
   const [sellers, setSellers] = useState([]);
@@ -228,11 +234,10 @@ export default function Leads() {
 
       <section className="filters-bar">
         <form className="filters-row" onSubmit={(e) => { e.preventDefault(); setFilters({ ...filters, search: searchText.trim() }); }}>
-          <input className="filters-search" placeholder="Buscar por nome ou CNPJ" aria-label="Buscar por nome ou CNPJ"
+          <input className="filters-search" placeholder="Buscar por nome, cidade ou CNPJ" aria-label="Buscar por nome, cidade ou CNPJ"
             value={searchText} onChange={(e) => setSearchText(e.target.value)}
             onBlur={() => searchText.trim() !== filters.search && setFilters({ ...filters, search: searchText.trim() })} />
-          <PillSelect label="Cidade" value={filters.city} onChange={(v) => setFilters({ ...filters, city: v })}
-            options={[["", "Todas"], ...allCities.map((c) => [c, c])]} />
+          <CityFilter value={cityText} cities={allCities} onChange={setCityText} />
           {isAdmin && (
             <PillSelect label="Vendedor" value={filters.seller} onChange={(v) => setFilters({ ...filters, seller: v })}
               options={[["", "Todos"], ["0", "Sem vendedor"], ...sellers.map((s) => [String(s.id), s.name])]} />

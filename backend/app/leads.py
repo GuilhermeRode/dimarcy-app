@@ -130,13 +130,17 @@ def ranked_leads(db: Session, user: User, city: str = "", search: str = "",
         q = q.filter(~owner.exists())
     elif seller_id is not None:
         q = q.filter(owner.where(SellerCity.user_id == seller_id).exists())
-    if city.strip():
-        q = q.filter(Lead.city_key == _city_key(city))
+    if city.strip():  # typed in the Cidade pill: part of the name, accents ignored ("rio" -> Rio do Sul, Rio Negrinho)
+        q = q.filter(Lead.city_key.contains(_city_key(city)))
     text = search.strip()
     if text:
+        # name or city, accents ignored: the Receita sends names without accents ("florianópolis" finds FLORIANOPOLIS)
+        plain = _city_key(text)
+        conds = [Lead.name.ilike(f"%{text}%"), Lead.name.ilike(f"%{plain}%"), Lead.city_key.contains(plain)]
         cnpj = normalize_cnpj(text)
-        cond = Lead.name.ilike(f"%{text}%")
-        q = q.filter(or_(cond, Lead.cnpj.contains(cnpj)) if len(cnpj) >= 3 else cond)
+        if len(cnpj) >= 3:
+            conds.append(Lead.cnpj.contains(cnpj))
+        q = q.filter(or_(*conds))
     return q
 
 

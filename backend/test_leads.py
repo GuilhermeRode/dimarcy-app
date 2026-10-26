@@ -189,6 +189,11 @@ def check_listing(ctx):
     assert blu["seller_id"] is None and blu["seller_name"] is None
     assert names(c.get("/api/leads", headers=admin, params={"seller_id": 0})) == ["Blu Fashion"]
     assert names(c.get("/api/leads", headers=admin, params={"seller_id": ctx["b_id"], "city": "corupa"})) == ["Corupá Store"]
+    # the search also finds the city, accents ignored; the city filter takes part of the name
+    assert names(c.get("/api/leads", headers=admin, params={"search": "CORUPÁ"})) == ["Corupá Store"]
+    assert names(c.get("/api/leads", headers=admin, params={"search": "blumenau"})) == ["Blu Fashion"]
+    assert sorted(names(c.get("/api/leads", headers=admin, params={"city": "jaragu"}))) == \
+        ["Antiga Modas", "Jaraguá Sem Fone", "Jota Moda"]
 
     # detail: visible to the region's seller and the admin only
     assert c.get(f"/api/leads/{ids['corupa']}", headers=ctx["b"]).json()["seller_name"] == "Bruno"
