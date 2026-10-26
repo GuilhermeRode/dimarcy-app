@@ -7,8 +7,9 @@ import { ContactHistory } from "./Contacts";
 export const isNewStore = (openedAt) =>
   !!openedAt && (Date.now() - new Date(`${openedAt}T00:00:00`)) / 86400000 <= 730; // opened within 2 years
 
-export default function LeadPanel({ lead, isAdmin, catalogUrl, onClose, onConvert, onDiscard, onReleased, onContacted, onNoAnswer }) {
+export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onClose, onConvert, onDiscard, onReleased, onContacted, onNoAnswer }) {
   const [releasing, setReleasing] = useState(false);
+  const [releaseTo, setReleaseTo] = useState("");  // only for a lead whose city has no seller
   const [releaseError, setReleaseError] = useState("");
   const [waOpened, setWaOpened] = useState(false);
   const [history, setHistory] = useState(0);  // bumped to reload the contact list
@@ -33,7 +34,7 @@ export default function LeadPanel({ lead, isAdmin, catalogUrl, onClose, onConver
   async function release() {
     setReleasing(true);
     try {
-      const { data } = await api.post("/leads/release", { ids: [lead.id] });
+      const { data } = await api.post("/leads/release", { ids: [lead.id], seller_id: releaseTo ? Number(releaseTo) : null });
       onReleased?.(data);
     } catch (e) { setReleaseError(errorMessage(e)); }
     setReleasing(false);
@@ -56,15 +57,31 @@ export default function LeadPanel({ lead, isAdmin, catalogUrl, onClose, onConver
           {lead.in_debt && <span className="cstatus cstatus-risk">Dívida ativa</span>}
         </div>
       </div>
-      <div className="customer-panel-actions">
+      {/* up to 7 buttons: contact on one wrapping row, the decision (liberar / virar cliente / descartar) on another */}
+      <div className="customer-panel-actions lead-actions">
         {wa
           ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>WhatsApp</a>
           : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
         {waCatalog && <a className="btn" href={waCatalog} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>Enviar catálogo</a>}
-        {waOpened && <button type="button" className="btn btn-primary" onClick={contactDone}>Contato feito</button>}
         {wa && <button type="button" className="btn" onClick={noAnswer} title="Agenda nova tentativa em 7 dias; na 3ª a loja é descartada">Não respondeu</button>}
+        {waOpened && <button type="button" className="btn btn-primary" onClick={contactDone}>Contato feito</button>}
+      </div>
+      {isAdmin && lead.status === "pending" && !lead.seller_id && (
+        // no seller has this city: pick one, and the city joins their region
+        <label className="lead-release-to">
+          <span>Liberar para</span>
+          <select value={releaseTo} onChange={(e) => setReleaseTo(e.target.value)}>
+            <option value="">Escolha o vendedor…</option>
+            {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <small className="muted">{lead.city}/{lead.state} ainda não é de nenhum vendedor: ela entra na região de quem você escolher.</small>
+        </label>
+      )}
+      <div className="customer-panel-actions lead-actions">
         {isAdmin && lead.status === "pending" && (
-          <button type="button" className="btn btn-primary" disabled={releasing} onClick={release}>Liberar</button>
+          <button type="button" className="btn btn-primary" disabled={releasing || (!lead.seller_id && !releaseTo)} onClick={release}>
+            {lead.seller_id ? `Liberar para ${lead.seller_name.split(" ")[0]}` : "Liberar"}
+          </button>
         )}
         <button type="button" className="btn btn-primary" onClick={onConvert}>Virar cliente</button>
         <button type="button" className="btn" onClick={onDiscard}>Descartar</button>

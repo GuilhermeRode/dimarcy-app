@@ -288,6 +288,9 @@ class Lead(Base):
     capital: Mapped[float | None] = mapped_column(Numeric(14, 2))  # capital social (Receita Empresas)
     in_debt: Mapped[bool | None] = mapped_column(Boolean)  # PGFN dívida ativa "em cobrança"; None = not checked
     released_at: Mapped[datetime | None] = mapped_column(DateTime)  # naive UTC, pending -> new
+    # ranking, stored so the list can ORDER BY ... LIMIT in SQL (leads.refresh_scores; daily and after imports)
+    score: Mapped[int | None] = mapped_column(Integer)  # leads.lead_score
+    city_active: Mapped[int | None] = mapped_column(Integer)  # active Di Marcy customers in the city (tie-break)
 
 
 class Contact(Base):

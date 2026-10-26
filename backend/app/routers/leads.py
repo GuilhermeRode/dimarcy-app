@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 
 from .. import clock, lead_import
 from ..database import get_db
-from ..leads import city_owners, lead_out, lead_owner, ranked_leads, released_this_week, visible_lead
-from ..models import Contact, Lead, User
-from ..schemas import BulkDiscardIn, CustomerIn, CustomerOut, DiscardIn, ReleaseIn
+from ..leads import (city_owners, ensure_scores, lead_out, lead_owner, rank_order, ranked_leads, released_this_week,
+                     visible_lead)
+from ..models import Contact, Lead, SellerCity, User
+from ..schemas import BulkDiscardIn, CustomerIn, CustomerOut, DiscardIn, ReleaseToIn
 from ..security import get_current_user, require_admin
 from ..settings_store import get_app_settings
 from .customers import add_customer, geocode_later
@@ -23,32 +24,59 @@ def list_leads(city: str = "", search: str = "", seller_id: int | None = None,
                limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
                db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     admin = user.role == "admin"  # only the admin may list pending leads
-    rows = ranked_leads(db, user, clock.today_br(), city, search, seller_id if admin else None,
-                        status if admin else "new")
-    page = rows[offset:offset + limit]
+    ensure_scores(db, clock.today_br())
+    q = ranked_leads(db, user, city, search, seller_id if admin else None, status if admin else "new")
+    owners = city_owners(db)
+    page = [(lead, lead_owner(owners, lead)) for lead in rank_order(q).offset(offset).limit(limit)]
     latest: dict[int, Contact] = {}  # the list shows where the seller left off
     for ct in db.query(Contact).filter(Contact.lead_id.in_([lead.id for lead, _ in page])).order_by(Contact.id):
         latest[ct.lead_id] = ct
     items = [{**lead_out(lead, owner), "last_contact_at": getattr(latest.get(lead.id), "created_at", None),
               "next_action_date": getattr(latest.get(lead.id), "next_action_date", None)} for lead, owner in page]
-    out = {"items": items, "total": len(rows),
-           "cities": sorted({lead.city for lead, _ in rows})}  # for the screen's city filter
+    out = {"items": items, "total": q.count(),
+           "cities": sorted(c for (c,) in q.with_entities(Lead.city).distinct())}  # for the screen's city filter
     if admin and status == "pending" and seller_id:  # the weekly suggestion for that seller
         out["week"] = {"released": released_this_week(db, seller_id), "quota": get_app_settings(db).lead_weekly_release}
     return out
 
 
 @router.post("/release", dependencies=[Depends(require_admin)])
-def release(data: ReleaseIn, db: Session = Depends(get_db)):
-    """Pending -> new, only for leads whose city has an active seller."""
+def release(data: ReleaseToIn, db: Session = Depends(get_db)):
+    """Pending -> new for leads whose city has an active seller. With `seller_id`, a lead whose city has
+    NO active seller gets that city added to the seller's region (so the city's other leads follow);
+    a city that already belongs to another active seller stays theirs (a city has one seller)."""
+    seller = None
+    if data.seller_id is not None:
+        seller = db.get(User, data.seller_id)
+        if not seller or seller.role != "seller" or not seller.active:
+            raise HTTPException(400, "Vendedor inválido ou inativo.")
     owners = city_owners(db)
     leads = db.query(Lead).filter(Lead.id.in_(data.ids), Lead.status == "pending").all()
-    ok = [lead.id for lead in leads if lead_owner(owners, lead)]
+    ok, other, added = [], {}, []
+    for lead in leads:
+        owner = lead_owner(owners, lead)
+        if owner is None and seller:
+            # the row may exist for an inactive seller (a city has one row): hand it over
+            sc = db.query(SellerCity).filter_by(city_key=lead.city_key, state=lead.state).first()
+            if sc:
+                sc.user_id = seller.id
+            else:
+                db.add(SellerCity(user_id=seller.id, city=lead.city, state=lead.state, city_key=lead.city_key))
+            owners[(lead.city_key, lead.state)] = owner = seller
+            added.append(f"{lead.city}/{lead.state}")
+        if owner is None:
+            continue
+        if seller and owner.id != seller.id:
+            other[owner.name] = other.get(owner.name, 0) + 1
+            continue
+        ok.append(lead.id)
     if ok:
         db.query(Lead).filter(Lead.id.in_(ok), Lead.status == "pending").update(
             {"status": "new", "released_at": lead_import.utcnow()}, synchronize_session=False)
-        db.commit()
-    return {"released": len(ok), "skipped_no_seller": len(leads) - len(ok)}
+    db.commit()
+    skipped_other = sum(other.values())
+    return {"released": len(ok), "skipped_no_seller": len(leads) - len(ok) - skipped_other,
+            "skipped_other_seller": other, "cities_added": sorted(set(added))}
 
 
 @router.post("/discard", dependencies=[Depends(require_admin)])

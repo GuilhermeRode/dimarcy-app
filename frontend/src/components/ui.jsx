@@ -104,6 +104,20 @@ export function PasswordInput(props) {
   );
 }
 
+// A pill-shaped filter menu: "Status: Todos ▾", highlighted while it filters something. options: [[value, label]].
+// The real <select> is invisible and covers the whole pill, so a click anywhere on it opens the list.
+export function PillSelect({ label, value, options, onChange, className = "" }) {
+  return (
+    <label className={`pill-select ${value !== "" ? "on" : ""} ${className}`}>
+      <span>{label}:</span>
+      <strong className="pill-value">{options.find(([v]) => v === value)?.[1]}</strong>
+      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
+        {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+      </select>
+    </label>
+  );
+}
+
 export const ErrorBox = ({ msg }) => (msg ? <div className="error-message">{msg}</div> : null);
 
 export function EmptyState({ text, action }) {

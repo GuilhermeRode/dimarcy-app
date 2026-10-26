@@ -1,5 +1,7 @@
 from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -9,7 +11,7 @@ from ..database import get_db
 from ..geocoding import geocode_and_cache_background, lookup_cached_city
 from ..leads import city_owners, lead_owner
 from ..models import Contact, Customer, Lead, Order, PastOrder, User
-from ..schemas import CustomerIn, CustomerOut
+from ..schemas import CustomerDraft, CustomerIn, CustomerOut
 from ..sales import customer_overview, customers_by_city
 from ..security import get_current_user, require_admin
 
@@ -116,13 +118,19 @@ def create(data: CustomerIn, background_tasks: BackgroundTasks,
 
 
 @router.put("/{cid}", response_model=CustomerOut)
-def update(cid: int, data: CustomerIn, background_tasks: BackgroundTasks,
+def update(cid: int, background_tasks: BackgroundTasks, body: dict = Body(...),
            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     c = _visible(cid, db, user)
+    # Admins may save with blanks (CustomerDraft); sellers keep every field required (CustomerIn).
+    try:
+        data = (CustomerDraft if user.role == "admin" else CustomerIn).model_validate(body)
+    except ValidationError as e:
+        raise RequestValidationError(e.errors(include_url=False, include_context=False))  # same 422 as a typed body
     city_changed = data.city != c.city or data.state != c.state
     payload = data.model_dump(exclude={"owner_id"})
     # the DNS lookup only when the address changed: an untouched (old) one never blocks saving other fields
-    payload["email"] = _check_email(data.email, check_dns=data.email != c.email)
+    if data.email:
+        payload["email"] = _check_email(data.email, check_dns=data.email != c.email)
     for k, v in payload.items():
         setattr(c, k, v)
     if user.role == "admin":
