@@ -121,13 +121,14 @@ export function PillSelect({ label, value, options, onChange, className = "" }) 
 // "Cidade:" pill: type part of a name or pick one from our own list (the native <datalist> popup is a dark
 // OS-styled box that doesn't match the app). Typing already filters; picking sets the exact city.
 const CITY_MENU_MAX = 100;  // Prospecção has 1,000+ cities: show the first ones, typing narrows the rest
-export function CityFilter({ value, cities, onChange }) {
+// onPick (optional): called when a city is chosen from the list, for screens that search on demand.
+export function CityFilter({ value, cities, onChange, onPick }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const typed = normalize(value.trim());
   const matches = cities.filter((c) => normalize(c).includes(typed));
   const items = ["", ...matches.slice(0, CITY_MENU_MAX)];  // "" = Todas
-  const pick = (c) => { onChange(c); setOpen(false); };
+  const pick = (c) => { onChange(c); onPick?.(c); setOpen(false); };
   function onKeyDown(e) {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();

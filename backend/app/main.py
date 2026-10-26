@@ -10,8 +10,10 @@ from sqlalchemy import inspect, text
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .br_format import extract_state_registration, format_document, format_phone, format_state_registration
+from . import clock
 from .lead_import import clear_interrupted
-from .models import Customer, Product, User, size_key
+from .leads import receita_phone, refresh_scores
+from .models import Customer, Lead, Product, User, size_key
 from .routers import auth, colors, contacts, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
@@ -56,6 +58,22 @@ def _tidy_customers():
                     c.state_registration, c.notes = ie, notes
             c.state_registration = format_state_registration(c.state_registration, c.state)
         db.commit()  # only the rows that actually changed are written
+
+
+def _tidy_lead_phones():
+    """Leads imported before receita_phone have "DDD number" as the Receita sends it ("41 97605678": no 9th
+    digit on mobiles, "51 99999999" placeholders). Rewrite them, then re-rank. Idempotent: formatted phones
+    start with "(" and are skipped; what receita_phone keeps as "DDD number" maps to itself."""
+    with SessionLocal() as db:
+        changed = 0
+        for lead in db.query(Lead).filter(Lead.phone.isnot(None), ~Lead.phone.startswith("(")):
+            ddd, _, number = lead.phone.partition(" ")
+            phone = receita_phone(ddd, number) if number else receita_phone("", ddd)
+            if phone != lead.phone:
+                lead.phone, changed = phone, changed + 1
+        db.commit()
+        if changed:
+            refresh_scores(db, clock.today_br())
 
 
 def _sort_product_sizes():
@@ -104,6 +122,7 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE app_settings ALTER COLUMN last_lead_import_scope TYPE VARCHAR(500)"))
     _ensure_columns("leads", {"size": "VARCHAR(5) DEFAULT ''", "capital": "NUMERIC(14,2)", "in_debt": "BOOLEAN",
                               "released_at": "TIMESTAMP", "score": "INTEGER", "city_active": "INTEGER"})
+    _tidy_lead_phones()
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator
             db.add(User(name="Administrador", email=settings.admin_email,

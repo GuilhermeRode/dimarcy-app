@@ -85,7 +85,7 @@ def check_parsing():
           "area_codes": set()}
     now = date(2026, 10, 16)
     lead = li.pick(estab(), cn, st, towns, on, now)
-    assert lead == {"cnpj": "10000000000101", "basico": "10000000", "name": "LOJA A", "phone": "47 33330000",
+    assert lead == {"cnpj": "10000000000101", "basico": "10000000", "name": "LOJA A", "phone": "(47) 3333-0000",
                     "email": "loja@mail.com", "address": "RUA QUADRA 11;LOTE 04, 10, CENTRO, 89251000",
                     "raw_city": "JARAGUA DO SUL", "state": "SC", "opened_at": date(2025, 1, 1)}, lead
     assert li.pick(estab(situacao="08"), cn, st, towns, off, now) is None

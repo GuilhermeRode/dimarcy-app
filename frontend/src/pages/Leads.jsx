@@ -36,11 +36,8 @@ export default function Leads() {
   const [filters, setFilters] = useState({ search: "", city: "", seller: "", tab: "pending" });
   const [searchText, setSearchText] = useState("");
   const [cityText, setCityText] = useState("");
-  // the city is matched on the server: wait for a pause in typing instead of one request per letter
-  useEffect(() => {
-    const t = setTimeout(() => setFilters((f) => (f.city === cityText.trim() ? f : { ...f, city: cityText.trim() })), 300);
-    return () => clearTimeout(t);
-  }, [cityText]);
+  // Searching is explicit: Enter, the magnifier or "Pesquisar" apply what was typed; picking a city applies it.
+  const search = (city = cityText) => setFilters((f) => ({ ...f, search: searchText.trim(), city: city.trim() }));
   const [data, setData] = useState(null); // {items, total, cities}
   const [allCities, setAllCities] = useState([]);
   const [sellers, setSellers] = useState([]);
@@ -233,15 +230,18 @@ export default function Leads() {
       )}
 
       <section className="filters-bar">
-        <form className="filters-row" onSubmit={(e) => { e.preventDefault(); setFilters({ ...filters, search: searchText.trim() }); }}>
-          <input className="filters-search" placeholder="Buscar por nome, cidade ou CNPJ" aria-label="Buscar por nome, cidade ou CNPJ"
-            value={searchText} onChange={(e) => setSearchText(e.target.value)}
-            onBlur={() => searchText.trim() !== filters.search && setFilters({ ...filters, search: searchText.trim() })} />
-          <CityFilter value={cityText} cities={allCities} onChange={setCityText} />
+        <form className="filters-row" onSubmit={(e) => { e.preventDefault(); search(); }}>
+          <div className="search-box">
+            <button type="submit" className="search-box-icon" aria-label="Pesquisar" title="Pesquisar" />
+            <input className="filters-search" placeholder="Buscar por nome, cidade ou CNPJ" aria-label="Buscar por nome, cidade ou CNPJ"
+              value={searchText} onChange={(e) => setSearchText(e.target.value)} />
+          </div>
+          <CityFilter value={cityText} cities={allCities} onChange={setCityText} onPick={search} />
           {isAdmin && (
             <PillSelect label="Vendedor" value={filters.seller} onChange={(v) => setFilters({ ...filters, seller: v })}
               options={[["", "Todos"], ["0", "Sem vendedor"], ...sellers.map((s) => [String(s.id), s.name])]} />
           )}
+          <button type="submit" className="btn btn-primary btn-search">Pesquisar</button>
         </form>
       </section>
 
