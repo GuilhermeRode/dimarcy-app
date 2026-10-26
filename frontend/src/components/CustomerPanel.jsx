@@ -43,7 +43,7 @@ export default function CustomerPanel({ customer: c, isAdmin, onClose, onEdit })
       <div>
         <h3>Últimos pedidos</h3>
         {c.recent_orders.length ? c.recent_orders.map((o) => (
-          <button type="button" key={o.id} className="customer-panel-order" onClick={() => nav(`/orders/${o.id}`)}>
+          <button type="button" key={o.id} className="customer-panel-order" onClick={() => nav(`/orders/${o.id}`, { state: { back: { to: "/customers", label: "Clientes" } } })}>
             <span><strong>#{orderNumber(o.id)}</strong><small>{dateBR(o.date)} · {o.pieces} peças</small></span>
             <strong>{money(o.total)}</strong>
           </button>

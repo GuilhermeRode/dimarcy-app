@@ -109,7 +109,7 @@ export default function Production() {
                       return (
                         <div key={o.id} className={`ticket ticket-${u}`} draggable
                           onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(o.id)); e.dataTransfer.effectAllowed = "move"; }}
-                          onClick={() => nav(`/orders/${o.id}`)}>
+                          onClick={() => nav(`/orders/${o.id}`, { state: { back: { to: "/production", label: "Produção" } } })}>
                           <div className="ticket-top">
                             <div className="ticket-customer-block">
                               <span className="ticket-customer">{o.customer_name}</span>
