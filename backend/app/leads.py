@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
+from .br_format import format_phone
 from .models import SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
 from .sales import _city_key
 
@@ -61,19 +62,39 @@ def active_customers_by_city(db: Session, today: date) -> Counter:
     return counts
 
 
+def receita_phone(ddd: str, number: str) -> str | None:
+    """A Receita phone (DDD and number in separate columns) as "(47) 99735-3510". Mobiles mostly come in the
+    old 8-digit form: an 8-digit number starting with 6-9 gets the 9th digit every Brazilian mobile has had
+    since 2016, or WhatsApp can't find it. Placeholders ("99999999", "00000000") are dropped; anything that
+    isn't DDD + 8/9 digits is kept as "DDD number"."""
+    d, n = re.sub(r"\D", "", ddd or "").lstrip("0"), re.sub(r"\D", "", number or "")
+    if len(set(n)) <= 1 or len(n) < 7:  # "", "0", "99999999": no number at all
+        return None
+    if len(n) == 8 and n[0] in "6789":
+        n = "9" + n
+    if len(d) == 2 and len(n) in (8, 9):
+        return format_phone(d + n)
+    return f"{d} {n}".strip()
+
+
 def is_mobile(phone: str | None) -> bool:
-    """Receita phones are "DDD number", mobiles mostly still in the old 8-digit form ("47 99735351"):
-    9 digits starting with 9, or 8 starting with 6-9, is a mobile (likely WhatsApp)."""
+    """9 digits starting with 9 after the DDD — receita_phone adds the 9th digit to old 8-digit mobiles;
+    8 starting with 6-9 still counts, for phones stored before that ("47 99735351")."""
     number = re.sub(r"\D", "", (phone or "").split(" ")[-1])
     return (len(number) == 9 and number[0] == "9") or (len(number) == 8 and number[0] in "6789")
 
 
-def lead_score(lead: Lead, active_in_city: int, today: date) -> int:
+SHARED_PHONE = 3  # the same phone on this many queued leads: most likely the accountant's, not the store's
+
+
+def lead_score(lead: Lead, active_in_city: int, today: date, shared_phone: bool = False) -> int:
     """Points that order the queue; nothing here removes a lead (0-15):
-    mobile phone 3 (landline 1) · no federal debt 3 (not checked 1) · capital ≥ R$ 50 mil 3, ≥ R$ 10 mil 2,
-    ≥ R$ 1 mil 1 · opened within ESTABLISHED_DAYS 2 · e-mail 1 · active Di Marcy customers in the city, up to 3."""
+    mobile phone 3 (landline 1; none or shared with other leads 0) · no federal debt 3 (not checked 1) ·
+    capital ≥ R$ 50 mil 3, ≥ R$ 10 mil 2, ≥ R$ 1 mil 1 · opened within ESTABLISHED_DAYS 2 · e-mail 1 ·
+    active Di Marcy customers in the city, up to 3."""
     capital = float(lead.capital or 0)
-    return ((3 if is_mobile(lead.phone) else 1 if lead.phone else 0)
+    phone = None if shared_phone else lead.phone
+    return ((3 if is_mobile(phone) else 1 if phone else 0)
             + (3 if lead.in_debt is False else 1 if lead.in_debt is None else 0)
             + (3 if capital >= 50_000 else 2 if capital >= 10_000 else 1 if capital >= 1_000 else 0)
             + (2 if lead.opened_at and (today - lead.opened_at).days <= ESTABLISHED_DAYS else 0)
@@ -91,10 +112,12 @@ def refresh_scores(db: Session, today: date) -> int:
     active = active_customers_by_city(db, today)
     rows = db.query(Lead.id, Lead.phone, Lead.email, Lead.capital, Lead.in_debt, Lead.opened_at,
                     Lead.city_key, Lead.state).filter(Lead.status.in_(QUEUE)).all()
+    uses = Counter(r.phone for r in rows if r.phone)
     updates = []
     for r in rows:
         n = active[(r.city_key, r.state)]
-        updates.append({"id": r.id, "score": lead_score(r, n, today), "city_active": n})
+        shared = uses[r.phone] >= SHARED_PHONE if r.phone else False
+        updates.append({"id": r.id, "score": lead_score(r, n, today, shared), "city_active": n})
     if updates:
         db.execute(update(Lead), updates)  # ORM bulk UPDATE by primary key
     db.commit()

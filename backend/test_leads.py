@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError  # noqa: E402
 
 from app import clock  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
-from app.leads import is_mobile, lead_score, normalize_cnpj  # noqa: E402
+from app.leads import is_mobile, lead_score, normalize_cnpj, receita_phone  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import AppSettings, Contact, Customer, Lead, SellerCity, User  # noqa: E402
 from app.sales import _city_key  # noqa: E402
@@ -221,6 +221,13 @@ def check_listing(ctx):
 
 
 def check_score():
+    # Receita phones: the 9th digit for old 8-digit mobiles, placeholders dropped, odd ones kept as typed
+    assert receita_phone("41", "97605678") == "(41) 99760-5678" and receita_phone("041", "32437109") == "(41) 3243-7109"
+    assert receita_phone("47", "991234567") == "(47) 99123-4567"
+    assert [receita_phone(*p) for p in (("51", "99999999"), ("0000", "00000000"), ("0", "0"), ("47", ""))] == [None] * 4
+    assert receita_phone("11", "1949284") == "11 1949284"
+    assert is_mobile(receita_phone("41", "97605678")) and not is_mobile(receita_phone("41", "32437109"))
+    assert lead_score(Lead(phone="(41) 99760-5678"), 0, TODAY, shared_phone=True) == 1  # only "debt not checked"
     assert is_mobile("47 991234567") and not is_mobile("47 33330000") and not is_mobile(None)
     assert is_mobile("46 99735351") and is_mobile("51 85205934") and not is_mobile("41 32926931")
     best = Lead(phone="47 991234567", email="a@b.c", in_debt=False, capital=60000, opened_at=TODAY - timedelta(days=400))

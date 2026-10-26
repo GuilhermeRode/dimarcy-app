@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from . import clock
 from .config import settings
 from .database import SessionLocal
-from .leads import customer_cnpjs, normalize_cnpj, refresh_scores
+from .leads import customer_cnpjs, normalize_cnpj, receita_phone, refresh_scores
 from .models import Contact, Customer, Lead
 from .sales import _city_key
 from .settings_store import get_app_settings
@@ -114,7 +114,7 @@ def pick(row: list[str], cnaes: set[str], states: set[str], towns: dict[str, str
     age = filters["min_age_months"]
     if age and (opened_at is None or opened_at > today - timedelta(days=30 * age)):
         return None
-    if filters["require_contact"] and not row[22].strip():  # a phone: sellers prospect by WhatsApp
+    if filters["require_contact"] and not receita_phone(row[21], row[22]):  # a real phone: sellers prospect by WhatsApp
         return None
     if filters["area_codes"] and row[21].strip().lstrip("0") not in filters["area_codes"]:
         return None
@@ -124,7 +124,7 @@ def pick(row: list[str], cnaes: set[str], states: set[str], towns: dict[str, str
         "cnpj": normalize_cnpj(row[0] + row[1] + row[2]),
         "basico": row[0],
         "name": row[4].strip(),
-        "phone": f"{row[21].strip()} {row[22].strip()}".strip() if row[22].strip() else None,
+        "phone": receita_phone(row[21], row[22]),
         "email": row[27].strip().lower() or None,
         "address": address[:250] or None,
         "raw_city": towns[row[20]],

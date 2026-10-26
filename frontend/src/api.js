@@ -28,8 +28,10 @@ api.interceptors.response.use(
 export const screenCache = new Map();
 
 // Uploaded files (e.g. product images) are served from the API's root, outside the "/api" prefix.
+// Always absolute: the web build's API is the relative "/api", and a link that leaves the app (the catalog
+// sent by WhatsApp) must carry the domain, not just "/uploads/...".
 export const fileUrl = (path) =>
-  path ? `${api.defaults.baseURL.replace(/\/api\/?$/, "")}${path}` : null;
+  path ? new URL(`${api.defaults.baseURL.replace(/\/api\/?$/, "")}${path}`, window.location.href).href : null;
 
 export const errorMessage = (e) => {
   const d = e?.response?.data?.detail;
