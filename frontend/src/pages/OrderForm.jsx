@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useBlocker, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useBlocker, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, errorMessage, fileUrl } from "../api";
 import { useAuth } from "../auth";
 import { customerFieldError, localDate, maskDocument, maskPhone, money, orderNumber, sortSizes, tablePrice } from "../format";
@@ -243,6 +243,7 @@ export default function OrderForm() {
   // ?customer=<id> from the Clientes screen; only for new orders, only a number.
   const presetCustomer = id ? null : Number(searchParams.get("customer")) || null;
   const nav = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [customers, setCustomers] = useState([]);
@@ -400,7 +401,8 @@ export default function OrderForm() {
       setSaved(true);
       unsavedRef.current = false;
       // Sellers don't have access to the order detail screen — send them back to their dashboard.
-      nav(isAdmin ? `/orders/${data.id}` : "/");
+      // state carries the detail screen's { back } through the edit round-trip.
+      nav(isAdmin ? `/orders/${data.id}` : "/", { state: location.state });
     } catch (e) { setError(errorMessage(e)); setSaving(false); }
   }
 
