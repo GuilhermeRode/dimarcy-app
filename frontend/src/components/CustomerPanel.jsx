@@ -12,7 +12,7 @@ export default function CustomerPanel({ customer: c, isAdmin, onClose, onEdit })
     ["Total comprado", c.total ? money(c.total) : "—"],
     ["Pedidos", String(c.orders)],
     ["Ticket médio", c.orders ? compactMoney(c.total / c.orders) : "—"],
-    ["Cliente desde", since],
+    ["Cadastrado em", since],
   ];
   return (
     <aside className="customer-panel" aria-label={`Cliente ${c.name}`}>

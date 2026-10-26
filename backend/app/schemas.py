@@ -116,6 +116,41 @@ class CustomerIn(ORM):
         return format_state_registration(v, info.data.get("state"))  # state is declared above, so already in data
 
 
+class CustomerDraft(ORM):
+    """An admin editing an existing customer (old/imported records often lack data): only the name is
+    required, blanks are stored as empty, and whatever is filled in is formatted like CustomerIn."""
+    name: str = Field(min_length=2)
+    document: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    city: str | None = None
+    state: str | None = Field(default=None, max_length=2)
+    address: str | None = None
+    state_registration: str | None = None
+    notes: str | None = None
+    owner_id: int | None = None
+
+    @field_validator("document", "phone", "email", "city", "state", "address", "state_registration", mode="before")
+    @classmethod
+    def _blank_is_none(cls, v):
+        return v.strip() or None if isinstance(v, str) else v
+
+    @field_validator("document")
+    @classmethod
+    def _format_document(cls, v):
+        return format_document(v)
+
+    @field_validator("phone")
+    @classmethod
+    def _format_phone(cls, v):
+        return format_phone(v)
+
+    @field_validator("state_registration")
+    @classmethod
+    def _state_registration(cls, v, info):
+        return format_state_registration(v, info.data.get("state"))
+
+
 class CustomerOut(CustomerIn):
     id: int
     # older records may lack these; new ones always have them (see CustomerIn)
@@ -138,6 +173,10 @@ class DiscardIn(BaseModel):
 
 class ReleaseIn(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=500)
+
+
+class ReleaseToIn(ReleaseIn):
+    seller_id: int | None = None  # leads whose city has no seller: add the city to this seller's region
 
 
 class BulkDiscardIn(ReleaseIn, DiscardIn):

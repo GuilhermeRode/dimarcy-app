@@ -111,7 +111,7 @@ export const stateRegistrationHint = (uf) => ieMasks(uf).join(" ou ");
 // Only checks fields the user changed, so an old record with a free-text value can still be edited.
 export function customerFieldError(form, before = {}) {
   const changed = (k) => (form[k] || "") !== (before[k] || "");
-  if (changed("document") && ![11, 14].includes(digits(form.document).length)) return "CPF/CNPJ incompleto: informe 11 dígitos (CPF) ou 14 (CNPJ).";
+  if (changed("document") && form.document && ![11, 14].includes(digits(form.document).length)) return "CPF/CNPJ incompleto: informe 11 dígitos (CPF) ou 14 (CNPJ).";
   if (changed("phone") && form.phone && ![10, 11].includes(digits(form.phone).length)) return "Telefone incompleto: informe o DDD e o número.";
   const ie = form.state_registration, masks = ieMasks(form.state);
   if ((changed("state_registration") || changed("state")) && ie && ie !== "ISENTO" && masks.length

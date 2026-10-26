@@ -44,12 +44,12 @@ export const CnpjNote = ({ note }) => (note ? <small className={`field-note ${no
 
 // Inscrição estadual: a number, or the "Isento" box for customers exempt from it (stored as "ISENTO")
 // formatted with the customer's UF mask (re-applied when the UF changes)
-export function StateRegistrationField({ value, uf, onChange }) {
+export function StateRegistrationField({ value, uf, onChange, required = true }) {
   const exempt = value === "ISENTO";
   return (
     <Field label="Inscrição estadual">
       <div className="field-row">
-        <input required={!exempt} inputMode="numeric" disabled={exempt}
+        <input required={required && !exempt} inputMode="numeric" disabled={exempt}
           value={exempt ? "" : maskStateRegistration(value, uf)}
           placeholder={exempt ? "Isento" : stateRegistrationHint(uf) || "Número da IE"}
           onChange={(e) => onChange(maskStateRegistration(e.target.value, uf))} />
@@ -89,33 +89,40 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved, 
   }
 
   const f = (k) => ({ value: form[k] || "", onChange: (e) => setForm({ ...form, [k]: e.target.value }) });
+  // An admin editing an existing customer may save with blanks (the API accepts it, see CustomerDraft);
+  // registering, and every seller save, keep all fields required.
+  const required = !(isAdmin && form.id);
 
   return (
     <>
     <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={onClose} wide>
       <form onSubmit={save} className="form-grid">
+        {!required && (
+          <p className="field-note span-2">Como administrador, você pode salvar mesmo com campos em branco. Só o nome é obrigatório.</p>
+        )}
         <Field label="Nome / razão social" span={2}><input required {...f("name")} /></Field>
-        <Field label="CPF/CNPJ"><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...f("document")}
+        <Field label="CPF/CNPJ"><input required={required} inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...f("document")}
           onChange={(e) => setForm({ ...form, document: maskDocument(e.target.value) })} /><CnpjNote note={cnpjNote} /></Field>
-        <StateRegistrationField value={form.state_registration} uf={form.state} onChange={(v) => setForm({ ...form, state_registration: v })} />
+        <StateRegistrationField value={form.state_registration} uf={form.state} required={required}
+          onChange={(v) => setForm({ ...form, state_registration: v })} />
         {isAdmin && (
           <Field label="Vendedor responsável" span={2}>
-            <select required {...f("owner_id")}>
-              <option value="">Selecione o vendedor</option>
+            <select required={required} {...f("owner_id")}>
+              <option value="">{required ? "Selecione o vendedor" : "Sem vendedor"}</option>
               {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
         )}
-        <Field label="Telefone"><input required type="tel" inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" {...f("phone")}
+        <Field label="Telefone"><input required={required} type="tel" inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" {...f("phone")}
           onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} /></Field>
-        <Field label="E-mail"><input required type="email" placeholder="nome@empresa.com.br" {...f("email")} /></Field>
+        <Field label="E-mail"><input required={required} type="email" placeholder="nome@empresa.com.br" {...f("email")} /></Field>
         <Field label="Cidade / UF" span={2}>
           <div className="city-row">
-            <input required placeholder="Cidade" {...f("city")} />
-            <input required placeholder="UF" minLength={2} maxLength={2} className="uf-input" {...f("state")} />
+            <input required={required} placeholder="Cidade" {...f("city")} />
+            <input required={required} placeholder="UF" minLength={2} maxLength={2} className="uf-input" {...f("state")} />
           </div>
         </Field>
-        <Field label="Endereço" span={2}><input required {...f("address")} /></Field>
+        <Field label="Endereço" span={2}><input required={required} {...f("address")} /></Field>
         <Field label="Observações (opcional)" span={2}><textarea rows={3} {...f("notes")} /></Field>
         <div className="span-2"><ErrorBox msg={error} /></div>
         <div className="actions span-2">
