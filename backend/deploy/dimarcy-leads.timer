@@ -1,0 +1,9 @@
+[Unit]
+Description=Roda a importação de leads todo dia de madrugada
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

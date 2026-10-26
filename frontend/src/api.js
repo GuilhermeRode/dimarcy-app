@@ -34,6 +34,10 @@ export const fileUrl = (path) =>
 export const errorMessage = (e) => {
   const d = e?.response?.data?.detail;
   if (typeof d === "string") return d;
-  if (Array.isArray(d)) return "Confira os campos preenchidos.";
+  if (Array.isArray(d)) {
+    // our own pt-BR validators surface as "Value error, <message>"
+    const msg = d[0]?.msg;
+    return typeof msg === "string" && msg.startsWith("Value error, ") ? msg.slice(13) : "Confira os campos preenchidos.";
+  }
   return e?.response ? "Não foi possível concluir a operação." : "Sem conexão com o servidor.";
 };

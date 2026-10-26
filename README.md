@@ -71,3 +71,25 @@ Veja [`CLAUDE.md`](./CLAUDE.md) para essa convenção.
 - Exportar pedido em PDF/Excel
 - Tabela de preços por cliente (atacado/varejo)
 - Estoque e ordem de produção por referência
+
+## Importação de leads (Prospecção)
+
+`python -m app.lead_import` (em `backend/`) baixa os dados abertos de CNPJ da Receita e atualiza a tabela
+`leads`. Só trabalha de verdade quando sai um mês novo ou quando mudam as UFs das regiões / os CNAEs em
+Configurações; nos outros dias sai na hora. Leva 20–40 min e baixa ~7 GB (um arquivo por vez).
+
+Na VM (o backend precisa ter subido uma vez depois da atualização, para criar as tabelas):
+
+    sudo cp /opt/dimarcy/backend/deploy/dimarcy-leads.* /etc/systemd/system/
+    sudo systemctl daemon-reload && sudo systemctl enable --now dimarcy-leads.timer
+    sudo systemctl start --no-block dimarcy-leads.service   # primeira importação (demora), sem esperar a madrugada
+    journalctl -u dimarcy-leads -f               # acompanhe o progresso e o resultado
+
+Se a Receita mudar o endereço, ajuste `RECEITA_WEBDAV_URL` / `RECEITA_SHARE_TOKEN` no `.env`.
+
+**Atenção no primeiro deploy:** a primeira importação depois desta atualização aplica os novos filtros e remove os
+leads liberados que não passam neles (filiais, MEI, sem telefone, abertas há menos de 6 meses), a não ser que já
+tenham contatos. Depois disso, o administrador libera as lojas em Prospecção → Aguardando liberação: escolhendo um
+vendedor, a tela sugere as melhores da região dele até completar a cota semanal (Configurações, padrão 20). A ordem
+usa celular, dívida ativa na União (dados abertos da PGFN), capital social, idade da loja e clientes ativos na cidade.
+O botão "Atualizar agora" roda a importação em segundo plano e a tela mostra o andamento/status.
