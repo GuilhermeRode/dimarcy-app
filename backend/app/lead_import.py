@@ -124,7 +124,7 @@ def pick(row: list[str], cnaes: set[str], states: set[str], towns: dict[str, str
         "cnpj": normalize_cnpj(row[0] + row[1] + row[2]),
         "basico": row[0],
         "name": row[4].strip(),
-        "phone": receita_phone(row[21], row[22]),
+        "phone": None,  # the Receita's phone is mostly the accountant's or outdated: the admin types it in (Editar dados)
         "email": row[27].strip().lower() or None,
         "address": address[:250] or None,
         "raw_city": towns[row[20]],
@@ -187,6 +187,9 @@ def current_scope(db: Session) -> tuple[set[str], set[str], dict, str]:
     return states, cnaes, filters, text
 
 
+EDITABLE = ("name", "phone", "email", "address")  # schemas.LeadEditIn
+
+
 def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: date) -> int:
     """Writes one import in a single transaction: insert new CNPJs, refresh known ones (status kept),
     drop 'pending'/'new' leads that left the Receita unless they have contacts. Returns how many are new."""
@@ -205,16 +208,17 @@ def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: da
         lead = existing.get(cnpj)
         if lead:
             for k, v in fields.items():
-                setattr(lead, k, v)
+                if not (lead.edited and k in EDITABLE):  # what the admin fixed wins over the Receita
+                    setattr(lead, k, v)
         else:
             db.add(Lead(cnpj=cnpj, status="pending", **fields))
             added += 1
     with_contacts = {lid for (lid,) in db.query(Contact.lead_id).filter(Contact.lead_id.isnot(None)).distinct()}
-    gone = [lead.id for cnpj, lead in existing.items()
-            if lead.status in ("pending", "new") and cnpj not in found and lead.id not in with_contacts]
+    gone = [lead.id for cnpj, lead in existing.items()  # an admin-typed/edited lead stays even out of scope
+            if lead.status in ("pending", "new") and cnpj not in found and lead.id not in with_contacts and not lead.edited]
     for i in range(0, len(gone), 500):  # stay under SQLite's bound-parameter limit
         batch = gone[i:i + 500]  # re-checked in SQL: a contact may have been added since the read above
-        db.query(Lead).filter(Lead.id.in_(batch), Lead.status.in_(("pending", "new")),
+        db.query(Lead).filter(Lead.id.in_(batch), Lead.status.in_(("pending", "new")), Lead.edited.is_(False),
                               ~Lead.id.in_(select(Contact.lead_id).where(Contact.lead_id.isnot(None)))
                               ).delete(synchronize_session=False)
     s = get_app_settings(db)

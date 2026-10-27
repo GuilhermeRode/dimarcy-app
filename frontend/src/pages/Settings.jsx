@@ -217,7 +217,7 @@ export default function Settings() {
                   onChange={(e) => setForm({ ...form, lead_head_office_only: e.target.checked })} />
               </label>
               <label className="switch-row span-2">
-                <span>Só lojas com telefone</span>
+                <span>Só lojas com telefone na Receita (o número não é importado)</span>
                 <input type="checkbox" role="switch" className="switch" checked={form.lead_require_contact}
                   onChange={(e) => setForm({ ...form, lead_require_contact: e.target.checked })} />
               </label>

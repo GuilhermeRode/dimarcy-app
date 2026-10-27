@@ -293,6 +293,7 @@ class Lead(Base):
     # ranking, stored so the list can ORDER BY ... LIMIT in SQL (leads.refresh_scores; daily and after imports)
     score: Mapped[int | None] = mapped_column(Integer)  # leads.lead_score
     city_active: Mapped[int | None] = mapped_column(Integer)  # active Di Marcy customers in the city (tie-break)
+    edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")  # admin fixed name/contact: the import keeps them
 
 
 class Contact(Base):

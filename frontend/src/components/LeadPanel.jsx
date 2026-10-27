@@ -7,7 +7,7 @@ import { ContactHistory } from "./Contacts";
 export const isNewStore = (openedAt) =>
   !!openedAt && (Date.now() - new Date(`${openedAt}T00:00:00`)) / 86400000 <= 730; // opened within 2 years
 
-export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onClose, onConvert, onDiscard, onReleased, onContacted, onNoAnswer }) {
+export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onClose, onConvert, onDiscard, onEdit, onReleased, onContacted, onNoAnswer }) {
   const [releasing, setReleasing] = useState(false);
   const [releaseTo, setReleaseTo] = useState("");  // only for a lead whose city has no seller
   const [releaseError, setReleaseError] = useState("");
@@ -88,6 +88,7 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
         {/* one blue button at a time: while Liberar is there, it is the main action */}
         <button type="button" className={`btn ${releasable ? "" : "btn-primary"}`} onClick={onConvert}>Cadastrar cliente</button>
         <button type="button" className="btn" onClick={onDiscard}>Descartar</button>
+        {isAdmin && <button type="button" className="btn lead-action-wide" onClick={onEdit}>Editar dados</button>}
       </div>
       {releaseError && <p className="muted" style={{ color: "var(--danger)" }}>{releaseError}</p>}
       <dl className="customer-panel-info">

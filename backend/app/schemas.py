@@ -167,6 +167,21 @@ class CustomerOut(CustomerIn):
     lng: float | None = None
 
 
+class LeadEditIn(BaseModel):
+    """What the admin may fix on a lead (the rest comes from the Receita)."""
+    name: str = Field(min_length=1, max_length=160)
+    phone: str | None = Field(None, max_length=30)
+    email: str | None = Field(None, max_length=160)
+    address: str | None = Field(None, max_length=250)
+
+
+class LeadCreateIn(LeadEditIn):
+    """A store the admin found outside the Receita import."""
+    cnpj: str
+    city: str = Field(min_length=1, max_length=100)
+    state: str = Field(min_length=2, max_length=2)
+
+
 class DiscardIn(BaseModel):
     reason: Literal["closed", "not_target", "competitor", "not_recommended", "no_answer", "other"]  # models.DISCARD_REASONS
 

@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session
 
 from .. import clock, lead_import
 from ..database import get_db
-from ..leads import (REGION_ROLES, check_leads_open, city_owners, ensure_scores, lead_out, lead_owner, rank_order,
+from ..leads import (REGION_ROLES, check_leads_open, city_owners, customer_cnpjs, ensure_scores, lead_out, lead_owner, normalize_cnpj, rank_order,
                      ranked_leads, released_this_week, visible_lead)
 from ..models import Contact, Lead, SellerCity, User
-from ..schemas import BulkDiscardIn, CustomerIn, CustomerOut, DiscardIn, ReleaseToIn
+from ..sales import _city_key
+from ..schemas import BulkDiscardIn, CustomerIn, CustomerOut, DiscardIn, LeadCreateIn, LeadEditIn, ReleaseToIn
 from ..security import get_current_user, require_admin
 from ..settings_store import get_app_settings
 from .customers import add_customer, geocode_later
@@ -96,6 +97,44 @@ def discard_many(data: BulkDiscardIn, db: Session = Depends(get_db)):
 @router.get("/{lid}")
 def get_lead(lid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     lead = visible_lead(db, user, lid)
+    return lead_out(lead, lead_owner(city_owners(db), lead))
+
+
+def _typed_fields(data: LeadEditIn) -> dict:
+    fields = {k: (v or "").strip() or None for k, v in data.model_dump().items()}
+    if not fields["name"]:
+        raise HTTPException(422, "Informe o nome da loja.")
+    return fields
+
+
+@router.post("", dependencies=[Depends(require_admin)], status_code=201)
+def create_lead(data: LeadCreateIn, db: Session = Depends(get_db)):
+    """A lead typed in by the admin; it starts pending, like an imported one, and is released the same way.
+    edited=True: the import neither overwrites nor drops it."""
+    fields = _typed_fields(data)
+    fields["cnpj"] = normalize_cnpj(fields["cnpj"])
+    if len(fields["cnpj"]) != 14:
+        raise HTTPException(422, "CNPJ inválido.")
+    if db.query(Lead.id).filter(Lead.cnpj == fields["cnpj"]).first():
+        raise HTTPException(409, "Esse CNPJ já está na Prospecção.")
+    if fields["cnpj"] in customer_cnpjs(db):
+        raise HTTPException(409, "Esse CNPJ já é cliente.")
+    fields["state"] = fields["state"].upper()
+    lead = Lead(**fields, city_key=_city_key(fields["city"]), status="pending", edited=True, seen_at=clock.today_br())
+    db.add(lead)
+    db.commit()
+    return lead_out(lead, lead_owner(city_owners(db), lead))
+
+
+@router.put("/{lid}", dependencies=[Depends(require_admin)])
+def edit_lead(lid: int, data: LeadEditIn, db: Session = Depends(get_db)):
+    lead = db.get(Lead, lid)
+    if not lead:
+        raise HTTPException(404, "Lead não encontrado.")
+    for k, v in _typed_fields(data).items():
+        setattr(lead, k, v)
+    lead.edited = True
+    db.commit()
     return lead_out(lead, lead_owner(city_owners(db), lead))
 
 
