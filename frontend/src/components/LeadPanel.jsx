@@ -39,6 +39,7 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
     } catch (e) { setReleaseError(errorMessage(e)); }
     setReleasing(false);
   }
+  const releasable = isAdmin && lead.status === "pending";
   const { user } = useAuth();
   const firstName = (user?.name || "").split(" ")[0];
   const wa = whatsappUrl(lead.phone, `Olá, tudo bem? Sou ${firstName} da Di Marcy. Gostaria de apresentar nossa `
@@ -57,8 +58,9 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
           {lead.in_debt && <span className="cstatus cstatus-risk">Dívida ativa</span>}
         </div>
       </div>
-      {/* up to 7 buttons: contact on one wrapping row, the decision (liberar / virar cliente / descartar) on another */}
-      <div className="customer-panel-actions lead-actions">
+      {/* two columns, so a narrow (notebook) panel never leaves a button squeezed or stranded:
+          contact pairs first, then the decision — Liberar across, Cadastrar cliente | Descartar under it */}
+      <div className="customer-panel-actions lead-actions lead-contact">
         {wa
           ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>WhatsApp</a>
           : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
@@ -78,12 +80,13 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
         </label>
       )}
       <div className="customer-panel-actions lead-actions">
-        {isAdmin && lead.status === "pending" && (
-          <button type="button" className="btn btn-primary" disabled={releasing || (!lead.seller_id && !releaseTo)} onClick={release}>
+        {releasable && (
+          <button type="button" className="btn btn-primary lead-action-wide" disabled={releasing || (!lead.seller_id && !releaseTo)} onClick={release}>
             {lead.seller_id ? `Liberar para ${lead.seller_name.split(" ")[0]}` : "Liberar"}
           </button>
         )}
-        <button type="button" className="btn btn-primary" onClick={onConvert}>Virar cliente</button>
+        {/* one blue button at a time: while Liberar is there, it is the main action */}
+        <button type="button" className={`btn ${releasable ? "" : "btn-primary"}`} onClick={onConvert}>Cadastrar cliente</button>
         <button type="button" className="btn" onClick={onDiscard}>Descartar</button>
       </div>
       {releaseError && <p className="muted" style={{ color: "var(--danger)" }}>{releaseError}</p>}
