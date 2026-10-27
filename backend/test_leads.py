@@ -387,6 +387,44 @@ def check_contacts(ctx):
     assert len(c.get("/api/contacts/due", headers=ctx["a"]).json()) == 1  # its reminder is live again
 
 
+def check_edit(ctx):
+    """Only the admin edits a lead; the monthly import keeps what was edited."""
+    from app import lead_import
+    c, admin, a = ctx["c"], ctx["admin"], ctx["a"]
+    lid = add_lead("70000000000202", "RAZAO SOCIAL LTDA", phone="(47) 3333-4444")
+    body = {"name": " Loja da Maria ", "phone": "(47) 99999-1111", "email": "", "address": "Rua B, 2"}
+    assert c.put(f"/api/leads/{lid}", headers=a, json=body).status_code == 403
+    assert c.put(f"/api/leads/{lid}", headers=admin, json={**body, "name": "  "}).status_code == 422
+    r = c.put(f"/api/leads/{lid}", headers=admin, json=body)
+    assert r.status_code == 200, r.text
+    assert (r.json()["name"], r.json()["email"]) == ("Loja da Maria", None), r.json()
+    row = {"name": "RAZAO SOCIAL LTDA", "phone": "(47) 3333-4444", "email": None, "address": "X", "raw_city": "Jaraguá do Sul",
+           "state": "SC", "opened_at": None, "size": "me", "capital": 10, "in_debt": False}
+    with SessionLocal() as db:
+        lead_import.apply(db, {"70000000000202": row}, "2026-10", "t", TODAY)
+        lead = db.get(Lead, lid)
+        assert (lead.name, lead.phone, lead.address, lead.size) == ("Loja da Maria", "(47) 99999-1111", "Rua B, 2", "me")
+    # Receita phones were mostly wrong: startup clears them, keeping the ones an admin typed in
+    from app.main import _drop_lead_phones
+    old = add_lead("70000000000303", "Loja Receita", phone="(47) 3333-5555")
+    _drop_lead_phones()
+    with SessionLocal() as db:
+        assert db.get(Lead, old).phone is None and db.get(Lead, lid).phone == "(47) 99999-1111"
+    # a lead typed in by the admin: pending, kept by the import even when the Receita doesn't list it
+    new = {**body, "cnpj": "70.000.000/0004-04", "city": "Joinville", "state": "sc"}
+    assert c.post("/api/leads", headers=a, json=new).status_code == 403
+    assert c.post("/api/leads", headers=admin, json={**new, "cnpj": "123"}).status_code == 422
+    r = c.post("/api/leads", headers=admin, json=new)
+    assert r.status_code == 201, r.text
+    made = r.json()
+    assert (made["cnpj"], made["state"], made["status"], made["phone"]) == ("70000000000404", "SC", "pending", "(47) 99999-1111")
+    assert c.post("/api/leads", headers=admin, json=new).status_code == 409
+    with SessionLocal() as db:
+        lead_import.apply(db, {}, "2026-11", "t", TODAY)
+        assert db.get(Lead, made["id"]) is not None and db.get(Lead, old) is None
+    assert c.post("/api/leads/discard", headers=admin, json={"ids": [made["id"]], "reason": "other"}).status_code == 200
+
+
 def check_role_change(ctx):
     c, admin = ctx["c"], ctx["admin"]
     r = c.post("/api/users", headers=admin, json={
@@ -553,6 +591,7 @@ with TestClient(app) as c:
     check_ranking_by_active_customers(ctx)
     check_convert(ctx)
     check_contacts(ctx)
+    check_edit(ctx)
     check_role_change(ctx)
     check_pending_release(ctx)
 

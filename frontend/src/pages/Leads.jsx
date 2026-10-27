@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
-import { LEAD_SIZES, dateBR, formatCnpj, initials } from "../format";
+import { LEAD_SIZES, dateBR, formatCnpj, initials, maskDocument, maskPhone } from "../format";
 import { CityFilter, ErrorBox, Field, Modal, PillSelect } from "../components/ui";
 import LeadPanel, { isNewStore } from "../components/LeadPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
@@ -45,6 +45,7 @@ export default function Leads() {
   const [selectedId, setSelectedId] = useState(null);
   const [converting, setConverting] = useState(null);
   const [discarding, setDiscarding] = useState(null);
+  const [editing, setEditing] = useState(null);  // admin fixing the store's name/contact, or typing a new one (no id)
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [checked, setChecked] = useState(new Set());
@@ -174,6 +175,31 @@ export default function Leads() {
     setNotice("Este lead já tinha sido tratado por outra pessoa.");
   }
 
+  async function saveEdit(e) {
+    e.preventDefault();
+    if (editing.busy) return;
+    setEditing({ ...editing, busy: true, error: "" });
+    const { id, name, phone, email, address, cnpj, city, state, sellerId } = editing;
+    try {
+      if (!id) {  // new lead: created pending, then released like any other (its city may join the seller's region)
+        const { data: lead } = await api.post("/leads", { name, phone, email, address, cnpj, city, state });
+        setEditing(null);
+        if (sellerId) {
+          try {
+            const { data: r } = await api.post("/leads/release", { ids: [lead.id], seller_id: Number(sellerId) });
+            afterRelease([lead.id], r);
+          } catch (err) { setError(`Lead cadastrado, mas não foi liberado: ${errorMessage(err)}`); }
+        } else setNotice("Lead cadastrado em Pendentes. Libere para um vendedor quando quiser.");
+        load(0);
+        return;
+      }
+      const { data: lead } = await api.put(`/leads/${id}`, { name, phone, email, address });
+      setData((d) => ({ ...d, items: d.items.map((l) => (l.id === id ? { ...l, ...lead } : l)) }));
+      setEditing(null);
+      setNotice("Dados do lead atualizados. As próximas importações não sobrescrevem essa edição.");
+    } catch (err) { setEditing((f) => f && { ...f, busy: false, error: errorMessage(err) }); }
+  }
+
   async function discard(e) {
     e.preventDefault();
     if (discarding.busy) return;
@@ -217,6 +243,8 @@ export default function Leads() {
           )}
         </div>
         <div className="header-actions">
+          {isAdmin && <button className="btn btn-primary" onClick={() => setEditing({ name: "", phone: "", email: "", address: "",
+            cnpj: "", city: "", state: "", sellerId: "" })}>+ Novo lead</button>}
           {isAdmin && <button className="btn" onClick={importNow} disabled={!!importCfg?.lead_import_started_at}>Atualizar agora</button>}
           <button className="btn" onClick={() => nav("/follow-ups")}>Retornos</button>
         </div>
@@ -330,6 +358,8 @@ export default function Leads() {
                 if (r.discarded) { drop(selected.id); setNotice("3 tentativas sem resposta: a loja foi descartada."); }
                 else { refreshContact(selected.id); setNotice(`Tentativa ${r.tries} de 3 registrada. Retorno em ${dateBR(r.retry_on)}.`); }
               }}
+              onEdit={() => setEditing({ id: selected.id, name: selected.name, phone: selected.phone || "",
+                email: selected.email || "", address: selected.address || "" })}
               onDiscard={() => setDiscarding({ id: selected.id, name: selected.name, reason: "closed" })}
               onConvert={() => setConverting({
                 ...EMPTY_CUSTOMER, name: selected.name, document: formatCnpj(selected.cnpj),
@@ -345,6 +375,46 @@ export default function Leads() {
         <CustomerFormModal initial={converting} isAdmin={isAdmin} submitUrl={`/leads/${converting.leadId}/convert`}
           onClose={() => setConverting(null)} onConflict={() => alreadyHandled(converting.leadId)}
           onSaved={() => { drop(converting.leadId); setConverting(null); setNotice("Cliente cadastrado. Ele já aparece em Clientes."); }} />
+      )}
+
+      {editing && (
+        <Modal title={editing.id ? "Editar lead" : "Novo lead"} onClose={() => setEditing(null)}>
+          <form onSubmit={saveEdit} className="form-grid">
+            <Field label="Nome da loja" span={2}>
+              <input required maxLength={160} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+            </Field>
+            {!editing.id && (<>
+              <Field label="CNPJ" span={2}>
+                <input required value={editing.cnpj} onChange={(e) => setEditing({ ...editing, cnpj: maskDocument(e.target.value) })} />
+              </Field>
+              <Field label="Cidade">
+                <input required maxLength={100} value={editing.city} onChange={(e) => setEditing({ ...editing, city: e.target.value })} />
+              </Field>
+              <Field label="UF">
+                <input required minLength={2} maxLength={2} value={editing.state} onChange={(e) => setEditing({ ...editing, state: e.target.value.toUpperCase() })} />
+              </Field>
+            </>)}
+            <Field label="Telefone">
+              <input value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: maskPhone(e.target.value) })} />
+            </Field>
+            <Field label="E-mail">
+              <input type="email" maxLength={160} value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
+            </Field>
+            <Field label="Endereço" span={2}>
+              <input maxLength={250} value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} />
+            </Field>
+            {!editing.id && (
+              <Field label="Liberar para (opcional)" span={2}>
+                <select value={editing.sellerId} onChange={(e) => setEditing({ ...editing, sellerId: e.target.value })}>
+                  <option value="">Deixar em Pendentes</option>
+                  {sellers.map((s) => <option key={s.id} value={s.id}>{s.role === "admin" ? `${s.name} (admin)` : s.name}</option>)}
+                </select>
+              </Field>
+            )}
+            <div className="span-2"><ErrorBox msg={editing.error} /></div>
+            <div className="actions span-2"><button className="btn btn-primary" disabled={editing.busy}>Salvar</button></div>
+          </form>
+        </Modal>
       )}
 
       {discarding && (
