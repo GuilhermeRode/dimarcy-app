@@ -87,7 +87,7 @@ export default function Users() {
 
   async function save(e) {
     e.preventDefault();
-    if (form.role === "seller" && cities === null) { setError("Não foi possível carregar as cidades da região. Feche e abra o usuário de novo."); return; }
+    if (cities === null) { setError("Não foi possível carregar as cidades da região. Feche e abra o usuário de novo."); return; }
     setError("");
     const goal = form.annual_goal;
     const body = { ...form, annual_goal: goal === "" || goal == null ? null : Number(goal) };
@@ -95,7 +95,7 @@ export default function Users() {
       const { data: saved } = form.id ? await api.put(`/users/${form.id}`, body) : await api.post("/users", body);
       setForm({ ...form, id: saved.id }); // a failing region save below must not create the user twice
       load();
-      if (form.role === "seller" && cities) await api.put(`/users/${saved.id}/cities`, cities);
+      if (cities) await api.put(`/users/${saved.id}/cities`, cities);
       setForm(null);
       load();
     } catch (err) { setError(errorMessage(err)); }
@@ -156,7 +156,7 @@ export default function Users() {
                 <option value="both">Atacado e varejo</option>
               </select>
             </Field>
-            {form.role === "seller" && (cities
+            {(cities
               ? <RegionCities userId={form.id} cities={cities} onChange={setCities} />
               : <p className="span-2 muted">Carregando cidades da região…</p>)}
             <label className="check">
