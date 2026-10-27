@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
-import { addDays, dateBR, localDate } from "../format";
+import { addDays, dateBR, localDate, utcDateBR } from "../format";
 import { ErrorBox, Field, Modal } from "./ui";
 
 // Keys match the backend's CONTACT_CHANNELS
 export const CHANNELS = { whatsapp: "WhatsApp", call: "Ligação", visit: "Visita", email: "E-mail" };
 
 // created_at is UTC without a zone (SQLite CURRENT_TIMESTAMP); "Z" makes the browser convert it to local time
-const contactDate = (iso) => new Date(`${iso}Z`).toLocaleDateString("pt-BR");
 
 export function ContactModal({ target, onClose, onSaved }) {
   const [form, setForm] = useState({ channel: "whatsapp", notes: "", next_action_date: "" });
@@ -76,7 +75,7 @@ export function ContactHistory({ target, onSaved }) {
       <ErrorBox msg={error} />
       {list && (list.length ? list.map((ct) => (
         <div key={ct.id} className="contact-item">
-          <small>{contactDate(ct.created_at)} · {CHANNELS[ct.channel] ?? ct.channel} · {ct.user_name}</small>
+          <small>{utcDateBR(ct.created_at)} · {CHANNELS[ct.channel] ?? ct.channel} · {ct.user_name}</small>
           {ct.notes && <p>{ct.notes}</p>}
           {ct.next_action_date && <small className="contact-due">Retornar em {dateBR(ct.next_action_date)}</small>}
         </div>

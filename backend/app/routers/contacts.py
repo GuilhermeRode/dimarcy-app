@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import clock
 from ..database import get_db
-from ..leads import due_follow_ups, visible_lead
+from ..leads import done_follow_ups, due_follow_ups, visible_lead
 from ..models import Contact, User
 from ..schemas import ContactIn
 from ..security import get_current_user
@@ -29,8 +31,15 @@ def _check_target(db: Session, user: User, lead_id: int | None, customer_id: int
 
 
 @router.get("/due")
-def due(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return due_follow_ups(db, user, clock.today_br())
+def due(days: int = Query(0, ge=0, le=60), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Late and today's follow-ups; with `days`, also the ones coming up in the next days (Próximos)."""
+    today = clock.today_br()
+    return due_follow_ups(db, user, today, everyone=user.role == "admin", until=today + timedelta(days=days))
+
+
+@router.get("/done")
+def done(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return done_follow_ups(db, user, clock.today_br() - timedelta(days=days), everyone=user.role == "admin")
 
 
 @router.get("")
