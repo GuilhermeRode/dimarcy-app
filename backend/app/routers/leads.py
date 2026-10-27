@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from .. import clock, lead_import
 from ..database import get_db
-from ..leads import (check_leads_open, city_owners, ensure_scores, lead_out, lead_owner, rank_order, ranked_leads, released_this_week,
-                     visible_lead)
+from ..leads import (REGION_ROLES, check_leads_open, city_owners, ensure_scores, lead_out, lead_owner, rank_order,
+                     ranked_leads, released_this_week, visible_lead)
 from ..models import Contact, Lead, SellerCity, User
 from ..schemas import BulkDiscardIn, CustomerIn, CustomerOut, DiscardIn, ReleaseToIn
 from ..security import get_current_user, require_admin
@@ -53,7 +53,7 @@ def release(data: ReleaseToIn, db: Session = Depends(get_db)):
     seller = None
     if data.seller_id is not None:
         seller = db.get(User, data.seller_id)
-        if not seller or seller.role != "seller" or not seller.active:
+        if not seller or seller.role not in REGION_ROLES or not seller.active:
             raise HTTPException(400, "Vendedor inválido ou inativo.")
     owners = city_owners(db)
     leads = db.query(Lead).filter(Lead.id.in_(data.ids), Lead.status == "pending").all()

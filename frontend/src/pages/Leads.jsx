@@ -8,6 +8,7 @@ import LeadPanel, { isNewStore } from "../components/LeadPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
 
 const PAGE_SIZE = 50;
+export const sellerLabel = (u) => (u.role === "admin" ? `${u.name} (admin)` : u.name);  // admins can get leads too
 // Keys match the backend's DISCARD_REASONS
 const DISCARD_REASONS = { closed: "Loja fechou", not_target: "Não é o nosso público", competitor: "Já compra de concorrente",
   not_recommended: "Não recomendada", no_answer: "Não respondeu (3 tentativas)", other: "Outro" };
@@ -93,7 +94,8 @@ export default function Leads() {
   useEffect(() => { api.get("/settings").then((r) => setCatalogUrl(r.data.catalog_url)).catch(() => {}); }, []);
 
   useEffect(() => {
-    if (isAdmin) api.get("/users").then((r) => setSellers(r.data.filter((u) => u.role === "seller" && u.active)));
+    // admins can get leads too ("as if a seller"): every active user may own a region
+    if (isAdmin) api.get("/users").then((r) => setSellers(r.data.filter((u) => u.active)));
   }, [isAdmin]);
 
   async function load(offset = 0) {
@@ -239,7 +241,7 @@ export default function Leads() {
           <CityFilter value={cityText} cities={allCities} onChange={setCityText} onPick={search} />
           {isAdmin && (
             <PillSelect label="Vendedor" value={filters.seller} onChange={(v) => setFilters({ ...filters, seller: v })}
-              options={[["", "Todos"], ["0", "Sem vendedor"], ...sellers.map((s) => [String(s.id), s.name])]} />
+              options={[["", "Todos"], ["0", "Sem vendedor"], ...sellers.map((s) => [String(s.id), sellerLabel(s)])]} />
           )}
           <button type="submit" className="btn btn-primary btn-search">Pesquisar</button>
         </form>
@@ -283,7 +285,7 @@ export default function Leads() {
                   Não recomendar ({checked.size})
                 </button>
                 <PillSelect label="Liberar para" value={releaseTo} onChange={setReleaseTo} className="pill-release"
-                  options={[["", "Vendedor da cidade"], ...sellers.map((s) => [String(s.id), s.name])]} />
+                  options={[["", "Vendedor da cidade"], ...sellers.map((s) => [String(s.id), sellerLabel(s)])]} />
                 <button type="button" className="btn btn-primary" disabled={!checked.size || busy}
                   title={releaseTo ? "Lojas de cidades sem vendedor vão para este vendedor, e a cidade entra na região dele" : undefined}
                   onClick={() => release([...checked], releaseTo)}>Liberar ({checked.size})</button>

@@ -74,7 +74,7 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
           <span>Liberar para</span>
           <select value={releaseTo} onChange={(e) => setReleaseTo(e.target.value)}>
             <option value="">Escolha o vendedor…</option>
-            {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {sellers.map((s) => <option key={s.id} value={s.id}>{s.role === "admin" ? `${s.name} (admin)` : s.name}</option>)}
           </select>
           <small className="muted">{lead.city}/{lead.state} ainda não é de nenhum vendedor: ela entra na região de quem você escolher.</small>
         </label>

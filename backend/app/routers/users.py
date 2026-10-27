@@ -45,8 +45,6 @@ def update(uid: int, data: UserIn, db: Session = Depends(get_db)):
         if len(data.password) < MIN_PASSWORD_LENGTH:
             raise HTTPException(400, f"The password must be at least {MIN_PASSWORD_LENGTH} characters long.")
         u.password_hash = hash_password(data.password)
-    if data.role != "seller":  # only sellers have a region
-        db.query(SellerCity).filter(SellerCity.user_id == uid).delete()
     db.commit()
     db.refresh(u)
     return u
@@ -76,12 +74,10 @@ def get_cities(uid: int, db: Session = Depends(get_db)):
 
 @router.put("/{uid}/cities", response_model=list[CityOut])
 def set_cities(uid: int, data: list[CityIn], db: Session = Depends(get_db)):
-    """Replaces the seller's region. A city already in another seller's region -> 409."""
+    """Replaces the user's region (sellers, and admins who also work leads). A city already in another seller's region -> 409."""
     user = db.get(User, uid)
     if not user:
         raise HTTPException(404, "User not found.")
-    if user.role != "seller":
-        raise HTTPException(422, "Só vendedores têm região.")
     others = {(sc.city_key, sc.state): sc for sc in db.query(SellerCity).filter(SellerCity.user_id != uid)}
     wanted: dict[tuple[str, str], str] = {}
     for item in data:
