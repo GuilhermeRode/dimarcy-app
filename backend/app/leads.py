@@ -15,6 +15,7 @@ from .br_format import format_phone
 from .models import SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
 from .sales import _city_key
 
+REGION_ROLES = ("seller", "admin")  # an admin may also keep a region and work leads like a seller
 ESTABLISHED_DAYS = 5 * 365  # opened within 5 years: past the first months, still choosing suppliers
 
 
@@ -25,7 +26,7 @@ def normalize_cnpj(value: str | None) -> str:
 
 def city_owners(db: Session) -> dict[tuple[str, str], User]:
     """(city_key, state) -> the ACTIVE seller whose region has that city."""
-    rows = db.query(SellerCity).join(User, SellerCity.user_id == User.id).filter(User.active.is_(True), User.role == "seller").all()
+    rows = db.query(SellerCity).join(User, SellerCity.user_id == User.id).filter(User.active.is_(True), User.role.in_(REGION_ROLES)).all()
     return {(r.city_key, r.state): r.user for r in rows}
 
 
@@ -146,7 +147,7 @@ def ranked_leads(db: Session, user: User, city: str = "", search: str = "",
                               ~Lead.cnpj.in_(select(_normalized_document()).where(Customer.document.isnot(None))))
     # a lead's seller: the ACTIVE seller whose region has its city (see city_owners)
     owner = select(SellerCity.id).join(User, SellerCity.user_id == User.id).where(
-        SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state, User.active.is_(True), User.role == "seller")
+        SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state, User.active.is_(True), User.role.in_(REGION_ROLES))
     if user.role != "admin":
         q = q.filter(owner.where(SellerCity.user_id == user.id).exists())
     elif seller_id == 0:

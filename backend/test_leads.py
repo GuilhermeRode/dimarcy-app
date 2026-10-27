@@ -140,7 +140,8 @@ def check_regions(ctx):
     assert c.put("/api/users/9999/cities", headers=admin, json=[]).status_code == 404
     with SessionLocal() as db:
         admin_id = db.query(User).filter(User.email == "admin@test.com").one().id
-    assert c.put(f"/api/users/{admin_id}/cities", headers=admin, json=[]).status_code == 422  # only sellers have a region
+    assert c.put(f"/api/users/{admin_id}/cities", headers=admin, json=[]).status_code == 200  # an admin may have a region too
+    ctx["admin_id"] = admin_id
     assert c.get(f"/api/users/{a_id}/cities", headers=ctx["a"]).status_code == 403  # admin only
     assert c.put(f"/api/users/{a_id}/cities", headers=admin, json=[{"city": "", "state": "SC"}]).status_code == 422
 
@@ -396,9 +397,11 @@ def check_role_change(ctx):
     r = c.put(f"/api/users/{cid}", headers=admin, json={
         "name": "Caio", "email": "caio@t.com", "role": "admin", "active": True})
     assert r.status_code == 200, r.text
-    assert c.get(f"/api/users/{cid}/cities", headers=admin).json() == []
+    # an admin may keep a region (and work its leads like a seller): promoting doesn't drop it
+    assert c.get(f"/api/users/{cid}/cities", headers=admin).json() == [{"city": "Guaramirim", "state": "SC"}]
     items = c.get("/api/leads", headers=admin, params={"search": "Guaramirim"}).json()["items"]
-    assert [x["seller_id"] for x in items if x["id"] == lead] == [None], items
+    assert [x["seller_id"] for x in items if x["id"] == lead] == [cid], items
+    assert c.put(f"/api/users/{cid}/cities", headers=admin, json=[]).status_code == 200
     r = c.put(f"/api/users/{ctx['b_id']}/cities", headers=admin, json=[{"city": "Guaramirim", "state": "SC"}])
     assert r.status_code == 200, r.text
 
@@ -448,6 +451,14 @@ def check_pending_release(ctx):
     assert c.get(f"/api/leads/{pz}", headers=a).status_code == 200
     assert "Cidade Livre" in [x["city"] for x in c.get(f"/api/users/{ctx['a_id']}/cities", headers=admin).json()]
     assert c.post("/api/leads/release", headers=admin, json={"ids": [pg]}).json()["released"] == 1  # to its city's seller
+    # the admin can take leads like a seller: the city joins the admin's region
+    pq = add_lead("80000000000193", "Pend Para Admin", city="Cidade do Admin", status="pending")
+    r = c.post("/api/leads/release", headers=admin, json={"ids": [pq], "seller_id": ctx["admin_id"]})
+    assert r.json()["released"] == 1 and r.json()["cities_added"] == ["Cidade do Admin/SC"], r.text
+    mine = c.get("/api/leads", headers=admin, params={"seller_id": ctx["admin_id"]}).json()["items"]
+    assert [x["name"] for x in mine] == ["Pend Para Admin"] and mine[0]["seller_id"] == ctx["admin_id"], mine
+    assert c.post(f"/api/leads/{pq}/discard", headers=admin, json={"reason": "other"}).status_code == 204
+    c.put(f"/api/users/{ctx['admin_id']}/cities", headers=admin, json=[])
     for lid in (pz, pg, pn):
         assert c.post(f"/api/leads/{lid}/discard", headers=admin, json={"reason": "other"}).status_code == 204
     assert c.put(f"/api/users/{ctx['a_id']}/cities", headers=admin, json=[  # back to a's original region
