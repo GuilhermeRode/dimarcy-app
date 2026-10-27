@@ -6,15 +6,20 @@ from sqlalchemy.orm import Session
 
 from .. import clock, lead_import
 from ..database import get_db
-from ..leads import (REGION_ROLES, city_owners, ensure_scores, lead_out, lead_owner, rank_order, ranked_leads, released_this_week,
-                     visible_lead)
+from ..leads import (REGION_ROLES, check_leads_open, city_owners, ensure_scores, lead_out, lead_owner, rank_order,
+                     ranked_leads, released_this_week, visible_lead)
 from ..models import Contact, Lead, SellerCity, User
 from ..schemas import BulkDiscardIn, CustomerIn, CustomerOut, DiscardIn, ReleaseToIn
 from ..security import get_current_user, require_admin
 from ..settings_store import get_app_settings
 from .customers import add_customer, geocode_later
 
-router = APIRouter(prefix="/leads", tags=["leads"])
+
+def _leads_open(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    check_leads_open(db, user)
+
+
+router = APIRouter(prefix="/leads", tags=["leads"], dependencies=[Depends(_leads_open)])
 ALREADY_HANDLED = "Este lead já foi tratado."
 
 

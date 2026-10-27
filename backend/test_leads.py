@@ -519,6 +519,22 @@ def _check_import_now(ctx, calls, settings_router):
         assert db.query(AppSettings).first().lead_import_started_at is None
 
 
+def check_sellers_flag(ctx):
+    """Prospecção starts admin-only (Configurações: leads_for_sellers); the rest of this file turns it on."""
+    c, admin, a = ctx["c"], ctx["admin"], ctx["a"]
+    assert c.get("/api/settings", headers=a).json()["leads_for_sellers"] is False
+    for path in ("/api/leads", "/api/leads/1"):
+        r = c.get(path, headers=a)
+        assert r.status_code == 403 and "desativada" in r.json()["detail"], (path, r.text)
+    assert c.get("/api/contacts", headers=a, params={"lead_id": 1}).status_code == 403
+    assert c.get("/api/leads", headers=admin).status_code == 200  # the admin always has it
+    s = c.get("/api/settings", headers=admin).json()
+    body = {k: s[k] for k in ("allow_price_override", "max_discount_percent", "retail_markup_percent", "annual_goal")}
+    assert c.put("/api/settings", headers=admin, json={**body, "leads_for_sellers": True}).status_code == 200
+    assert c.get("/api/settings", headers=a).json()["leads_for_sellers"] is True
+    assert c.get("/api/leads", headers=a).status_code == 200
+
+
 # ---- run ----
 with TestClient(app) as c:
     ctx = {"c": c, "admin": login(c, "admin@test.com", "admin-pass-123")}
@@ -529,6 +545,7 @@ with TestClient(app) as c:
         ctx[key + "_id"] = r.json()["id"]
         ctx[key] = login(c, f"{key}@t.com", "seller-pass-123")
     check_models(ctx)
+    check_sellers_flag(ctx)
     check_settings(ctx)
     check_regions(ctx)
     check_score()

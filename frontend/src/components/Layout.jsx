@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { api } from "../api";
 import { useAuth } from "../auth";
 import {
   ColorsIcon, CustomersIcon, DashboardIcon, LeadsIcon, MenuIcon, OrdersIcon, ProductionIcon,
@@ -30,8 +31,14 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Prospecção can be admin-only for now (Configurações); the API refuses it to sellers too.
+  const [leadsForSellers, setLeadsForSellers] = useState(false);
+  useEffect(() => {
+    if (user?.role !== "admin") api.get("/settings").then((r) => setLeadsForSellers(!!r.data.leads_for_sellers)).catch(() => {});
+  }, [user?.role]);
   // Sellers see the dashboard (scoped to their own orders), "Novo pedido", their own orders/customers, prospecting and their products (read-only); admins see everything.
-  const links = user?.role === "admin" ? [DASHBOARD_LINK, ...ADMIN_LINKS] : [DASHBOARD_LINK, ORDERS_LINK, CUSTOMERS_LINK, LEADS_LINK, PRODUCTS_LINK];
+  const links = user?.role === "admin" ? [DASHBOARD_LINK, ...ADMIN_LINKS]
+    : [DASHBOARD_LINK, ORDERS_LINK, CUSTOMERS_LINK, ...(leadsForSellers ? [LEADS_LINK] : []), PRODUCTS_LINK];
   const closeMenu = () => setMenuOpen(false);
 
   return (

@@ -286,6 +286,7 @@ class AppSettingsIn(BaseModel):
     lead_states: str | None = None
     lead_area_codes: str | None = None  # "" = every DDD of the states
     lead_weekly_release: int | None = Field(default=None, ge=0, le=500)
+    leads_for_sellers: bool | None = None
 
     @field_validator("lead_states")
     @classmethod
@@ -339,6 +340,7 @@ class AppSettingsOut(ORM):
     max_discount_percent: float
     retail_markup_percent: float
     catalog_url: str | None = None  # sellers send it to stores
+    leads_for_sellers: bool = False  # the menu hides Prospecção for sellers while off
 
 
 class AppSettingsAdminOut(AppSettingsOut):
