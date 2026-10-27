@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from .br_format import format_phone
 from .models import SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
 from .sales import _city_key
+from .settings_store import get_app_settings
 
 ESTABLISHED_DAYS = 5 * 365  # opened within 5 years: past the first months, still choosing suppliers
 
@@ -37,8 +38,19 @@ def customer_cnpjs(db: Session) -> set[str]:
     return {normalize_cnpj(d) for (d,) in db.query(Customer.document) if d}
 
 
+def leads_open(db: Session, user: User) -> bool:
+    """Prospecção may be admin-only for now (Configurações: leads_for_sellers off)."""
+    return user.role == "admin" or get_app_settings(db).leads_for_sellers
+
+
+def check_leads_open(db: Session, user: User) -> None:
+    if not leads_open(db, user):
+        raise HTTPException(403, "A Prospecção está desativada para vendedores.")
+
+
 def visible_lead(db: Session, user: User, lead_id: int) -> Lead:
     """A seller only reaches leads of their region; an admin reaches every lead."""
+    check_leads_open(db, user)
     lead = db.get(Lead, lead_id)
     if lead and user.role != "admin":
         if lead.status == "pending":  # awaiting admin release: invisible to sellers
@@ -198,11 +210,14 @@ def due_follow_ups(db: Session, user: User, today: date) -> list[dict]:
     for ct in db.query(Contact).order_by(Contact.id):
         latest[(ct.lead_id, ct.customer_id)] = ct
     owners = city_owners(db) if user.role != "admin" else {}
+    with_leads = leads_open(db, user)  # Prospecção off for sellers: their lead follow-ups wait too
     rows = []
     for ct in latest.values():
         if ct.user_id != user.id or ct.next_action_date is None or ct.next_action_date > today:
             continue
         if ct.lead_id:
+            if not with_leads:
+                continue
             target, kind = ct.lead, "lead"
             if target is None or target.status not in (("pending", "new") if user.role == "admin" else ("new",)):
                 continue

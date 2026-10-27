@@ -228,6 +228,8 @@ class AppSettings(Base):
     lead_import_pid: Mapped[int | None] = mapped_column(Integer)  # the running importer's process id
     lead_import_error: Mapped[str | None] = mapped_column(String(300))  # last failure, cleared on success
     catalog_url: Mapped[str | None] = mapped_column(String(200))  # PDF sellers send to stores (/uploads/catalog/...)
+    # off = Prospecção is admin-only for now (menu hidden, /leads and lead contacts 403 for sellers)
+    leads_for_sellers: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 

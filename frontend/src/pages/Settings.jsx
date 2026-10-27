@@ -73,6 +73,7 @@ export default function Settings() {
         lead_area_codes: (form.lead_area_codes || "").split(",")
           .filter((c) => stateList(form.lead_states).some((uf) => AREA_CODES[uf].includes(c))).join(","),
         lead_weekly_release: Number(form.lead_weekly_release) || 0,
+        leads_for_sellers: !!form.leads_for_sellers,
       });
       setForm(data);
       setOk("Configurações salvas com sucesso.");
@@ -156,6 +157,14 @@ export default function Settings() {
           <section className="panel">
             <h3>Prospecção</h3>
             <div className="form-grid">
+              <label className="switch-row span-2">
+                <span>
+                  Liberar a Prospecção para os vendedores
+                  <small className="muted">Desligado, só administradores veem a tela: o menu some para os vendedores e os leads ficam bloqueados para eles.</small>
+                </span>
+                <input type="checkbox" role="switch" className="switch" checked={!!form.leads_for_sellers}
+                  onChange={(e) => setForm({ ...form, leads_for_sellers: e.target.checked })} />
+              </label>
               <Field label="Estados da prospecção" span={2}>
                 <input placeholder="PR, RS, SC" value={form.lead_states || ""}
                   onChange={(e) => setForm({ ...form, lead_states: e.target.value })} />

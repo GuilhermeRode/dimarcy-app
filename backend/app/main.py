@@ -113,6 +113,7 @@ async def lifespan(app: FastAPI):
                                      "lead_states": "VARCHAR(30) DEFAULT 'PR,RS,SC'",
                                      "lead_area_codes": "VARCHAR(60) DEFAULT ''",
                                      "lead_weekly_release": "INTEGER DEFAULT 20",
+                                     "leads_for_sellers": "BOOLEAN DEFAULT FALSE",
                                      "lead_import_started_at": "TIMESTAMP",
                                      "lead_import_pid": "INTEGER",
                                      "lead_import_error": "VARCHAR(300)",
