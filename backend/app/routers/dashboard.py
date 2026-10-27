@@ -159,6 +159,6 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
             "customers_never_ordered": statuses["never_ordered"],
             "late_orders": len(late),
             "oldest_late_days": max(((today - o.delivery_date).days for o in late), default=None),
-            "follow_ups_due": len(due_follow_ups(db, user, today)),
+            "follow_ups_due": len(due_follow_ups(db, user, today, everyone=user.role == "admin")),  # same as Retornos
         },
     }
