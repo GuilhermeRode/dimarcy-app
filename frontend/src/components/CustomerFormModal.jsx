@@ -59,7 +59,7 @@ export function StateRegistrationField({ value, uf, onChange, required = true })
   );
 }
 
-export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved, onConflict, submitUrl = "/customers" }) {
+export default function CustomerFormModal({ initial, isAdmin, forOrder = false, onClose, onSaved, onConflict, submitUrl = "/customers" }) {
   const [confirmDialog, ask] = useConfirm();
   const [form, setForm] = useState({ ...initial, owner_id: initial.owner_id || "" });
   const [sellers, setSellers] = useState([]);
@@ -75,8 +75,8 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved, 
     if (invalid) return setError(invalid);
     const body = { ...form, state: form.state ? form.state.toUpperCase() : null, owner_id: form.owner_id ? Number(form.owner_id) : null };
     try {
-      form.id ? await api.put(`/customers/${form.id}`, body) : await api.post(submitUrl, body);
-      onSaved();
+      const { data } = form.id ? await api.put(`/customers/${form.id}`, body) : await api.post(submitUrl, body);
+      onSaved(data);
     } catch (err) {
       if (onConflict && err.response?.status === 409) onConflict(); else setError(errorMessage(err));
     }
@@ -93,6 +93,7 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved, 
   // registering keeps the rest required, and every seller save keeps all fields required.
   const required = !(isAdmin && form.id);
   const requiredForSeller = required && !isAdmin; // an admin may register without e-mail and IE
+  // ...but forOrder (Prospecção "Fazer pedido") needs the e-mail: the order form refuses a customer without one
 
   return (
     <>
@@ -116,7 +117,7 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved, 
         )}
         <Field label="Telefone"><input required={required} type="tel" inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" {...f("phone")}
           onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} /></Field>
-        <Field label="E-mail"><input required={requiredForSeller} type="email" placeholder="nome@empresa.com.br" {...f("email")} /></Field>
+        <Field label="E-mail"><input required={requiredForSeller || forOrder} type="email" placeholder="nome@empresa.com.br" {...f("email")} /></Field>
         <Field label="Cidade / UF" span={2}>
           <div className="city-row">
             <input required={required} placeholder="Cidade" {...f("city")} />

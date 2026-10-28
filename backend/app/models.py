@@ -25,7 +25,9 @@ PRICE_TABLES = ["wholesale", "retail"]  # wholesale = registered price; retail =
 ENTRY_KINDS = ["receivable", "payable"]
 # Business content, so in Portuguese; a payable's category must be one of these
 PAYABLE_CATEGORIES = ["Matéria-prima", "Aluguel", "Salários", "Impostos", "Energia", "Manutenção", "Outros"]
-LEAD_STATUSES = ["pending", "new", "converted", "discarded"]  # pending = aguardando liberação (admin only)
+LEAD_STATUSES = ["pending", "contacted", "new", "converted", "discarded"]
+# pending: no contact yet · contacted: the admin talked to the store (Primeiro contato) · both admin only
+# until released to the seller (new)
 DISCARD_REASONS = ["closed", "not_target", "competitor", "not_recommended", "no_answer", "other"]
 CONTACT_CHANNELS = ["whatsapp", "call", "visit", "email"]
 

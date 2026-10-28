@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select, text
 
 from .config import settings
 from .database import Base, SessionLocal, engine
@@ -13,7 +13,8 @@ from .br_format import extract_state_registration, format_document, format_phone
 from . import clock
 from .lead_import import clear_interrupted
 from .leads import refresh_scores
-from .models import Customer, Lead, Product, User, size_key
+from .models import Contact, Customer, Lead, Product, User, size_key
+from .routers.leads import NO_ANSWER
 from .routers import auth, colors, contacts, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
@@ -70,6 +71,15 @@ def _drop_lead_phones():
             refresh_scores(db, clock.today_br())
 
 
+def _contacted_leads():
+    """Pending leads the admin already talked to (a contact other than "Não respondeu") go to Primeiro contato
+    (contacted), the only status that can be released. Idempotent."""
+    with SessionLocal() as db:
+        talked = select(Contact.lead_id).where(Contact.lead_id.isnot(None), Contact.notes.is_distinct_from(NO_ANSWER))
+        db.query(Lead).filter(Lead.status == "pending", Lead.id.in_(talked))           .update({"status": "contacted"}, synchronize_session=False)
+        db.commit()
+
+
 def _sort_product_sizes():
     """Sizes used to be saved in the order they were ticked ("GG,P,M"); store them in SIZE_ORDER ("P,M,GG").
     Idempotent: products already in order are left alone."""
@@ -119,6 +129,7 @@ async def lifespan(app: FastAPI):
                               "released_at": "TIMESTAMP", "score": "INTEGER", "city_active": "INTEGER",
                               "edited": "BOOLEAN DEFAULT FALSE"})
     _drop_lead_phones()
+    _contacted_leads()
     with SessionLocal() as db:
         if not db.query(User).first():  # first run: create the administrator
             db.add(User(name="Administrador", email=settings.admin_email,

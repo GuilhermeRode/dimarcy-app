@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { dateBR, initials, localDate, whatsappUrl } from "../format";
 import { ErrorBox } from "../components/ui";
@@ -9,6 +10,7 @@ export default function FollowUps() {
   const [error, setError] = useState("");
   const [target, setTarget] = useState(null);
   const today = localDate();
+  const nav = useNavigate();
 
   const load = () => api.get("/contacts/due")
     .then((r) => { setRows(r.data); setError(""); })
@@ -22,6 +24,9 @@ export default function FollowUps() {
           <h1>Retornos</h1>
           <p className="muted">Contatos que você combinou de retomar até hoje. Registrar o novo contato tira da lista.</p>
         </div>
+        <div className="header-actions">
+          <button className="btn" onClick={() => nav("/leads")}>← Prospecção</button>
+        </div>
       </header>
       <ErrorBox msg={error} />
       <section className="customers-table">
@@ -34,7 +39,7 @@ export default function FollowUps() {
                 <span className="customer-avatar">{initials(r.name)}</span>
                 <span>
                   <strong>{r.name}</strong>
-                  <small>{r.kind === "lead" ? "Lead" : "Cliente"} · último: {CHANNELS[r.channel] ?? r.channel}{r.notes ? ` — ${r.notes}` : ""}</small>
+                  <small>{r.kind === "lead" ? "Lead" : "Cliente"} · {r.seller_name ? `vendedor ${r.seller_name}` : "sem vendedor"} · feito por {r.user_name}: {CHANNELS[r.channel] ?? r.channel}{r.notes ? ` — ${r.notes}` : ""}</small>
                 </span>
               </span>
               <span className={r.next_action_date < today ? "followup-late" : "followup-today"}>

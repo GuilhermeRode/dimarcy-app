@@ -32,6 +32,7 @@ export default function CustomerPanel({ customer: c, isAdmin, onClose, onEdit })
           : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
         <button type="button" className="btn" onClick={onEdit}>Editar</button>
       </div>
+      <ContactHistory target={{ customer_id: c.id }} />
       <div className="customer-panel-stats">
         {stats.map(([l, v]) => <div key={l}><span>{l}</span><strong>{v}</strong></div>)}
       </div>
@@ -61,7 +62,6 @@ export default function CustomerPanel({ customer: c, isAdmin, onClose, onEdit })
           ))}
         </div>
       )}
-      <ContactHistory target={{ customer_id: c.id }} />
     </aside>
   );
 }

@@ -53,8 +53,10 @@ export default function Leads() {
   const [busy, setBusy] = useState(false);
   const [releaseTo, setReleaseTo] = useState("");  // "" = each lead's city seller
   const [importCfg, setImportCfg] = useState(null);
-  const pending = isAdmin && filters.tab === "pending";
-  const week = pending && data?.week;  // only when a seller is picked
+  // admin tabs: Pendentes (no contact yet) -> Primeiro contato (talked to the store; only these can be released) -> Liberados
+  const queue = isAdmin && filters.tab !== "new";
+  const releasing = isAdmin && filters.tab === "contacted";
+  const week = releasing && data?.week;  // only when a seller is picked
   const suggested = week ? Math.max(week.quota - week.released, 0) : 0;
 
   const [statusError, setStatusError] = useState(false);
@@ -89,7 +91,7 @@ export default function Leads() {
     if (importCfg.lead_import_started_at) return `Importando desde ${hhmm(importCfg.lead_import_started_at)}…`;
     const [y, m] = (importCfg.last_lead_import_month || "").split("-");
     if (!y) return "Ainda não houve importação.";
-    return `Última importação: dados de ${m}/${y} (${utc(importCfg.last_lead_import_at).toLocaleDateString("pt-BR")})`;
+    return `Importação: dados de ${m}/${y} · ${utc(importCfg.last_lead_import_at).toLocaleDateString("pt-BR")}`;
   }
 
   const [catalogUrl, setCatalogUrl] = useState(null);
@@ -136,7 +138,7 @@ export default function Leads() {
     const others = Object.entries(r.skipped_other_seller || {});
     setChecked(new Set());
     setSelectedId(null);
-    // skipped rows stay pending on the server, so reload instead of dropping them locally
+    // skipped rows stay in Primeiro contato on the server, so reload instead of dropping them locally
     if (r.skipped_no_seller > 0 || others.length) load(0);
     else setData((d) => ({ ...d, items: d.items.filter((l) => !gone.has(l.id)), total: d.total - ids.length }));
     setNotice([
@@ -152,7 +154,7 @@ export default function Leads() {
     try {
       while (rows.length < Math.min(suggested, data.total)) {
         const { data: d } = await api.get("/leads", { params: {
-          status: "pending", seller_id: filters.seller, search: filters.search, city: filters.city,
+          status: "contacted", seller_id: filters.seller, search: filters.search, city: filters.city,
           offset: rows.length, limit: Math.min(suggested - rows.length, 200) } });
         if (!d.items.length) break;
         rows = [...rows, ...d.items];
@@ -181,18 +183,12 @@ export default function Leads() {
     e.preventDefault();
     if (editing.busy) return;
     setEditing({ ...editing, busy: true, error: "" });
-    const { id, name, phone, email, address, cnpj, city, state, sellerId } = editing;
+    const { id, name, phone, email, address, cnpj, city, state } = editing;
     try {
-      if (!id) {  // new lead: created pending, then released like any other (its city may join the seller's region)
-        const { data: lead } = await api.post("/leads", { name, phone, email, address, cnpj, city, state });
+      if (!id) {  // new lead: the admin's starts in Pendentes (first contact, then release); a seller's is already theirs
+        await api.post("/leads", { name, phone, email, address, cnpj, city, state });
         setEditing(null);
-        if (!isAdmin) setNotice("Lead cadastrado. Ele já está na sua lista.");
-        else if (sellerId) {
-          try {
-            const { data: r } = await api.post("/leads/release", { ids: [lead.id], seller_id: Number(sellerId) });
-            afterRelease([lead.id], r);
-          } catch (err) { setError(`Lead cadastrado, mas não foi liberado: ${errorMessage(err)}`); }
-        } else setNotice("Lead cadastrado em Pendentes. Libere para um vendedor quando quiser.");
+        setNotice(isAdmin ? "Lead cadastrado em Pendentes. Depois do primeiro contato, libere para o vendedor." : "Lead cadastrado. Ele já está na sua lista.");
         load(0);
         return;
       }
@@ -233,7 +229,6 @@ export default function Leads() {
       <header className="page-header">
         <div>
           <h1>Prospecção</h1>
-          <p className="muted">Lojas de roupa da sua região que ainda não compram da Di Marcy.</p>
           {isAdmin && statusError && !importCfg && <p className="muted import-status">Não foi possível carregar o status da importação.</p>}
           {isAdmin && importCfg && (
             <p className="muted import-status">
@@ -247,7 +242,7 @@ export default function Leads() {
         </div>
         <div className="header-actions">
           {(isAdmin || myCities.length > 0) && <button className="btn btn-primary" onClick={() => setEditing({ name: "", phone: "", email: "", address: "",
-            cnpj: "", city: "", state: "", sellerId: "" })}>+ Novo lead</button>}
+            cnpj: "", city: "", state: "" })}>+ Novo lead</button>}
           {isAdmin && <button className="btn" onClick={importNow} disabled={!!importCfg?.lead_import_started_at}>Atualizar agora</button>}
           <button className="btn" onClick={() => nav("/follow-ups")}>Retornos</button>
         </div>
@@ -255,7 +250,7 @@ export default function Leads() {
 
       {isAdmin && (
         <nav className="tabs-underline" aria-label="Status dos leads">
-          {[["pending", "Aguardando liberação"], ["new", "Liberados"]].map(([k, label]) => (
+          {[["pending", "Pendentes"], ["contacted", "Primeiro contato"], ["new", "Liberados"]].map(([k, label]) => (
             <button key={k} type="button" className={filters.tab === k ? "active" : ""}
               onClick={() => { setNotice(""); setFilters({ ...filters, tab: k }); }}>{label}</button>
           ))}
@@ -283,8 +278,10 @@ export default function Leads() {
 
       {data && data.total === 0 && !filters.search && !filters.city && filters.seller === "" ? (
         <p className="customers-empty">
-          {pending
-            ? "Nenhuma loja aguardando liberação. Clique em Atualizar agora ou aguarde a importação da madrugada."
+          {isAdmin && filters.tab === "pending"
+            ? "Nenhuma loja pendente. Clique em Atualizar agora ou aguarde a importação da madrugada."
+            : releasing
+            ? "Nenhuma loja em primeiro contato. Fale com uma loja de Pendentes (WhatsApp → Contato feito) e ela aparece aqui."
             : isAdmin
             ? "Nenhum lead ainda. Defina as cidades de cada vendedor em Usuários; a importação da Receita traz as lojas na madrugada seguinte."
             : "Nenhum lead disponível na sua região agora. Se você ainda não tem cidades cadastradas, peça ao administrador."}
@@ -292,10 +289,10 @@ export default function Leads() {
       ) : (
         <div className={`customers-layout ${selected ? "with-panel" : ""}`}>
           <section className="customers-table">
-            <div className={`customers-row leads-row head ${isAdmin ? "admin" : ""} ${pending ? "picking" : ""}`}>
+            <div className={`customers-row leads-row head ${isAdmin ? "admin" : ""} ${queue ? "picking" : ""}`}>
               <span>Loja</span><span>Telefone</span>{isAdmin && <span>Vendedor</span>}<span>Abertura</span>
             </div>
-            {pending && (
+            {queue && (
               <div className="leads-toolbar">
                 {week ? (
                   <>
@@ -315,17 +312,19 @@ export default function Leads() {
                   onClick={() => setDiscarding({ ids: [...checked], name: `${checked.size} ${checked.size === 1 ? "loja" : "lojas"}`, reason: "not_recommended" })}>
                   Não recomendar ({checked.size})
                 </button>
-                <PillSelect label="Liberar para" value={releaseTo} onChange={setReleaseTo} className="pill-release"
-                  options={[["", "Vendedor da cidade"], ...sellers.map((s) => [String(s.id), sellerLabel(s)])]} />
-                <button type="button" className="btn btn-primary" disabled={!checked.size || busy}
-                  title={releaseTo ? "Lojas de cidades sem vendedor vão para este vendedor, e a cidade entra na região dele" : undefined}
-                  onClick={() => release([...checked], releaseTo)}>Liberar ({checked.size})</button>
+                {releasing && <>
+                  <PillSelect label="Liberar para" value={releaseTo} onChange={setReleaseTo} className="pill-release"
+                    options={[["", "Vendedor da cidade"], ...sellers.map((s) => [String(s.id), sellerLabel(s)])]} />
+                  <button type="button" className="btn btn-primary" disabled={!checked.size || busy}
+                    title={releaseTo ? "Lojas de cidades sem vendedor vão para este vendedor, e a cidade entra na região dele" : undefined}
+                    onClick={() => release([...checked], releaseTo)}>Liberar ({checked.size})</button>
+                </>}
               </div>
             )}
             {items.map((l) => (
-              <div key={l.id} className={pending ? `lead-pick ${l.id === selectedId ? "on" : ""}` : undefined}
-                style={pending ? undefined : { display: "contents" }}>
-              {pending && <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Selecionar ${l.name}`} />}
+              <div key={l.id} className={queue ? `lead-pick ${l.id === selectedId ? "on" : ""}` : undefined}
+                style={queue ? undefined : { display: "contents" }}>
+              {queue && <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Selecionar ${l.name}`} />}
               <button type="button" onClick={() => { setSelectedId(l.id); setNotice(""); }}
                 className={`customers-row leads-row ${isAdmin ? "admin" : ""} ${l.id === selectedId ? "on" : ""}`}>
                 <span className="customers-cell-main">
@@ -355,7 +354,11 @@ export default function Leads() {
           {selected && (
             <LeadPanel key={selected.id} lead={selected} isAdmin={isAdmin} sellers={sellers} onClose={() => setSelectedId(null)}
               onReleased={(r) => afterRelease([selected.id], r)}
-              onContacted={() => refreshContact(selected.id)}
+              onContacted={() => {
+                if (selected.status !== "pending") return refreshContact(selected.id);
+                drop(selected.id);  // the admin's first contact: on to Primeiro contato
+                setNotice(`${selected.name} foi para Primeiro contato. Libere para o vendedor quando a loja tiver interesse.`);
+              }}
               catalogUrl={catalogUrl}
               onNoAnswer={(r) => {
                 if (r.discarded) { drop(selected.id); setNotice("3 tentativas sem resposta: a loja foi descartada."); }
@@ -364,7 +367,7 @@ export default function Leads() {
               onEdit={() => setEditing({ id: selected.id, name: selected.name, phone: selected.phone || "",
                 email: selected.email || "", address: selected.address || "" })}
               onDiscard={() => setDiscarding({ id: selected.id, name: selected.name, reason: "closed" })}
-              onConvert={() => setConverting({
+              onOrder={() => setConverting({
                 ...EMPTY_CUSTOMER, name: selected.name, document: formatCnpj(selected.cnpj),
                 phone: selected.phone || "", email: selected.email || "", city: selected.city,
                 state: selected.state, address: selected.address || "", owner_id: selected.seller_id || "",
@@ -375,9 +378,9 @@ export default function Leads() {
       )}
 
       {converting && (
-        <CustomerFormModal initial={converting} isAdmin={isAdmin} submitUrl={`/leads/${converting.leadId}/convert`}
+        <CustomerFormModal initial={converting} isAdmin={isAdmin} forOrder submitUrl={`/leads/${converting.leadId}/convert`}
           onClose={() => setConverting(null)} onConflict={() => alreadyHandled(converting.leadId)}
-          onSaved={() => { drop(converting.leadId); setConverting(null); setNotice("Cliente cadastrado. Ele já aparece em Clientes."); }} />
+          onSaved={(c) => nav(`/orders/new?customer=${c.id}`)} />
       )}
 
       {editing && (
@@ -416,14 +419,6 @@ export default function Leads() {
             <Field label="Endereço" span={2}>
               <input maxLength={250} value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} />
             </Field>
-            {isAdmin && !editing.id && (
-              <Field label="Liberar para (opcional)" span={2}>
-                <select value={editing.sellerId} onChange={(e) => setEditing({ ...editing, sellerId: e.target.value })}>
-                  <option value="">Deixar em Pendentes</option>
-                  {sellers.map((s) => <option key={s.id} value={s.id}>{s.role === "admin" ? `${s.name} (admin)` : s.name}</option>)}
-                </select>
-              </Field>
-            )}
             <div className="span-2"><ErrorBox msg={editing.error} /></div>
             <div className="actions span-2"><button className="btn btn-primary" disabled={editing.busy}>Salvar</button></div>
           </form>

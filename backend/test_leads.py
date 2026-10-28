@@ -326,6 +326,7 @@ def check_contacts(ctx):
 
     due = c.get("/api/contacts/due", headers=ctx["a"]).json()
     assert [(d["name"], d["kind"], d["notes"]) for d in due] == [("Loja Contato", "lead", "Pediu catálogo")], due
+    assert due[0]["seller_name"] and due[0]["user_name"], due  # "vendedor X · feito por Y"
     assert c.get("/api/contacts/due", headers=admin).json() == []  # reminders belong to who set them
     assert c.get("/api/dashboard", headers=ctx["a"]).json()["alerts"]["follow_ups_due"] == 1
 
@@ -473,7 +474,15 @@ def check_pending_release(ctx):
     assert set(got) == {pa, pb, pn} and got[pa]["size"] == "me", got
     assert c.post("/api/leads/release", headers=a, json={"ids": [pa]}).status_code == 403
     assert c.post("/api/leads/release", headers=admin, json={"ids": []}).status_code == 422
-    week = lambda uid: c.get("/api/leads", headers=admin, params={"status": "pending", "seller_id": uid}).json()["week"]  # noqa: E731
+    # release only after the admin's first contact: pending -> contacted ("Primeiro contato") -> new
+    assert c.post("/api/leads/release", headers=admin, json={"ids": [pa]}).json()["released"] == 0
+    for lid in (pa, pb, pn):
+        assert c.post("/api/contacts", headers=admin, json={"lead_id": lid, "channel": "whatsapp"}).status_code == 201
+    r = c.get("/api/leads", headers=admin, params={"status": "contacted", "limit": 200})
+    assert {pa, pb, pn} <= {x["id"] for x in r.json()["items"]}, r.text
+    assert not {pa, pb, pn} & {x["id"] for x in c.get("/api/leads", headers=admin, params={"status": "pending", "limit": 200}).json()["items"]}
+    assert c.get(f"/api/leads/{pa}", headers=a).status_code == 404  # still the admin's
+    week = lambda uid: c.get("/api/leads", headers=admin, params={"status": "contacted", "seller_id": uid}).json()["week"]  # noqa: E731
     assert week(ctx["a_id"]) == {"released": 0, "quota": 20}
     r = c.post("/api/leads/release", headers=admin, json={"ids": [pa, pb, pn]})
     assert r.json() == {"released": 2, "skipped_no_seller": 1, "skipped_other_seller": {}, "cities_added": []}, r.text
@@ -485,8 +494,8 @@ def check_pending_release(ctx):
     assert r.json()["released"] == 0, r.text
 
     # "Liberar para": a city with no seller joins the chosen seller's region; another seller's city stays theirs
-    pz = add_lead("80000000000191", "Pend Cidade Livre", city="Cidade Livre", status="pending")
-    pg = add_lead("80000000000192", "Pend Guaramirim 2", city="Guaramirim", status="pending")
+    pz = add_lead("80000000000191", "Pend Cidade Livre", city="Cidade Livre", status="contacted")
+    pg = add_lead("80000000000192", "Pend Guaramirim 2", city="Guaramirim", status="contacted")
     assert c.post("/api/leads/release", headers=admin, json={"ids": [pz], "seller_id": 99999}).status_code == 400
     r = c.post("/api/leads/release", headers=admin, json={"ids": [pz, pg], "seller_id": ctx["a_id"]})
     got = r.json()
@@ -495,8 +504,18 @@ def check_pending_release(ctx):
     assert c.get(f"/api/leads/{pz}", headers=a).status_code == 200
     assert "Cidade Livre" in [x["city"] for x in c.get(f"/api/users/{ctx['a_id']}/cities", headers=admin).json()]
     assert c.post("/api/leads/release", headers=admin, json={"ids": [pg]}).json()["released"] == 1  # to its city's seller
+    # a return the admin scheduled before releasing passes to the seller
+    pr = add_lead("80000000000194", "Pend Retorno", status="pending")
+    r = c.post("/api/contacts", headers=admin, json={"lead_id": pr, "channel": "whatsapp", "notes": "Pediu para retornar depois",
+                                                      "next_action_date": TODAY.isoformat()})
+    assert r.status_code == 201, r.text
+    due_names = lambda h: [d["name"] for d in c.get("/api/contacts/due", headers=h).json()]  # noqa: E731
+    assert "Pend Retorno" in due_names(admin) and "Pend Retorno" not in due_names(a)
+    assert c.post("/api/leads/release", headers=admin, json={"ids": [pr]}).json()["released"] == 1
+    assert "Pend Retorno" in due_names(a) and "Pend Retorno" not in due_names(admin)
+    assert c.post(f"/api/leads/{pr}/discard", headers=admin, json={"reason": "other"}).status_code == 204
     # the admin can take leads like a seller: the city joins the admin's region
-    pq = add_lead("80000000000193", "Pend Para Admin", city="Cidade do Admin", status="pending")
+    pq = add_lead("80000000000193", "Pend Para Admin", city="Cidade do Admin", status="contacted")
     r = c.post("/api/leads/release", headers=admin, json={"ids": [pq], "seller_id": ctx["admin_id"]})
     assert r.json()["released"] == 1 and r.json()["cities_added"] == ["Cidade do Admin/SC"], r.text
     mine = c.get("/api/leads", headers=admin, params={"seller_id": ctx["admin_id"]}).json()["items"]
@@ -528,6 +547,17 @@ def check_pending_release(ctx):
     assert c.delete(f"/api/customers/{cu['id']}", headers=admin).status_code == 204
     with SessionLocal() as db:
         assert db.get(Lead, lo).status == "pending"
+
+    # startup: pending leads the admin already talked to move to "Primeiro contato"; "Não respondeu" doesn't count
+    from app.main import _contacted_leads
+    talked, silent = add_lead("80000000000106", "Ja Falei", status="pending"), add_lead("80000000000107", "Mudo", status="pending")
+    assert c.post(f"/api/leads/{silent}/no-answer", headers=admin).status_code == 200
+    with SessionLocal() as db:
+        db.add(Contact(lead_id=talked, user_id=ctx["admin_id"], channel="whatsapp"))
+        db.commit()
+    _contacted_leads()
+    with SessionLocal() as db:
+        assert (db.get(Lead, talked).status, db.get(Lead, silent).status) == ("contacted", "pending")
 
 
 def _check_import_now(ctx, calls, settings_router):

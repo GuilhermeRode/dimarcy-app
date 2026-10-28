@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
 from .br_format import format_phone
 from .models import SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
@@ -17,6 +17,8 @@ from .sales import _city_key
 from .settings_store import get_app_settings
 
 REGION_ROLES = ("seller", "admin")  # an admin may also keep a region and work leads like a seller
+ADMIN_QUEUE = ("pending", "contacted")  # the admin's first contact, before releasing to the seller
+QUEUE = (*ADMIN_QUEUE, "new")  # the statuses the Prospecção list shows (and that get a score)
 ESTABLISHED_DAYS = 5 * 365  # opened within 5 years: past the first months, still choosing suppliers
 
 
@@ -27,7 +29,7 @@ def normalize_cnpj(value: str | None) -> str:
 
 def city_owners(db: Session) -> dict[tuple[str, str], User]:
     """(city_key, state) -> the ACTIVE seller whose region has that city."""
-    rows = db.query(SellerCity).join(User, SellerCity.user_id == User.id).filter(User.active.is_(True), User.role.in_(REGION_ROLES)).all()
+    rows = db.query(SellerCity).join(User, SellerCity.user_id == User.id).options(contains_eager(SellerCity.user))              .filter(User.active.is_(True), User.role.in_(REGION_ROLES)).all()
     return {(r.city_key, r.state): r.user for r in rows}
 
 
@@ -54,7 +56,7 @@ def visible_lead(db: Session, user: User, lead_id: int) -> Lead:
     check_leads_open(db, user)
     lead = db.get(Lead, lead_id)
     if lead and user.role != "admin":
-        if lead.status == "pending":  # awaiting admin release: invisible to sellers
+        if lead.status in ADMIN_QUEUE:  # awaiting admin release: invisible to sellers
             raise HTTPException(404, "Lead não encontrado.")
         owner = lead_owner(city_owners(db), lead)
         if not owner or owner.id != user.id:
@@ -113,9 +115,6 @@ def lead_score(lead: Lead, active_in_city: int, today: date, shared_phone: bool 
             + (2 if lead.opened_at and (today - lead.opened_at).days <= ESTABLISHED_DAYS else 0)
             + (1 if lead.email else 0)
             + min(active_in_city, 3))
-
-
-QUEUE = ("pending", "new")  # the statuses the Prospecção list shows (and that get a score)
 
 
 def refresh_scores(db: Session, today: date) -> int:
@@ -203,34 +202,41 @@ def lead_out(lead: Lead, owner: User | None) -> dict:
 
 
 def due_follow_ups(db: Session, user: User, today: date) -> list[dict]:
-    """The user's pending follow-ups: for each lead/customer, its LATEST contact, when that contact
-    was registered by this user and its next_action_date is today or earlier. Discarded/converted
-    leads and anything the user can no longer see are left out."""
+    """The user's pending follow-ups: for each lead/customer, its LATEST contact, when its next_action_date
+    is today or earlier and the follow-up is the user's: whoever registered the contact, except a released
+    lead's, which belongs to its seller (a return the admin scheduled before releasing passes to the seller).
+    Discarded/converted leads and anything the user can no longer see are left out."""
     latest: dict[tuple, Contact] = {}
     # ponytail: every contact in Python; a "latest per target" subquery if this grows past ~50k contacts
     for ct in db.query(Contact).order_by(Contact.id):
         latest[(ct.lead_id, ct.customer_id)] = ct
-    owners = city_owners(db) if user.role != "admin" else {}
+    due = [ct for ct in latest.values() if ct.next_action_date and ct.next_action_date <= today]
+    if not due:
+        return []
+    owners = city_owners(db)
+    names = dict(db.query(User.id, User.name))  # "vendedor X · feito por Y" without a query per row
     with_leads = leads_open(db, user)  # Prospecção off for sellers: their lead follow-ups wait too
     rows = []
-    for ct in latest.values():
-        if ct.user_id != user.id or ct.next_action_date is None or ct.next_action_date > today:
-            continue
+    for ct in due:
         if ct.lead_id:
             if not with_leads:
                 continue
             target, kind = ct.lead, "lead"
-            if target is None or target.status not in (("pending", "new") if user.role == "admin" else ("new",)):
+            if target is None or target.status not in QUEUE:
                 continue
-            if user.role != "admin" and getattr(lead_owner(owners, target), "id", None) != user.id:
+            seller = lead_owner(owners, target)
+            if (seller.id if target.status == "new" and seller else ct.user_id) != user.id:
                 continue
+            seller_name = seller.name if seller else None
         else:
             target, kind = ct.customer, "customer"
-            if target is None:
+            if target is None or ct.user_id != user.id:
                 continue
             if user.role != "admin" and target.owner_id != user.id:
                 continue
+            seller_name = names.get(target.owner_id)
         rows.append({"contact_id": ct.id, "lead_id": ct.lead_id, "customer_id": ct.customer_id,
                      "name": target.name, "kind": kind, "phone": target.phone, "channel": ct.channel,
+                     "seller_name": seller_name, "user_name": names.get(ct.user_id),
                      "notes": ct.notes, "next_action_date": ct.next_action_date, "last_contact_at": ct.created_at})
     return sorted(rows, key=lambda r: (r["next_action_date"], r["name"]))
