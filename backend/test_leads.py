@@ -511,8 +511,12 @@ def check_pending_release(ctx):
     assert r.status_code == 201, r.text
     due_names = lambda h: [d["name"] for d in c.get("/api/contacts/due", headers=h).json()]  # noqa: E731
     assert "Pend Retorno" in due_names(admin) and "Pend Retorno" not in due_names(a)
+    c.post("/api/users", headers=admin, json={"name": "Outro Admin", "email": "adm2@t.com",
+                                                          "password": "admin2-pass-123", "role": "admin"})
+    admin2 = login(c, "adm2@t.com", "admin2-pass-123")
+    assert "Pend Retorno" in due_names(admin2)  # before release: every admin's
     assert c.post("/api/leads/release", headers=admin, json={"ids": [pr]}).json()["released"] == 1
-    assert "Pend Retorno" in due_names(a) and "Pend Retorno" not in due_names(admin)
+    assert "Pend Retorno" in due_names(a) and "Pend Retorno" not in due_names(admin) and "Pend Retorno" not in due_names(admin2)
     assert c.post(f"/api/leads/{pr}/discard", headers=admin, json={"reason": "other"}).status_code == 204
     # the admin can take leads like a seller: the city joins the admin's region
     pq = add_lead("80000000000193", "Pend Para Admin", city="Cidade do Admin", status="contacted")

@@ -203,8 +203,8 @@ def lead_out(lead: Lead, owner: User | None) -> dict:
 
 def due_follow_ups(db: Session, user: User, today: date) -> list[dict]:
     """The user's pending follow-ups: for each lead/customer, its LATEST contact, when its next_action_date
-    is today or earlier and the follow-up is the user's: whoever registered the contact, except a released
-    lead's, which belongs to its seller (a return the admin scheduled before releasing passes to the seller).
+    is today or earlier and the follow-up is the user's: whoever registered the contact, except a lead's —
+    every admin's while it's in the admin queue, its seller's once released (the admin's return passes on).
     Discarded/converted leads and anything the user can no longer see are left out."""
     latest: dict[tuple, Contact] = {}
     # ponytail: every contact in Python; a "latest per target" subquery if this grows past ~50k contacts
@@ -225,7 +225,10 @@ def due_follow_ups(db: Session, user: User, today: date) -> list[dict]:
             if target is None or target.status not in QUEUE:
                 continue
             seller = lead_owner(owners, target)
-            if (seller.id if target.status == "new" and seller else ct.user_id) != user.id:
+            if target.status in ADMIN_QUEUE:
+                if user.role != "admin":
+                    continue
+            elif (seller.id if seller else ct.user_id) != user.id:
                 continue
             seller_name = seller.name if seller else None
         else:
