@@ -540,7 +540,7 @@ def check_pending_release(ctx):
     finally:
         settings_router._spawn_import = real_spawn
 
-    # admin follow-ups include pending leads; a seller-less lead goes back to pending when its customer is deleted
+    # admin follow-ups include pending leads; a seller-less lead goes back to Primeiro contato (releasable) when its customer is deleted
     pf = add_lead("80000000000104", "Pend Follow", city="Cidade Sem Vendedor", status="pending")
     r = c.post("/api/contacts", headers=admin, json={"lead_id": pf, "channel": "call", "notes": "x",
                                                       "next_action_date": (TODAY - timedelta(days=1)).isoformat()})
@@ -550,7 +550,7 @@ def check_pending_release(ctx):
     cu = c.post(f"/api/leads/{lo}/convert", headers=admin, json={**REQ, "name": "Sem Dono", "document": "80000000000105"}).json()
     assert c.delete(f"/api/customers/{cu['id']}", headers=admin).status_code == 204
     with SessionLocal() as db:
-        assert db.get(Lead, lo).status == "pending"
+        assert db.get(Lead, lo).status == "contacted"
 
     # startup: pending leads the admin already talked to move to "Primeiro contato"; "Não respondeu" doesn't count
     from app.main import _contacted_leads

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock, lead_import
 from ..database import get_db
-from ..leads import (QUEUE, REGION_ROLES, check_leads_open, city_owners, customer_cnpjs, ensure_scores, lead_out, lead_owner, normalize_cnpj, rank_order,
+from ..leads import (NO_ANSWER, QUEUE, REGION_ROLES, check_leads_open, city_owners, customer_cnpjs, ensure_scores, lead_out, lead_owner, normalize_cnpj, rank_order,
                      ranked_leads, released_this_week, visible_lead)
 from ..models import Contact, Lead, SellerCity, User
 from ..sales import _city_key
@@ -180,7 +180,6 @@ def convert(lid: int, background_tasks: BackgroundTasks, body: dict = Body(...),
     return c
 
 
-NO_ANSWER = "Não respondeu"
 NO_ANSWER_RETRY_DAYS, NO_ANSWER_LIMIT = 7, 3
 
 

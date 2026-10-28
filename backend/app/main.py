@@ -12,9 +12,8 @@ from .database import Base, SessionLocal, engine
 from .br_format import extract_state_registration, format_document, format_phone, format_state_registration
 from . import clock
 from .lead_import import clear_interrupted
-from .leads import refresh_scores
+from .leads import NO_ANSWER, refresh_scores
 from .models import Contact, Customer, Lead, Product, User, size_key
-from .routers.leads import NO_ANSWER
 from .routers import auth, colors, contacts, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
@@ -76,7 +75,8 @@ def _contacted_leads():
     (contacted), the only status that can be released. Idempotent."""
     with SessionLocal() as db:
         talked = select(Contact.lead_id).where(Contact.lead_id.isnot(None), Contact.notes.is_distinct_from(NO_ANSWER))
-        db.query(Lead).filter(Lead.status == "pending", Lead.id.in_(talked))           .update({"status": "contacted"}, synchronize_session=False)
+        db.query(Lead).filter(Lead.status == "pending", Lead.id.in_(talked)) \
+          .update({"status": "contacted"}, synchronize_session=False)
         db.commit()
 
 

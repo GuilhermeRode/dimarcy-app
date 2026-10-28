@@ -171,6 +171,6 @@ def delete(cid: int, db: Session = Depends(get_db), user: User = Depends(get_cur
     else:
         contacts.delete(synchronize_session=False)
     for lead in leads:
-        lead.status, lead.customer_id = ("new" if lead_owner(owners, lead) else "pending"), None
+        lead.status, lead.customer_id = ("new" if lead_owner(owners, lead) else "contacted"), None
     db.delete(c)
     db.commit()

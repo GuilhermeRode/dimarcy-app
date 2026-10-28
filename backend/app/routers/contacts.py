@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..database import get_db
-from ..leads import QUEUE, due_follow_ups, visible_lead
+from ..leads import NO_ANSWER, QUEUE, due_follow_ups, visible_lead
 from ..models import Contact, Lead, User
 from ..schemas import ContactIn
 from ..security import get_current_user
@@ -46,7 +46,7 @@ def create(data: ContactIn, db: Session = Depends(get_db), user: User = Depends(
     _check_target(db, user, data.lead_id, data.customer_id, writing=True)
     ct = Contact(user_id=user.id, **data.model_dump())
     db.add(ct)
-    if data.lead_id:  # the admin's first contact moves the lead to "Primeiro contato", where it can be released
+    if data.lead_id and data.notes != NO_ANSWER:  # the admin's first contact: on to "Primeiro contato", where it can be released
         db.query(Lead).filter(Lead.id == data.lead_id, Lead.status == "pending").update({"status": "contacted"})
     db.commit()
     db.refresh(ct)

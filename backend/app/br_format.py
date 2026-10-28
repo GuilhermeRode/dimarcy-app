@@ -20,10 +20,9 @@ def format_document(v: str | None) -> str | None:
 def format_phone(v: str | None) -> str | None:
     """(00) 0000-0000 or (00) 00000-0000, dropping a leading country code 55 or trunk 0. An old 8-digit
     mobile (starting with 6-9) gets the 9th digit every Brazilian mobile has had since 2016."""
-    d = _digits(v)
+    d = _digits(v).lstrip("0")  # trunk 0 ("047 3333-4444", "0xx47 ...") or "0055 ..."; no DDD starts with 0
     if len(d) > 11 and d.startswith("55"):
         d = d[2:]
-    d = d.lstrip("0")  # trunk 0: "047 3333-4444", "0xx47 ..."; no DDD starts with 0
     if len(d) == 10 and d[2] in "6789":
         d = d[:2] + "9" + d[2:]
     if len(d) == 10:

@@ -73,9 +73,9 @@ export function maskDocument(v) {
 // (00) 0000-0000 up to 10 digits, (00) 00000-0000 with 11; a pasted country code 55 and trunk 0
 // ("047 ...", "0xx47 ...") are dropped. The server adds the 9th digit to old 8-digit mobiles (format_phone).
 export function maskPhone(v) {
-  let d = digits(v);
+  let d = digits(v).replace(/^0+/, "");
   if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
-  d = d.replace(/^0+/, "").slice(0, 11);
+  d = d.slice(0, 11);
   if (!d) return "";
   const k = d.length > 10 ? 5 : 4;
   return `(${d.slice(0, 2)}` + (d.length > 2 ? `) ${d.slice(2, 2 + k)}` : "") + (d.length > 2 + k ? `-${d.slice(2 + k)}` : "");

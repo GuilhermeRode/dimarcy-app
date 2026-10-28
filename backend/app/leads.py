@@ -19,6 +19,7 @@ from .settings_store import get_app_settings
 REGION_ROLES = ("seller", "admin")  # an admin may also keep a region and work leads like a seller
 ADMIN_QUEUE = ("pending", "contacted")  # the admin's first contact, before releasing to the seller
 QUEUE = (*ADMIN_QUEUE, "new")  # the statuses the Prospecção list shows (and that get a score)
+NO_ANSWER = "Não respondeu"  # the note of a "Não respondeu" attempt: not a conversation with the store
 ESTABLISHED_DAYS = 5 * 365  # opened within 5 years: past the first months, still choosing suppliers
 
 
@@ -29,7 +30,8 @@ def normalize_cnpj(value: str | None) -> str:
 
 def city_owners(db: Session) -> dict[tuple[str, str], User]:
     """(city_key, state) -> the ACTIVE seller whose region has that city."""
-    rows = db.query(SellerCity).join(User, SellerCity.user_id == User.id).options(contains_eager(SellerCity.user))              .filter(User.active.is_(True), User.role.in_(REGION_ROLES)).all()
+    rows = db.query(SellerCity).join(User, SellerCity.user_id == User.id).options(contains_eager(SellerCity.user)) \
+             .filter(User.active.is_(True), User.role.in_(REGION_ROLES)).all()
     return {(r.city_key, r.state): r.user for r in rows}
 
 

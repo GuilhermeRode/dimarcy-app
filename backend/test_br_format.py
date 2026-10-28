@@ -15,6 +15,7 @@ assert phone("ramal 12") == "ramal 12"
 assert phone("4799735351") == "(47) 99973-5351"  # old 8-digit mobile gets the 9
 assert phone("(047) 99735-3510") == "(47) 99735-3510"
 assert phone("0xx47 3333-4444") == "(47) 3333-4444"
+assert phone("0055 47 99999-8888") == "(47) 99999-8888"
 assert phone("+55 (47) 9973-5351") == "(47) 99973-5351"
 
 assert ie("IE: 254.123.456") == ("254.123.456", None)

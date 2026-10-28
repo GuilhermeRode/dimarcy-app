@@ -125,8 +125,8 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, quickQuant
 
 // Older customers may predate the required fields; picking one for an order asks for them first.
 const REQUIRED_CUSTOMER_FIELDS = { document: "CPF/CNPJ", state_registration: "Inscrição estadual", phone: "Telefone", email: "E-mail", city: "Cidade", state: "UF", address: "Endereço" };
-// An admin may leave e-mail and IE blank (AdminCustomerIn on the server).
-const ADMIN_OPTIONAL = ["email", "state_registration"];
+// An admin may leave the IE blank (AdminCustomerIn on the server); the e-mail is still needed for an order.
+const ADMIN_OPTIONAL = ["state_registration"];
 const missingCustomerFields = (c, isAdmin) =>
   Object.entries(REQUIRED_CUSTOMER_FIELDS).filter(([k]) => !(isAdmin && ADMIN_OPTIONAL.includes(k)) && !String(c?.[k] || "").trim())
     .map(([, label]) => label);
@@ -173,7 +173,7 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
         )}
         <Field label="Telefone"><input required type="tel" inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" {...field("phone")}
           onChange={(e) => setF({ ...f, phone: maskPhone(e.target.value) })} /></Field>
-        <Field label="E-mail"><input required={!isAdmin} type="email" placeholder="nome@empresa.com.br" {...field("email")} /></Field>
+        <Field label="E-mail"><input required type="email" placeholder="nome@empresa.com.br" {...field("email")} /></Field>
         <Field label="Cidade / UF" span={2}>
           <div className="city-row">
             <input required placeholder="Cidade" {...field("city")} />
