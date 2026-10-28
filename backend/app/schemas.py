@@ -116,6 +116,17 @@ class CustomerIn(ORM):
         return format_state_registration(v, info.data.get("state"))  # state is declared above, so already in data
 
 
+class AdminCustomerIn(CustomerIn):
+    """An admin registering a customer: e-mail and IE may be left blank."""
+    email: str | None = None
+    state_registration: str | None = None
+
+    @field_validator("email", "state_registration", mode="before")
+    @classmethod
+    def _blank_is_none(cls, v):
+        return v.strip() or None if isinstance(v, str) else v
+
+
 class CustomerDraft(ORM):
     """An admin editing an existing customer (old/imported records often lack data): only the name is
     required, blanks are stored as empty, and whatever is filled in is formatted like CustomerIn."""

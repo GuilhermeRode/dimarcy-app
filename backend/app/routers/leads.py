@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from .. import clock, lead_import
@@ -10,10 +10,11 @@ from ..leads import (REGION_ROLES, check_leads_open, city_owners, customer_cnpjs
                      ranked_leads, released_this_week, visible_lead)
 from ..models import Contact, Lead, SellerCity, User
 from ..sales import _city_key
-from ..schemas import BulkDiscardIn, CustomerIn, CustomerOut, DiscardIn, LeadCreateIn, LeadEditIn, ReleaseToIn
+from ..br_format import format_phone
+from ..schemas import BulkDiscardIn, CustomerOut, DiscardIn, LeadCreateIn, LeadEditIn, ReleaseToIn
 from ..security import get_current_user, require_admin
 from ..settings_store import get_app_settings
-from .customers import add_customer, geocode_later
+from .customers import add_customer, geocode_later, new_customer_in
 
 
 def _leads_open(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -94,6 +95,13 @@ def discard_many(data: BulkDiscardIn, db: Session = Depends(get_db)):
     return {"discarded": done}
 
 
+@router.get("/my-cities")
+def my_cities(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """The user's region: where a seller may type in a lead of their own."""
+    return [{"city": r.city, "state": r.state}
+            for r in db.query(SellerCity).filter(SellerCity.user_id == user.id).order_by(SellerCity.city)]
+
+
 @router.get("/{lid}")
 def get_lead(lid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     lead = visible_lead(db, user, lid)
@@ -104,13 +112,14 @@ def _typed_fields(data: LeadEditIn) -> dict:
     fields = {k: (v or "").strip() or None for k, v in data.model_dump().items()}
     if not fields["name"]:
         raise HTTPException(422, "Informe o nome da loja.")
+    fields["phone"] = format_phone(fields["phone"])
     return fields
 
 
-@router.post("", dependencies=[Depends(require_admin)], status_code=201)
-def create_lead(data: LeadCreateIn, db: Session = Depends(get_db)):
-    """A lead typed in by the admin; it starts pending, like an imported one, and is released the same way.
-    edited=True: the import neither overwrites nor drops it."""
+@router.post("", status_code=201)
+def create_lead(data: LeadCreateIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """A lead typed in by hand; edited=True: the import neither overwrites nor drops it. The admin's starts
+    pending and is released the usual way; a seller's must be in their region and is already theirs (new)."""
     fields = _typed_fields(data)
     fields["cnpj"] = normalize_cnpj(fields["cnpj"])
     if len(fields["cnpj"]) != 14:
@@ -120,7 +129,13 @@ def create_lead(data: LeadCreateIn, db: Session = Depends(get_db)):
     if fields["cnpj"] in customer_cnpjs(db):
         raise HTTPException(409, "Esse CNPJ já é cliente.")
     fields["state"] = fields["state"].upper()
-    lead = Lead(**fields, city_key=_city_key(fields["city"]), status="pending", edited=True, seen_at=clock.today_br())
+    city_key = _city_key(fields["city"])
+    status = "pending"
+    if user.role != "admin":
+        if not db.query(SellerCity.id).filter_by(user_id=user.id, city_key=city_key, state=fields["state"]).first():
+            raise HTTPException(422, "Essa cidade não está na sua região.")
+        status = "new"  # no released_at: it doesn't use up the weekly release quota (released_this_week)
+    lead = Lead(**fields, city_key=city_key, status=status, edited=True, seen_at=clock.today_br())
     db.add(lead)
     db.commit()
     return lead_out(lead, lead_owner(city_owners(db), lead))
@@ -139,10 +154,11 @@ def edit_lead(lid: int, data: LeadEditIn, db: Session = Depends(get_db)):
 
 
 @router.post("/{lid}/convert", response_model=CustomerOut, status_code=201)
-def convert(lid: int, data: CustomerIn, background_tasks: BackgroundTasks,
+def convert(lid: int, background_tasks: BackgroundTasks, body: dict = Body(...),
             db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Lead -> customer in one transaction; the lead's contacts move to the customer."""
     lead = visible_lead(db, user, lid)
+    data = new_customer_in(body, user)
     if user.role == "admin":
         owner = lead_owner(city_owners(db), lead)
         owner_id = data.owner_id or (owner.id if owner else None)

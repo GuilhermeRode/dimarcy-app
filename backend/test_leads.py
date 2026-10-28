@@ -412,7 +412,13 @@ def check_edit(ctx):
         assert db.get(Lead, old).phone is None and db.get(Lead, lid).phone == "(47) 99999-1111"
     # a lead typed in by the admin: pending, kept by the import even when the Receita doesn't list it
     new = {**body, "cnpj": "70.000.000/0004-04", "city": "Joinville", "state": "sc"}
-    assert c.post("/api/leads", headers=a, json=new).status_code == 403
+    # a seller's: only in their region, and already theirs (new, not waiting for release)
+    assert c.post("/api/leads", headers=a, json=new).status_code == 422
+    assert c.get("/api/leads/my-cities", headers=a).json() == [{"city": "Jaraguá do Sul", "state": "SC"}]
+    r = c.post("/api/leads", headers=a, json={**new, "cnpj": "70000000000505", "city": "jaragua do sul"})
+    assert r.status_code == 201, r.text
+    assert (r.json()["status"], r.json()["seller_id"]) == ("new", ctx["a_id"]), r.json()
+    assert c.get(f"/api/leads/{r.json()['id']}", headers=a).status_code == 200
     assert c.post("/api/leads", headers=admin, json={**new, "cnpj": "123"}).status_code == 422
     r = c.post("/api/leads", headers=admin, json=new)
     assert r.status_code == 201, r.text

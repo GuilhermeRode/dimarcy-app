@@ -42,6 +42,7 @@ export default function Leads() {
   const [data, setData] = useState(null); // {items, total, cities}
   const [allCities, setAllCities] = useState([]);
   const [sellers, setSellers] = useState([]);
+  const [myCities, setMyCities] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [converting, setConverting] = useState(null);
   const [discarding, setDiscarding] = useState(null);
@@ -97,6 +98,7 @@ export default function Leads() {
   useEffect(() => {
     // admins can get leads too ("as if a seller"): every active user may own a region
     if (isAdmin) api.get("/users").then((r) => setSellers(r.data.filter((u) => u.active)));
+    else api.get("/leads/my-cities").then((r) => setMyCities(r.data)).catch(() => {});  // where a seller may add a lead
   }, [isAdmin]);
 
   async function load(offset = 0) {
@@ -184,7 +186,8 @@ export default function Leads() {
       if (!id) {  // new lead: created pending, then released like any other (its city may join the seller's region)
         const { data: lead } = await api.post("/leads", { name, phone, email, address, cnpj, city, state });
         setEditing(null);
-        if (sellerId) {
+        if (!isAdmin) setNotice("Lead cadastrado. Ele já está na sua lista.");
+        else if (sellerId) {
           try {
             const { data: r } = await api.post("/leads/release", { ids: [lead.id], seller_id: Number(sellerId) });
             afterRelease([lead.id], r);
@@ -243,7 +246,7 @@ export default function Leads() {
           )}
         </div>
         <div className="header-actions">
-          {isAdmin && <button className="btn btn-primary" onClick={() => setEditing({ name: "", phone: "", email: "", address: "",
+          {(isAdmin || myCities.length > 0) && <button className="btn btn-primary" onClick={() => setEditing({ name: "", phone: "", email: "", address: "",
             cnpj: "", city: "", state: "", sellerId: "" })}>+ Novo lead</button>}
           {isAdmin && <button className="btn" onClick={importNow} disabled={!!importCfg?.lead_import_started_at}>Atualizar agora</button>}
           <button className="btn" onClick={() => nav("/follow-ups")}>Retornos</button>
@@ -387,15 +390,25 @@ export default function Leads() {
               <Field label="CNPJ" span={2}>
                 <input required value={editing.cnpj} onChange={(e) => setEditing({ ...editing, cnpj: maskDocument(e.target.value) })} />
               </Field>
-              <Field label="Cidade">
-                <input required maxLength={100} value={editing.city} onChange={(e) => setEditing({ ...editing, city: e.target.value })} />
-              </Field>
-              <Field label="UF">
-                <input required minLength={2} maxLength={2} value={editing.state} onChange={(e) => setEditing({ ...editing, state: e.target.value.toUpperCase() })} />
-              </Field>
+              {isAdmin ? (<>
+                <Field label="Cidade">
+                  <input required maxLength={100} value={editing.city} onChange={(e) => setEditing({ ...editing, city: e.target.value })} />
+                </Field>
+                <Field label="UF">
+                  <input required minLength={2} maxLength={2} value={editing.state} onChange={(e) => setEditing({ ...editing, state: e.target.value.toUpperCase() })} />
+                </Field>
+              </>) : (
+                <Field label="Cidade (da sua região)" span={2}>
+                  <select required value={editing.city && `${editing.city}|${editing.state}`}
+                    onChange={(e) => { const [city, state] = e.target.value.split("|"); setEditing({ ...editing, city, state }); }}>
+                    <option value="">Escolha…</option>
+                    {myCities.map((c) => <option key={`${c.city}|${c.state}`} value={`${c.city}|${c.state}`}>{c.city}/{c.state}</option>)}
+                  </select>
+                </Field>
+              )}
             </>)}
             <Field label="Telefone">
-              <input value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: maskPhone(e.target.value) })} />
+              <input type="tel" inputMode="tel" placeholder="(00) 00000-0000" value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: maskPhone(e.target.value) })} />
             </Field>
             <Field label="E-mail">
               <input type="email" maxLength={160} value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
@@ -403,7 +416,7 @@ export default function Leads() {
             <Field label="Endereço" span={2}>
               <input maxLength={250} value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} />
             </Field>
-            {!editing.id && (
+            {isAdmin && !editing.id && (
               <Field label="Liberar para (opcional)" span={2}>
                 <select value={editing.sellerId} onChange={(e) => setEditing({ ...editing, sellerId: e.target.value })}>
                   <option value="">Deixar em Pendentes</option>

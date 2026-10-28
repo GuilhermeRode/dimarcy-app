@@ -32,8 +32,14 @@ with TestClient(app) as c:
     seller = login(c, "a@t.com", "seller-pass-123")
     mine = c.post("/api/customers", headers=seller, json={"name": "Loja da Ana", **FULL}).json()
 
-    # registering still needs everything, admin included
+    # registering: an admin may leave e-mail and IE blank, the rest is still required
     assert c.post("/api/customers", headers=admin, json={"name": "Nova", **BLANK}).status_code == 422
+    r = c.post("/api/customers", headers=admin, json={"name": "Nova", **FULL, "email": "", "state_registration": "",
+                                                      "document": "98765432000110", "owner_id": seller_id})
+    assert r.status_code == 201, r.text
+    assert r.json()["email"] is None and r.json()["state_registration"] is None
+    r = c.post("/api/customers", headers=seller, json={"name": "Outra", **FULL, "email": "", "document": "11222333000181"})
+    assert r.status_code == 422, r.text
 
     # admin: blanks are saved as empty, filled fields are still formatted
     r = c.put(f"/api/customers/{mine['id']}", headers=admin, json={"name": "Loja da Ana", **BLANK, "phone": "54 3333 4444",

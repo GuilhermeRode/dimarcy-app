@@ -11,7 +11,7 @@ from ..database import get_db
 from ..geocoding import geocode_and_cache_background, lookup_cached_city
 from ..leads import city_owners, lead_owner
 from ..models import Contact, Customer, Lead, Order, PastOrder, User
-from ..schemas import CustomerDraft, CustomerIn, CustomerOut
+from ..schemas import AdminCustomerIn, CustomerDraft, CustomerIn, CustomerOut
 from ..sales import customer_overview, customers_by_city
 from ..security import get_current_user, require_admin
 
@@ -91,7 +91,7 @@ def add_customer(db: Session, data: CustomerIn, owner_id: int | None) -> Custome
     """Adds (doesn't commit) a new customer, with cached coordinates when the city is known.
     Callers commit, then call geocode_later."""
     payload = data.model_dump(exclude={"owner_id"})
-    payload["email"] = _check_email(data.email, check_dns=True)
+    payload["email"] = _check_email(data.email, check_dns=True) if data.email else None
     c = Customer(**payload, owner_id=owner_id)
     if c.city:
         cached = lookup_cached_city(db, c.city, c.state)
@@ -106,9 +106,22 @@ def geocode_later(c: Customer, background_tasks: BackgroundTasks):
         background_tasks.add_task(geocode_and_cache_background, c.id, c.city, c.state)
 
 
+def validate_customer(model, body: dict):
+    try:
+        return model.model_validate(body)
+    except ValidationError as e:
+        raise RequestValidationError(e.errors(include_url=False, include_context=False))  # same 422 as a typed body
+
+
+def new_customer_in(body: dict, user: User) -> CustomerIn:
+    """Admins may register without e-mail and IE (AdminCustomerIn); sellers fill in everything."""
+    return validate_customer(AdminCustomerIn if user.role == "admin" else CustomerIn, body)
+
+
 @router.post("", response_model=CustomerOut, status_code=201)
-def create(data: CustomerIn, background_tasks: BackgroundTasks,
+def create(background_tasks: BackgroundTasks, body: dict = Body(...),
            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    data = new_customer_in(body, user)
     # Sellers can only ever own the customers they register; only admins may assign a seller.
     c = add_customer(db, data, data.owner_id if user.role == "admin" else user.id)
     db.commit()
@@ -122,10 +135,7 @@ def update(cid: int, background_tasks: BackgroundTasks, body: dict = Body(...),
            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     c = _visible(cid, db, user)
     # Admins may save with blanks (CustomerDraft); sellers keep every field required (CustomerIn).
-    try:
-        data = (CustomerDraft if user.role == "admin" else CustomerIn).model_validate(body)
-    except ValidationError as e:
-        raise RequestValidationError(e.errors(include_url=False, include_context=False))  # same 422 as a typed body
+    data = validate_customer(CustomerDraft if user.role == "admin" else CustomerIn, body)
     city_changed = data.city != c.city or data.state != c.state
     payload = data.model_dump(exclude={"owner_id"})
     # the DNS lookup only when the address changed: an untouched (old) one never blocks saving other fields

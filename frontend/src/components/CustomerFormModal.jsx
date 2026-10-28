@@ -90,8 +90,9 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved, 
 
   const f = (k) => ({ value: form[k] || "", onChange: (e) => setForm({ ...form, [k]: e.target.value }) });
   // An admin editing an existing customer may save with blanks (the API accepts it, see CustomerDraft);
-  // registering, and every seller save, keep all fields required.
+  // registering keeps the rest required, and every seller save keeps all fields required.
   const required = !(isAdmin && form.id);
+  const requiredForSeller = required && !isAdmin; // an admin may register without e-mail and IE
 
   return (
     <>
@@ -103,7 +104,7 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved, 
         <Field label="Nome / razão social" span={2}><input required {...f("name")} /></Field>
         <Field label="CPF/CNPJ"><input required={required} inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...f("document")}
           onChange={(e) => setForm({ ...form, document: maskDocument(e.target.value) })} /><CnpjNote note={cnpjNote} /></Field>
-        <StateRegistrationField value={form.state_registration} uf={form.state} required={required}
+        <StateRegistrationField value={form.state_registration} uf={form.state} required={requiredForSeller}
           onChange={(v) => setForm({ ...form, state_registration: v })} />
         {isAdmin && (
           <Field label="Vendedor responsável" span={2}>
@@ -115,7 +116,7 @@ export default function CustomerFormModal({ initial, isAdmin, onClose, onSaved, 
         )}
         <Field label="Telefone"><input required={required} type="tel" inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" {...f("phone")}
           onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} /></Field>
-        <Field label="E-mail"><input required={required} type="email" placeholder="nome@empresa.com.br" {...f("email")} /></Field>
+        <Field label="E-mail"><input required={requiredForSeller} type="email" placeholder="nome@empresa.com.br" {...f("email")} /></Field>
         <Field label="Cidade / UF" span={2}>
           <div className="city-row">
             <input required={required} placeholder="Cidade" {...f("city")} />
