@@ -59,53 +59,62 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
           {lead.in_debt && <span className="cstatus cstatus-risk">Dívida ativa</span>}
         </div>
       </div>
-      {/* two columns, so a narrow (notebook) panel never leaves a button squeezed or stranded:
-          contact pairs first, then the decision — Liberar across, Cadastrar cliente | Descartar under it */}
-      <div className="customer-panel-actions lead-actions lead-contact">
-        {wa
-          ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>WhatsApp</a>
-          : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
-        {waCatalog && <a className="btn" href={waCatalog} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>Enviar catálogo</a>}
-        {wa && <button type="button" className="btn" onClick={noAnswer} title="Agenda nova tentativa em 7 dias; na 3ª a loja é descartada">Não respondeu</button>}
-        <button type="button" className="btn" onClick={() => setWaiting(true)} title="A loja pediu para falar depois: escolha quando retornar">Aguardar</button>
-        {waOpened && <button type="button" className="btn btn-primary" onClick={contactDone}>Contato feito</button>}
-      </div>
-      {releasable && !lead.seller_id && (
-        // no seller has this city: pick one, and the city joins their region
-        <label className="lead-release-to">
-          <span>Liberar para</span>
-          <select value={releaseTo} onChange={(e) => setReleaseTo(e.target.value)}>
-            <option value="">Escolha o vendedor…</option>
-            {sellers.map((s) => <option key={s.id} value={s.id}>{s.role === "admin" ? `${s.name} (admin)` : s.name}</option>)}
-          </select>
-          <small className="muted">{lead.city}/{lead.state} ainda não é de nenhum vendedor: ela entra na região de quem você escolher.</small>
-        </label>
-      )}
-      <div className="customer-panel-actions lead-actions">
-        {releasable && (
-          <button type="button" className="btn btn-primary lead-action-wide" disabled={releasing || (!lead.seller_id && !releaseTo)} onClick={release}>
-            {lead.seller_id ? `Liberar para ${lead.seller_name.split(" ")[0]}` : "Liberar"}
-          </button>
+      {/* sections, two columns each, so a narrow (notebook) panel never leaves a button squeezed or stranded */}
+      <section className="lead-section">
+        <h3>Contato</h3>
+        <div className="customer-panel-actions lead-actions lead-contact">
+          {wa
+            ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>WhatsApp</a>
+            : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
+          {waCatalog && <a className="btn" href={waCatalog} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>Enviar catálogo</a>}
+          {wa && <button type="button" className="btn" onClick={noAnswer} title="Agenda nova tentativa em 7 dias; na 3ª a loja é descartada">Não respondeu</button>}
+          <button type="button" className="btn" onClick={() => setWaiting(true)} title="A loja pediu para falar depois: escolha quando retornar">Aguardar</button>
+          {waOpened && <button type="button" className="btn btn-primary" onClick={contactDone}>Contato feito</button>}
+        </div>
+      </section>
+      <section className="lead-section">
+        <h3>Próximo passo</h3>
+        {releasable && !lead.seller_id && (
+          // no seller has this city: pick one, and the city joins their region
+          <label className="lead-release-to">
+            <span>Liberar para</span>
+            <select value={releaseTo} onChange={(e) => setReleaseTo(e.target.value)}>
+              <option value="">Escolha o vendedor…</option>
+              {sellers.map((s) => <option key={s.id} value={s.id}>{s.role === "admin" ? `${s.name} (admin)` : s.name}</option>)}
+            </select>
+            <small className="muted">{lead.city}/{lead.state} ainda não é de nenhum vendedor: ela entra na região de quem você escolher.</small>
+          </label>
         )}
-        {/* one blue button at a time: while Liberar is there, it is the main action */}
-        <button type="button" className={`btn ${releasable ? "" : "btn-primary"}`} onClick={onOrder}
-          title="Cadastra a loja como cliente e abre o pedido">Fazer pedido</button>
-        <button type="button" className="btn" onClick={onDiscard}>Descartar</button>
-        {isAdmin && <button type="button" className="btn lead-action-wide" onClick={onEdit}>Editar dados</button>}
-      </div>
-      {releaseError && <p className="muted" style={{ color: "var(--danger)" }}>{releaseError}</p>}
-      <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} />
-      <dl className="customer-panel-info">
-        <dt>CNPJ</dt><dd>{formatCnpj(lead.cnpj)}</dd>
-        <dt>Aberta em</dt><dd>{lead.opened_at ? dateBR(lead.opened_at) : "—"}</dd>
-        <dt>Porte</dt><dd>{LEAD_SIZES[lead.size] || "—"}</dd>
-        <dt>Capital social</dt><dd>{lead.capital != null ? money(lead.capital) : "—"}</dd>
-        <dt>Dívida ativa (União)</dt>
-        <dd>{lead.in_debt == null ? "Não verificado" : lead.in_debt ? "Tem dívida em cobrança" : "Nenhuma em cobrança"}</dd>
-        <dt>E-mail</dt><dd>{lead.email || "—"}</dd>
-        <dt>Endereço</dt><dd>{lead.address || "—"}</dd>
-        {isAdmin && <><dt>Vendedor</dt><dd>{lead.seller_name || "Sem vendedor"}</dd></>}
-      </dl>
+        <div className="customer-panel-actions lead-actions">
+          {releasable && (
+            <button type="button" className="btn btn-primary lead-action-wide" disabled={releasing || (!lead.seller_id && !releaseTo)} onClick={release}>
+              {lead.seller_id ? `Liberar para ${lead.seller_name.split(" ")[0]}` : "Liberar"}
+            </button>
+          )}
+          {/* one blue button at a time: while Liberar is there, it is the main action */}
+          <button type="button" className={`btn ${releasable ? "" : "btn-primary"}`} onClick={onOrder}
+            title="Cadastra a loja como cliente e abre o pedido">Fazer pedido</button>
+          <button type="button" className="btn" onClick={onDiscard}>Descartar</button>
+        </div>
+        {releaseError && <p className="muted" style={{ color: "var(--danger)" }}>{releaseError}</p>}
+      </section>
+      {/* in the admin queue (Pendentes, Primeiro contato) the Contato buttons already log it: no "Registrar contato" */}
+      <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} canAdd={!["pending", "contacted"].includes(lead.status)} />
+      <section className="lead-section">
+        <h3>Dados da loja</h3>
+        <dl className="customer-panel-info">
+          <dt>CNPJ</dt><dd>{formatCnpj(lead.cnpj)}</dd>
+          <dt>Aberta em</dt><dd>{lead.opened_at ? dateBR(lead.opened_at) : "—"}</dd>
+          <dt>Porte</dt><dd>{LEAD_SIZES[lead.size] || "—"}</dd>
+          <dt>Capital social</dt><dd>{lead.capital != null ? money(lead.capital) : "—"}</dd>
+          <dt>Dívida ativa (União)</dt>
+          <dd>{lead.in_debt == null ? "Não verificado" : lead.in_debt ? "Tem dívida em cobrança" : "Nenhuma em cobrança"}</dd>
+          <dt>E-mail</dt><dd>{lead.email || "—"}</dd>
+          <dt>Endereço</dt><dd>{lead.address || "—"}</dd>
+          {isAdmin && <><dt>Vendedor</dt><dd>{lead.seller_name || "Sem vendedor"}</dd></>}
+        </dl>
+        {isAdmin && <button type="button" className="btn" onClick={onEdit}>Editar dados</button>}
+      </section>
       {waiting && <ContactModal target={{ lead_id: lead.id }} title="Aguardar retorno" notes="Pediu para retornar depois" requireDate
         onClose={() => setWaiting(false)} onSaved={() => { setWaiting(false); setHistory((n) => n + 1); onContacted?.(); }} />}
     </aside>
