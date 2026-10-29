@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from . import clock
 from .config import settings
 from .database import SessionLocal
-from .leads import customer_cnpjs, normalize_cnpj, receita_phone, refresh_scores
+from .leads import QUEUE, customer_cnpjs, normalize_cnpj, receita_phone, refresh_scores
 from .models import Contact, Customer, Lead
 from .sales import _city_key
 from .settings_store import get_app_settings
@@ -215,10 +215,10 @@ def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: da
             added += 1
     with_contacts = {lid for (lid,) in db.query(Contact.lead_id).filter(Contact.lead_id.isnot(None)).distinct()}
     gone = [lead.id for cnpj, lead in existing.items()  # an admin-typed/edited lead stays even out of scope
-            if lead.status in ("pending", "new") and cnpj not in found and lead.id not in with_contacts and not lead.edited]
+            if lead.status in QUEUE and cnpj not in found and lead.id not in with_contacts and not lead.edited]
     for i in range(0, len(gone), 500):  # stay under SQLite's bound-parameter limit
         batch = gone[i:i + 500]  # re-checked in SQL: a contact may have been added since the read above
-        db.query(Lead).filter(Lead.id.in_(batch), Lead.status.in_(("pending", "new")), Lead.edited.is_(False),
+        db.query(Lead).filter(Lead.id.in_(batch), Lead.status.in_(QUEUE), Lead.edited.is_(False),
                               ~Lead.id.in_(select(Contact.lead_id).where(Contact.lead_id.isnot(None)))
                               ).delete(synchronize_session=False)
     s = get_app_settings(db)
@@ -295,7 +295,7 @@ def run(db: Session, latest_month: Callable[[], str], download: Callable[[str, s
             d["in_debt"] = None if in_debt is None else d["basico"] in in_debt
             if (filters["exclude_mei"] and d["size"] == "mei") or (d["size"] != "mei" and porte not in filters["sizes"]):
                 del found[cnpj]
-    existing_new = db.query(Lead).filter(Lead.status.in_(("pending", "new")), Lead.state.in_(states)).count()
+    existing_new = db.query(Lead).filter(Lead.status.in_(QUEUE), Lead.state.in_(states)).count()
     # Bad/partial download: don't wipe leads. The "less than half" check is skipped when the scope changed
     # (narrowed CNAEs / removed state legitimately shrink the result); an empty result is always refused.
     shrunk = len(found) < existing_new // 2 and s.last_lead_import_scope == scope

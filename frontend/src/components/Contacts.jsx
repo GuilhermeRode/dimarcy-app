@@ -8,8 +8,9 @@ export const CHANNELS = { whatsapp: "WhatsApp", call: "Ligação", visit: "Visit
 
 // created_at is UTC without a zone (SQLite CURRENT_TIMESTAMP); "Z" makes the browser convert it to local time
 
-export function ContactModal({ target, onClose, onSaved }) {
-  const [form, setForm] = useState({ channel: "whatsapp", notes: "", next_action_date: "" });
+// "Aguardar" (the store asked to be called back later) uses it with a title, a preset note and a required date
+export function ContactModal({ target, onClose, onSaved, title = "Registrar contato", notes = "", requireDate = false }) {
+  const [form, setForm] = useState({ channel: "whatsapp", notes, next_action_date: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const today = localDate();
@@ -26,7 +27,7 @@ export function ContactModal({ target, onClose, onSaved }) {
   }
 
   return (
-    <Modal title="Registrar contato" onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       <form onSubmit={save} className="form-grid">
         <Field label="Canal" span={2}>
           <select value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })}>
@@ -38,13 +39,13 @@ export function ContactModal({ target, onClose, onSaved }) {
             value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </Field>
         <div className="field span-2">
-          <span>Retornar em (opcional)</span>
+          <span>{requireDate ? "Retornar em" : "Retornar em (opcional)"}</span>
           <div className="contact-next">
-            <input type="date" aria-label="Retornar em" min={today} value={form.next_action_date}
+            <input type="date" aria-label="Retornar em" required={requireDate} min={today} value={form.next_action_date}
               onChange={(e) => setForm({ ...form, next_action_date: e.target.value })} />
-            {[3, 7, 30].map((d) => (
-              <button type="button" key={d} className="btn"
-                onClick={() => setForm({ ...form, next_action_date: addDays(today, d) })}>+{d} dias</button>
+            {[[7, "1 semana"], [15, "15 dias"], [30, "1 mês"]].map(([d, label]) => (
+              <button type="button" key={d} className={`btn ${form.next_action_date === addDays(today, d) ? "btn-primary" : ""}`}
+                onClick={() => setForm({ ...form, next_action_date: addDays(today, d) })}>{label}</button>
             ))}
           </div>
         </div>

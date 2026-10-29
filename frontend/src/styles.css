@@ -1220,7 +1220,7 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
 .lead-pick > .leads-row, .lead-pick > .leads-row:hover, .lead-pick > .leads-row.on { flex: 1; min-width: 0; border-bottom: 0; background: transparent; box-shadow: none; }
 .customers-row.leads-row.head.picking { padding-left: 45px; } /* 14 margin + 13 checkbox + 18 row padding */
 .leads-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 18px; border-bottom: 1px solid var(--line); }
-.import-status { margin: 4px 0 0; font-size: 13px; }
+.import-status { margin: 2px 0 0; font-size: 12px; }
 @media (max-width: 860px) {
   .customers-row.leads-row, .customers-row.leads-row.admin { grid-template-columns: minmax(0, 1fr) auto; }
   .customer-panel-actions { flex-wrap: wrap; }

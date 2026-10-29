@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { dateBR, initials, localDate, utcDateBR, whatsappUrl } from "../format";
@@ -19,6 +20,7 @@ export default function FollowUps() {
   const [kind, setKind] = useState("");
   const [seller, setSeller] = useState("");
   const today = localDate();
+  const nav = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";  // sees every seller's follow-ups
 
@@ -58,6 +60,9 @@ export default function FollowUps() {
           <h1>Retornos</h1>
           <p className="muted">{isAdmin ? "Retornos combinados por toda a equipe, leads e clientes." : "Contatos que você combinou de retomar, leads e clientes."}
             {" "}Registrar o novo contato tira da lista.</p>
+        </div>
+        <div className="header-actions">
+          <button className="btn" onClick={() => nav("/leads")}>← Prospecção</button>
         </div>
       </header>
       <ErrorBox msg={error} />
@@ -118,7 +123,7 @@ export default function FollowUps() {
                     {r.kind === "lead" ? "Lead" : "Cliente"}{isAdmin && ` · ${r.user_name}`}
                     {tab === "done"
                       ? ` · feito por ${r.done_by}: ${CHANNELS[r.channel] ?? r.channel}${r.notes ? ` — ${r.notes}` : ""}`
-                      : ` · último: ${CHANNELS[r.channel] ?? r.channel}${r.notes ? ` — ${r.notes}` : ""}`}
+                      : ` · último${r.set_by !== r.user_name ? ` (por ${r.set_by})` : ""}: ${CHANNELS[r.channel] ?? r.channel}${r.notes ? ` — ${r.notes}` : ""}`}
                   </small>
                 </span>
               </span>

@@ -2,17 +2,18 @@ import { useState } from "react";
 import { api, errorMessage, fileUrl } from "../api";
 import { useAuth } from "../auth";
 import { LEAD_SIZES, dateBR, formatCnpj, initials, money, whatsappUrl } from "../format";
-import { ContactHistory } from "./Contacts";
+import { ContactHistory, ContactModal } from "./Contacts";
 
 export const isNewStore = (openedAt) =>
   !!openedAt && (Date.now() - new Date(`${openedAt}T00:00:00`)) / 86400000 <= 730; // opened within 2 years
 
-export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onClose, onConvert, onDiscard, onEdit, onReleased, onContacted, onNoAnswer }) {
+export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onClose, onOrder, onDiscard, onEdit, onReleased, onContacted, onNoAnswer }) {
   const [releasing, setReleasing] = useState(false);
   const [releaseTo, setReleaseTo] = useState("");  // only for a lead whose city has no seller
   const [releaseError, setReleaseError] = useState("");
   const [waOpened, setWaOpened] = useState(false);
   const [history, setHistory] = useState(0);  // bumped to reload the contact list
+  const [waiting, setWaiting] = useState(false);  // "Aguardar": the store asked to be called back later
   async function contactDone() {
     setReleaseError("");
     try {
@@ -39,7 +40,7 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
     } catch (e) { setReleaseError(errorMessage(e)); }
     setReleasing(false);
   }
-  const releasable = isAdmin && lead.status === "pending";
+  const releasable = isAdmin && lead.status === "contacted";  // only after the admin's first contact
   const { user } = useAuth();
   const firstName = (user?.name || "").split(" ")[0];
   const wa = whatsappUrl(lead.phone, `Olá, tudo bem? Sou ${firstName} da Di Marcy. Gostaria de apresentar nossa `
@@ -66,9 +67,10 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
           : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
         {waCatalog && <a className="btn" href={waCatalog} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>Enviar catálogo</a>}
         {wa && <button type="button" className="btn" onClick={noAnswer} title="Agenda nova tentativa em 7 dias; na 3ª a loja é descartada">Não respondeu</button>}
+        <button type="button" className="btn" onClick={() => setWaiting(true)} title="A loja pediu para falar depois: escolha quando retornar">Aguardar</button>
         {waOpened && <button type="button" className="btn btn-primary" onClick={contactDone}>Contato feito</button>}
       </div>
-      {isAdmin && lead.status === "pending" && !lead.seller_id && (
+      {releasable && !lead.seller_id && (
         // no seller has this city: pick one, and the city joins their region
         <label className="lead-release-to">
           <span>Liberar para</span>
@@ -86,11 +88,13 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
           </button>
         )}
         {/* one blue button at a time: while Liberar is there, it is the main action */}
-        <button type="button" className={`btn ${releasable ? "" : "btn-primary"}`} onClick={onConvert}>Cadastrar cliente</button>
+        <button type="button" className={`btn ${releasable ? "" : "btn-primary"}`} onClick={onOrder}
+          title="Cadastra a loja como cliente e abre o pedido">Fazer pedido</button>
         <button type="button" className="btn" onClick={onDiscard}>Descartar</button>
         {isAdmin && <button type="button" className="btn lead-action-wide" onClick={onEdit}>Editar dados</button>}
       </div>
       {releaseError && <p className="muted" style={{ color: "var(--danger)" }}>{releaseError}</p>}
+      <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} />
       <dl className="customer-panel-info">
         <dt>CNPJ</dt><dd>{formatCnpj(lead.cnpj)}</dd>
         <dt>Aberta em</dt><dd>{lead.opened_at ? dateBR(lead.opened_at) : "—"}</dd>
@@ -102,7 +106,8 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
         <dt>Endereço</dt><dd>{lead.address || "—"}</dd>
         {isAdmin && <><dt>Vendedor</dt><dd>{lead.seller_name || "Sem vendedor"}</dd></>}
       </dl>
-      <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} />
+      {waiting && <ContactModal target={{ lead_id: lead.id }} title="Aguardar retorno" notes="Pediu para retornar depois" requireDate
+        onClose={() => setWaiting(false)} onSaved={() => { setWaiting(false); setHistory((n) => n + 1); onContacted?.(); }} />}
     </aside>
   );
 }

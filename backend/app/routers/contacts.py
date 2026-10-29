@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..database import get_db
-from ..leads import done_follow_ups, due_follow_ups, visible_lead
-from ..models import Contact, User
+from ..leads import NO_ANSWER, QUEUE, done_follow_ups, due_follow_ups, visible_lead
+from ..models import Contact, Lead, User
 from ..schemas import ContactIn
 from ..security import get_current_user
 from .customers import _visible as visible_customer
@@ -24,7 +24,7 @@ def _check_target(db: Session, user: User, lead_id: int | None, customer_id: int
     if (lead_id is None) == (customer_id is None):
         raise HTTPException(422, "Informe o lead ou o cliente do contato.")
     if lead_id is not None:
-        if visible_lead(db, user, lead_id).status not in ("pending", "new") and writing:  # history of handled leads stays readable
+        if visible_lead(db, user, lead_id).status not in QUEUE and writing:  # history of handled leads stays readable
             raise HTTPException(409, "Este lead já foi tratado.")
     else:
         visible_customer(customer_id, db, user)
@@ -55,6 +55,8 @@ def create(data: ContactIn, db: Session = Depends(get_db), user: User = Depends(
     _check_target(db, user, data.lead_id, data.customer_id, writing=True)
     ct = Contact(user_id=user.id, **data.model_dump())
     db.add(ct)
+    if data.lead_id and data.notes != NO_ANSWER:  # the admin's first contact: on to "Primeiro contato", where it can be released
+        db.query(Lead).filter(Lead.id == data.lead_id, Lead.status == "pending").update({"status": "contacted"})
     db.commit()
     db.refresh(ct)
     return _out(ct)

@@ -45,14 +45,14 @@ with TestClient(app) as c:
     assert c.post(f"/api/products/{pid}/image", headers=seller, files={"file": ("x.jpg", b"x", "image/jpeg")}).status_code == 403
     assert c.delete(f"/api/products/{pid}/image", headers=seller).status_code == 403
 
-    # ---- customers: every field but the notes is required; the e-mail is checked ----
+    # ---- customers: every field but the notes is required (an admin may skip e-mail and IE); the e-mail is checked ----
     from email_validator import EmailUndeliverableError  # noqa: E402
     import app.routers.customers as _m  # noqa: E402
     from app import config as _config  # noqa: E402
     _m.geocode_and_cache_background = lambda *a: None
     full = {"name": "Cliente Teste", "document": "123.456.789-01", "state_registration": "254.123.456", "phone": "(54) 99999-8888", "email": "ok@gmail.com",
             "city": "Caxias do Sul", "state": "RS", "address": "Rua A, 1"}
-    for field in ("document", "state_registration", "phone", "email", "city", "state", "address"):
+    for field in ("document", "phone", "city", "state", "address"):
         assert c.post("/api/customers", headers=admin, json={**full, field: ""}).status_code == 422, field
     assert c.post("/api/customers", headers=admin, json={**full, "notes": None}).status_code == 201  # notes stay optional
     for bad in ("semarroba", "a@gmail", "a b@gmail.com"):

@@ -125,14 +125,17 @@ function QuantityGrid({ product, initial, initialPrice, canEditPrice, quickQuant
 
 // Older customers may predate the required fields; picking one for an order asks for them first.
 const REQUIRED_CUSTOMER_FIELDS = { document: "CPF/CNPJ", state_registration: "Inscrição estadual", phone: "Telefone", email: "E-mail", city: "Cidade", state: "UF", address: "Endereço" };
-const missingCustomerFields = (c) =>
-  Object.entries(REQUIRED_CUSTOMER_FIELDS).filter(([k]) => !String(c?.[k] || "").trim()).map(([, label]) => label);
+// An admin may leave the IE blank (AdminCustomerIn on the server); the e-mail is still needed for an order.
+const ADMIN_OPTIONAL = ["state_registration"];
+const missingCustomerFields = (c, isAdmin) =>
+  Object.entries(REQUIRED_CUSTOMER_FIELDS).filter(([k]) => !(isAdmin && ADMIN_OPTIONAL.includes(k)) && !String(c?.[k] || "").trim())
+    .map(([, label]) => label);
 
 // Full customer form, used both to create and to edit without leaving the order
 function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
   const [f, setF] = useState(() => (customer ? { ...customer, owner_id: customer.owner_id || "" } : { ...EMPTY_CUSTOMER }));
   const cnpjNote = useCnpjAutofill(f.document, customer?.document, setF);
-  const missing = customer?.id ? missingCustomerFields(customer) : [];
+  const missing = customer?.id ? missingCustomerFields(customer, isAdmin) : [];
   const [error, setError] = useState(missing.length ? `Faltam campos obrigatórios: ${missing.join(", ")}.` : "");
   const editing = Boolean(customer?.id);
 
@@ -159,7 +162,7 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
         <Field label="Nome / razão social" span={2}><input required autoFocus {...field("name")} /></Field>
         <Field label="CPF/CNPJ"><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...field("document")}
           onChange={(e) => setF({ ...f, document: maskDocument(e.target.value) })} /><CnpjNote note={cnpjNote} /></Field>
-        <StateRegistrationField value={f.state_registration} uf={f.state} onChange={(v) => setF({ ...f, state_registration: v })} />
+        <StateRegistrationField value={f.state_registration} uf={f.state} required={!isAdmin} onChange={(v) => setF({ ...f, state_registration: v })} />
         {isAdmin && (
           <Field label="Vendedor responsável" span={2}>
             <select required {...field("owner_id")}>
@@ -424,7 +427,7 @@ export default function OrderForm() {
             <CustomerSearch key={customerKey} customers={customers} value={header.customer_id}
               onSelect={(c) => {
                 setHeader((h) => ({ ...h, customer_id: c ? c.id : "" }));
-                if (c && missingCustomerFields(c).length) setCustomerModal(c);
+                if (c && missingCustomerFields(c, isAdmin).length) setCustomerModal(c);
               }} />
             <button type="button" className="btn btn-primary icon-btn" title="Cadastrar novo cliente" onClick={() => setCustomerModal("new")}>
               <PlusIcon />
@@ -603,7 +606,7 @@ export default function OrderForm() {
           isAdmin={isAdmin} sellers={sellers}
           onClose={() => {
             // closing without completing an incomplete customer drops them from the order
-            if (customerModal !== "new" && missingCustomerFields(customerModal).length && customerModal.id !== loadedCustomerId) {
+            if (customerModal !== "new" && missingCustomerFields(customerModal, isAdmin).length && customerModal.id !== loadedCustomerId) {
               setHeader((x) => ({ ...x, customer_id: "" }));
               setCustomerKey((k) => k + 1);
             }
