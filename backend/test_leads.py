@@ -420,6 +420,8 @@ def check_edit(ctx):
     assert r.status_code == 201, r.text
     assert (r.json()["status"], r.json()["seller_id"]) == ("new", ctx["a_id"]), r.json()
     assert c.get(f"/api/leads/{r.json()['id']}", headers=a).status_code == 200
+    with SessionLocal() as db:  # scored on creation: no full re-score on the next list load
+        assert db.get(Lead, r.json()["id"]).score >= 3 + 1  # at least: mobile phone, federal debt not checked
     assert c.post("/api/leads", headers=admin, json={**new, "cnpj": "123"}).status_code == 422
     r = c.post("/api/leads", headers=admin, json=new)
     assert r.status_code == 201, r.text

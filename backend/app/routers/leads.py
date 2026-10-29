@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock, lead_import
 from ..database import get_db
-from ..leads import (NO_ANSWER, QUEUE, REGION_ROLES, check_leads_open, city_owners, customer_cnpjs, ensure_scores, lead_out, lead_owner, normalize_cnpj, rank_order,
+from ..leads import (NO_ANSWER, QUEUE, REGION_ROLES, SHARED_PHONE, active_customers_by_city, check_leads_open, lead_score, city_owners, customer_cnpjs, ensure_scores, lead_out, lead_owner, normalize_cnpj, rank_order,
                      ranked_leads, released_this_week, visible_lead)
 from ..models import Contact, Lead, SellerCity, User
 from ..sales import _city_key
@@ -135,7 +135,13 @@ def create_lead(data: LeadCreateIn, db: Session = Depends(get_db), user: User = 
         if not db.query(SellerCity.id).filter_by(user_id=user.id, city_key=city_key, state=fields["state"]).first():
             raise HTTPException(422, "Essa cidade não está na sua região.")
         status = "new"  # no released_at: it doesn't use up the weekly release quota (released_this_week)
-    lead = Lead(**fields, city_key=city_key, status=status, edited=True, seen_at=clock.today_br())
+    today = clock.today_br()
+    # scored now: a lead without a score makes the next list load re-score the whole queue (ensure_scores)
+    n = active_customers_by_city(db, today)[(city_key, fields["state"])]
+    shared = bool(fields["phone"]) and db.query(Lead.id).filter(
+        Lead.phone == fields["phone"], Lead.status.in_(QUEUE)).count() + 1 >= SHARED_PHONE
+    lead = Lead(**fields, city_key=city_key, status=status, edited=True, seen_at=today, city_active=n)
+    lead.score = lead_score(lead, n, today, shared)
     db.add(lead)
     db.commit()
     return lead_out(lead, lead_owner(city_owners(db), lead))
