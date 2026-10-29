@@ -1229,7 +1229,11 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
 .followup-late { color: var(--danger); font-weight: 600; font-size: 13px; white-space: nowrap; }
 .followup-today { color: var(--accent-strong); font-weight: 600; font-size: 13px; }
 .followup-actions { display: flex; gap: 8px; }
+.followup-summary { margin-bottom: 18px; }
+.followup-summary tr.active td { background: var(--surface-2); }
+.followup-summary td:not(:first-child), .followup-summary th:not(:first-child) { text-align: right; }
 @media (max-width: 860px) {
+  .followup-summary { display: block; overflow-x: auto; }  /* 6 columns don't fit a phone: scroll the table, not the page */
   .followup-row { grid-template-columns: minmax(0, 1fr); }
   .followup-actions .btn { flex: 1; text-align: center; }
 }

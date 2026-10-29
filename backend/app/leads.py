@@ -5,12 +5,13 @@ lead's city, so moving a city between sellers moves its leads with no migration.
 Spec: docs/superpowers/specs/2026-10-16-prospeccao-crm-design.md"""
 import re
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select, update
-from sqlalchemy.orm import Session, contains_eager
+from sqlalchemy.orm import Session, aliased, contains_eager, joinedload
 
+from . import clock
 from .br_format import format_phone
 from .models import SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
 from .sales import _city_key
@@ -144,6 +145,64 @@ def ensure_scores(db: Session, today: date) -> None:
         refresh_scores(db, today)
 
 
+def _follow_up_checker(db: Session, user: User, everyone: bool):
+    """check(ct, open_only) -> (lead/customer, the user the follow-up is for) when it's one for this screen, else None.
+    It's for whoever set it, except a lead's: every admin's while it's in the admin queue, its seller's once
+    released (the admin's return passes on). It must be the user's own (or anyone's, with everyone) and still be
+    workable by that person: their city/customer, Prospecção open to them, an active user. So the admin never sees
+    a seller's reminder the seller can no longer clear. open_only: a lead still in the queue (handled ones stay in Concluídos)."""
+    owners = city_owners(db)
+    leads_ok: dict[int, bool] = {}
+
+    def check(ct: Contact, open_only: bool = True):
+        who, lead = ct.user, ct.lead
+        if ct.lead_id:
+            if lead is None or (open_only and lead.status not in QUEUE):
+                return None
+            if lead.status in ADMIN_QUEUE:  # before release: every admin's
+                return (lead, who) if user.role == "admin" and who is not None else None
+            if lead.status == "new":
+                who = lead_owner(owners, lead) or who
+        if who is None or not who.active or (who.id != user.id and not everyone):
+            return None
+        admin = who.role == "admin"
+        if ct.lead_id:
+            if who.id not in leads_ok:
+                leads_ok[who.id] = leads_open(db, who)  # Prospecção off for sellers: their lead follow-ups wait too
+            if not leads_ok[who.id] or (open_only and lead.status not in (QUEUE if admin else ("new",))):
+                return None
+            return (lead, who) if admin or getattr(lead_owner(owners, lead), "id", None) == who.id else None
+        customer = ct.customer
+        return (customer, who) if customer is not None and (admin or customer.owner_id == who.id) else None
+    return check
+
+
+def done_follow_ups(db: Session, user: User, since: date, everyone: bool = False) -> list[dict]:
+    """Follow-ups already handled: a contact with a next_action_date followed by a newer contact on the same
+    lead/customer, that newer one registered since `since`. on_time: done by the date that was set."""
+    check = _follow_up_checker(db, user, everyone)
+    # each contact next to the one before it on the same lead/customer, paired in SQL (window function)
+    pairs = select(Contact.id.label("id"), func.lag(Contact.id).over(
+        partition_by=(Contact.lead_id, Contact.customer_id), order_by=Contact.id).label("prev_id")).subquery()
+    Before = aliased(Contact)
+    since_utc = datetime.combine(since, time(), clock.BRT).astimezone(timezone.utc).replace(tzinfo=None)
+    q = db.query(Contact, Before).join(pairs, pairs.c.id == Contact.id).join(Before, Before.id == pairs.c.prev_id)           .filter(Contact.created_at >= since_utc, Before.next_action_date.isnot(None))           .options(joinedload(Contact.user), joinedload(Before.user), joinedload(Before.lead), joinedload(Before.customer))
+    rows = []
+    for ct, before in q:
+        # created_at is naive UTC; the reminder dates are Brazil's
+        done_on = ct.created_at.replace(tzinfo=timezone.utc).astimezone(clock.BRT).date()
+        hit = check(before, open_only=False)
+        if hit is None:
+            continue
+        target, who = hit
+        rows.append({"contact_id": ct.id, "lead_id": ct.lead_id, "customer_id": ct.customer_id,
+                     "kind": "lead" if ct.lead_id else "customer", "name": target.name,
+                     "user_id": who.id, "user_name": who.name, "done_by": ct.user.name,
+                     "next_action_date": before.next_action_date, "done_at": ct.created_at, "channel": ct.channel,
+                     "notes": ct.notes, "on_time": done_on <= before.next_action_date})
+    return sorted(rows, key=lambda r: r["done_at"], reverse=True)
+
+
 def _normalized_document():
     """Customer.document as digits/letters only, in SQL — matches Lead.cnpj (normalize_cnpj)."""
     d = Customer.document
@@ -203,45 +262,24 @@ def lead_out(lead: Lead, owner: User | None) -> dict:
             "seller_name": owner.name if owner else None}
 
 
-def due_follow_ups(db: Session, user: User, today: date) -> list[dict]:
-    """The user's pending follow-ups: for each lead/customer, its LATEST contact, when its next_action_date
-    is today or earlier and the follow-up is the user's: whoever registered the contact, except a lead's —
-    every admin's while it's in the admin queue, its seller's once released (the admin's return passes on).
-    Discarded/converted leads and anything the user can no longer see are left out."""
-    latest: dict[tuple, Contact] = {}
-    # ponytail: every contact in Python; a "latest per target" subquery if this grows past ~50k contacts
-    for ct in db.query(Contact).order_by(Contact.id):
-        latest[(ct.lead_id, ct.customer_id)] = ct
-    due = [ct for ct in latest.values() if ct.next_action_date and ct.next_action_date <= today]
-    if not due:
-        return []
-    owners = city_owners(db)
-    names = dict(db.query(User.id, User.name))  # "vendedor X · feito por Y" without a query per row
-    with_leads = leads_open(db, user)  # Prospecção off for sellers: their lead follow-ups wait too
+def due_follow_ups(db: Session, user: User, today: date, everyone: bool = False, until: date | None = None) -> list[dict]:
+    """The user's pending follow-ups: for each lead/customer, its LATEST contact, when the follow-up is the
+    user's (see _follow_up_checker) and its next_action_date is `until` (default today) or earlier.
+    Discarded/converted leads and anything the user can no longer see are left out. everyone (admin's
+    Retornos screen): every user's follow-ups, to chase whoever is late."""
+    until = until or today
+    latest = select(func.max(Contact.id)).group_by(Contact.lead_id, Contact.customer_id)  # the newest per lead/customer
+    q = db.query(Contact).filter(Contact.id.in_(latest), Contact.next_action_date <= until)           .options(joinedload(Contact.user), joinedload(Contact.lead), joinedload(Contact.customer))
+    check = _follow_up_checker(db, user, everyone)
     rows = []
-    for ct in due:
-        if ct.lead_id:
-            if not with_leads:
-                continue
-            target, kind = ct.lead, "lead"
-            if target is None or target.status not in QUEUE:
-                continue
-            seller = lead_owner(owners, target)
-            if target.status in ADMIN_QUEUE:
-                if user.role != "admin":
-                    continue
-            elif (seller.id if seller else ct.user_id) != user.id:
-                continue
-            seller_name = seller.name if seller else None
-        else:
-            target, kind = ct.customer, "customer"
-            if target is None or ct.user_id != user.id:
-                continue
-            if user.role != "admin" and target.owner_id != user.id:
-                continue
-            seller_name = names.get(target.owner_id)
+    for ct in q:
+        hit = check(ct)
+        if hit is None:
+            continue
+        target, who = hit
+        kind = "lead" if ct.lead_id else "customer"
         rows.append({"contact_id": ct.id, "lead_id": ct.lead_id, "customer_id": ct.customer_id,
+                     "user_id": who.id, "user_name": who.name, "set_by": ct.user.name,
                      "name": target.name, "kind": kind, "phone": target.phone, "channel": ct.channel,
-                     "seller_name": seller_name, "user_name": names.get(ct.user_id),
                      "notes": ct.notes, "next_action_date": ct.next_action_date, "last_contact_at": ct.created_at})
     return sorted(rows, key=lambda r: (r["next_action_date"], r["name"]))

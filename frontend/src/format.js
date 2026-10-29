@@ -29,6 +29,9 @@ export const sortSizes = (sizes) => [...sizes].sort((a, b) => {
 
 // Calendar dates in the user's local timezone. Never toISOString() — that's UTC and
 // returns tomorrow's date after 21:00 in Brazil.
+// A server timestamp (naive UTC, as the API sends created_at) as a pt-BR date.
+export const utcDateBR = (iso) => new Date(`${iso}Z`).toLocaleDateString("pt-BR");
+
 export const localDate = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 

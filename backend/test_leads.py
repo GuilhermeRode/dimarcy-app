@@ -326,13 +326,27 @@ def check_contacts(ctx):
 
     due = c.get("/api/contacts/due", headers=ctx["a"]).json()
     assert [(d["name"], d["kind"], d["notes"]) for d in due] == [("Loja Contato", "lead", "Pediu catálogo")], due
-    assert due[0]["seller_name"] and due[0]["user_name"], due  # "vendedor X · feito por Y"
-    assert c.get("/api/contacts/due", headers=admin).json() == []  # reminders belong to who set them
+    # reminders belong to who set them; the admin sees everyone's, with who set each one
+    assert c.get("/api/contacts/due", headers=ctx["b"]).json() == []
+    assert [(d["name"], d["user_name"]) for d in c.get("/api/contacts/due", headers=admin).json()] == [("Loja Contato", "Ana")]
+    assert c.get("/api/dashboard", headers=admin).json()["alerts"]["follow_ups_due"] == 1
+    with SessionLocal() as db:  # a seller who left: their reminders no longer count against the team
+        db.get(User, ctx["a_id"]).active = False
+        db.commit()
+    assert c.get("/api/contacts/due", headers=admin).json() == []
+    with SessionLocal() as db:
+        db.get(User, ctx["a_id"]).active = True
+        db.commit()
     assert c.get("/api/dashboard", headers=ctx["a"]).json()["alerts"]["follow_ups_due"] == 1
 
     # the latest contact replaces the reminder: future date -> not due; no date -> no reminder
     contact(ctx["a"], lead_id=jl, next_action_date=tomorrow)
     assert c.get("/api/contacts/due", headers=ctx["a"]).json() == []
+    assert [d["next_action_date"] for d in c.get("/api/contacts/due", headers=ctx["a"], params={"days": 7}).json()] == [tomorrow]
+    done = [d for d in c.get("/api/contacts/done", headers=ctx["a"]).json() if d["lead_id"] == jl]
+    assert [(d["done_by"], d["next_action_date"]) for d in done] == [("Ana", yesterday)], done
+    assert len(c.get("/api/contacts/done", headers=admin).json()) == len(c.get("/api/contacts/done", headers=ctx["a"]).json())
+    assert c.get("/api/contacts/done", headers=ctx["b"]).json() == []
     row = next(x for x in c.get("/api/leads", headers=ctx["a"]).json()["items"] if x["id"] == jl)
     assert row["next_action_date"] == tomorrow and row["last_contact_at"], row  # the list shows where Ana left off
     contact(ctx["a"], lead_id=jl, next_action_date=yesterday)
@@ -518,7 +532,9 @@ def check_pending_release(ctx):
     admin2 = login(c, "adm2@t.com", "admin2-pass-123")
     assert "Pend Retorno" in due_names(admin2)  # before release: every admin's
     assert c.post("/api/leads/release", headers=admin, json={"ids": [pr]}).json()["released"] == 1
-    assert "Pend Retorno" in due_names(a) and "Pend Retorno" not in due_names(admin) and "Pend Retorno" not in due_names(admin2)
+    assert "Pend Retorno" in due_names(a)
+    row = next(d for d in c.get("/api/contacts/due", headers=admin).json() if d["name"] == "Pend Retorno")
+    assert row["user_id"] == ctx["a_id"] and row["set_by"] != row["user_name"], row  # the admin's Retornos counts it for the seller
     assert c.post(f"/api/leads/{pr}/discard", headers=admin, json={"reason": "other"}).status_code == 204
     # the admin can take leads like a seller: the city joins the admin's region
     pq = add_lead("80000000000193", "Pend Para Admin", city="Cidade do Admin", status="contacted")
