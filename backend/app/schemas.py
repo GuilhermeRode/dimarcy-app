@@ -185,11 +185,11 @@ class LeadEditIn(BaseModel):
     email: str | None = Field(None, max_length=160)
     address: str | None = Field(None, max_length=250)
     notes: str | None = Field(None, max_length=2000)
+    cnpj: str | None = None  # blank = "a confirmar"; on an edit it only fills in a lead that has none
 
 
 class LeadCreateIn(LeadEditIn):
-    """A store the admin found outside the Receita import; blank CNPJ = "a confirmar"."""
-    cnpj: str | None = None
+    """A store the admin found outside the Receita import."""
     city: str = Field(min_length=1, max_length=100)
     state: str = Field(min_length=2, max_length=2)
 

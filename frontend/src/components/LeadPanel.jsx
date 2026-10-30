@@ -23,6 +23,13 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
       onContacted?.();
     } catch (e) { setReleaseError(errorMessage(e)); }
   }
+  async function moveToFirstContact() {
+    setReleaseError("");
+    try {
+      await api.post(`/leads/${lead.id}/first-contact`);
+      onContacted?.();
+    } catch (e) { setReleaseError(errorMessage(e)); }
+  }
   async function noAnswer() {
     setReleaseError("");
     try {
@@ -40,6 +47,7 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
     } catch (e) { setReleaseError(errorMessage(e)); }
     setReleasing(false);
   }
+  const pending = lead.status === "pending";  // the admin only sorts these: on to Primeiro contato, or out
   const releasable = isAdmin && lead.status === "contacted";  // only after the admin's first contact
   const { user } = useAuth();
   const firstName = (user?.name || "").split(" ")[0];
@@ -60,7 +68,7 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
         </div>
       </div>
       {/* sections, two columns each, so a narrow (notebook) panel never leaves a button squeezed or stranded */}
-      <section className="lead-section">
+      {!pending && <section className="lead-section">
         <h3>Contato</h3>
         <div className="customer-panel-actions lead-actions lead-contact">
           {wa
@@ -71,7 +79,7 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
           <button type="button" className="btn" onClick={() => setWaiting(true)} title="A loja pediu para falar depois: escolha quando retornar">Aguardar</button>
           {waOpened && <button type="button" className="btn btn-primary" onClick={contactDone}>Contato feito</button>}
         </div>
-      </section>
+      </section>}
       <section className="lead-section">
         <h3>Próximo passo</h3>
         {releasable && !lead.seller_id && (
@@ -91,15 +99,16 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
               {lead.seller_id ? `Liberar para ${lead.seller_name.split(" ")[0]}` : "Liberar"}
             </button>
           )}
+          {pending && <button type="button" className="btn btn-primary lead-action-wide" onClick={moveToFirstContact}>Mover para Primeiro contato</button>}
           {/* one blue button at a time: while Liberar is there, it is the main action */}
-          <button type="button" className={`btn ${releasable ? "" : "btn-primary"}`} onClick={onOrder}
-            title="Cadastra a loja como cliente e abre o pedido">Fazer pedido</button>
-          <button type="button" className="btn" onClick={onDiscard}>Descartar</button>
+          {!pending && <button type="button" className={`btn ${releasable ? "" : "btn-primary"}`} onClick={onOrder}
+            title="Cadastra a loja como cliente e abre o pedido">Fazer pedido</button>}
+          <button type="button" className={`btn ${pending ? "lead-action-wide" : ""}`} onClick={onDiscard}>Descartar</button>
         </div>
         {releaseError && <p className="muted" style={{ color: "var(--danger)" }}>{releaseError}</p>}
       </section>
-      {/* in the admin queue (Pendentes, Primeiro contato) the Contato buttons already log it: no "Registrar contato" */}
-      <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} canAdd={!["pending", "contacted"].includes(lead.status)} />
+      {/* in Primeiro contato the Contato buttons already log it: no "Registrar contato" */}
+      {!pending && <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} canAdd={lead.status !== "contacted"} />}
       <section className="lead-section">
         <h3>Dados da loja</h3>
         {lead.notes && <p className="lead-notes">{lead.notes}</p>}
