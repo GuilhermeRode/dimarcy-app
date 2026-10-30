@@ -1231,6 +1231,7 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
 .lead-contact > :last-child:nth-child(odd), .lead-action-wide { grid-column: 1 / -1; }  /* a lone button takes the row */
 .lead-section { display: flex; flex-direction: column; gap: 8px; }
 .lead-section h3 { margin: 0; }
+.lead-notes { margin: 0; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pill-release .pill-value { max-width: 150px; }  /* "Vendedor da cidade" fits */
 .lead-release-to { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; }
 .lead-release-to > span { font-weight: 600; }

@@ -184,11 +184,12 @@ class LeadEditIn(BaseModel):
     phone: str | None = Field(None, max_length=30)
     email: str | None = Field(None, max_length=160)
     address: str | None = Field(None, max_length=250)
+    notes: str | None = Field(None, max_length=2000)
 
 
 class LeadCreateIn(LeadEditIn):
-    """A store the admin found outside the Receita import."""
-    cnpj: str
+    """A store the admin found outside the Receita import; blank CNPJ = "a confirmar"."""
+    cnpj: str | None = None
     city: str = Field(min_length=1, max_length=100)
     state: str = Field(min_length=2, max_length=2)
 

@@ -196,7 +196,7 @@ def apply(db: Session, found: dict[str, dict], month: str, scope: str, today: da
     known = customer_cnpjs(db)
     spellings = {(_city_key(c), (s or "").strip().upper()): " ".join(c.split())
                  for c, s in db.query(Customer.city, Customer.state).filter(Customer.city.isnot(None)) if c.strip()}
-    existing = {lead.cnpj: lead for lead in db.query(Lead)}
+    existing = {lead.cnpj: lead for lead in db.query(Lead).filter(Lead.cnpj.isnot(None))}
     added = 0
     for cnpj, d in found.items():
         if cnpj in known:

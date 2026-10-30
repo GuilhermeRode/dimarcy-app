@@ -80,6 +80,29 @@ def _contacted_leads():
         db.commit()
 
 
+def _nullable_lead_cnpj():
+    """A lead may wait for its CNPJ ("a confirmar"), but create_all doesn't touch an existing column and SQLite
+    can't drop NOT NULL: there the table is rebuilt from its own DDL (ids kept, contacts still point to them). Idempotent."""
+    if next(c for c in inspect(engine).get_columns("leads") if c["name"] == "cnpj")["nullable"]:
+        return
+    with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            conn.execute(text("ALTER TABLE leads ALTER COLUMN cnpj DROP NOT NULL"))
+            return
+        ddl = conn.execute(text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'leads'")).scalar()
+        indexes = conn.execute(text("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'leads' "
+                                    "AND sql IS NOT NULL")).scalars().all()
+        new = ddl.replace("CREATE TABLE leads", "CREATE TABLE leads_new", 1).replace("cnpj VARCHAR(14) NOT NULL", "cnpj VARCHAR(14)", 1)
+        assert "leads_new" in new and "cnpj VARCHAR(14) NOT NULL" not in new
+        conn.execute(text("DROP TABLE IF EXISTS leads_new"))  # a rebuild cut short before its commit
+        conn.execute(text(new))
+        conn.execute(text("INSERT INTO leads_new SELECT * FROM leads"))
+        conn.execute(text("DROP TABLE leads"))
+        conn.execute(text("ALTER TABLE leads_new RENAME TO leads"))
+        for sql in indexes:
+            conn.execute(text(sql))
+
+
 def _sort_product_sizes():
     """Sizes used to be saved in the order they were ticked ("GG,P,M"); store them in SIZE_ORDER ("P,M,GG").
     Idempotent: products already in order are left alone."""
@@ -128,7 +151,8 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE app_settings ALTER COLUMN last_lead_import_scope TYPE VARCHAR(500)"))
     _ensure_columns("leads", {"size": "VARCHAR(5) DEFAULT ''", "capital": "NUMERIC(14,2)", "in_debt": "BOOLEAN",
                               "released_at": "TIMESTAMP", "score": "INTEGER", "city_active": "INTEGER",
-                              "edited": "BOOLEAN DEFAULT FALSE"})
+                              "edited": "BOOLEAN DEFAULT FALSE", "notes": "TEXT"})
+    _nullable_lead_cnpj()
     _drop_lead_phones()
     _contacted_leads()
     with SessionLocal() as db:
