@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, errorMessage, screenCache } from "../api";
 import { useAuth } from "../auth";
-import { CUSTOMER_STATUS, compactMoney, initials, normalize } from "../format";
+import { CONTACT_STATE, contactState, CUSTOMER_STATUS, compactMoney, initials, localDate, normalize } from "../format";
 import { CityFilter, ErrorBox, PillSelect } from "../components/ui";
 import CustomerPanel from "../components/CustomerPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
@@ -15,6 +15,12 @@ const SORTS = {
   recent: { label: "Mais recente", fn: (a, b) => (b.last_order_date || "").localeCompare(a.last_order_date || "") },
   name: { label: "Nome A–Z", fn: (a, b) => a.name.localeCompare(b.name, "pt-BR") },
 };
+// "há 15 dias" for the last order; the exact date is in the side panel
+function lastOrder(iso, today) {
+  if (!iso) return <span className="muted">Nunca</span>;
+  const days = Math.round((Date.parse(today) - Date.parse(iso)) / 86400000);
+  return days <= 0 ? "Hoje" : days === 1 ? "Ontem" : `há ${days} dias`;
+}
 const uniqSorted = (list) => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
 
 // Excel (pt-BR) opens ";"-separated files with a BOM straight into columns, accents intact
@@ -37,7 +43,9 @@ export default function Customers() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const nav = useNavigate();
-  const [rows, setRows] = useState(() => screenCache.get("customers") || []);
+  const [rawRows, setRows] = useState(() => screenCache.get("customers") || []);
+  const today = localDate();
+  const rows = useMemo(() => rawRows.map((r) => ({ ...r, contact: contactState(r, today) })), [rawRows, today]);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [form, setForm] = useState(null);
@@ -63,6 +71,7 @@ export default function Customers() {
     return {
       q: get("q"),
       status: Object.hasOwn(CUSTOMER_STATUS, get("status")) ? get("status") : "",
+      contact: Object.hasOwn(CONTACT_STATE, get("contact")) ? get("contact") : "",
       state: get("state"),
       city: get("city"),
       seller: isAdmin && (seller === "none" || options.sellers.some(([id]) => id === seller)) ? seller : "",
@@ -86,6 +95,7 @@ export default function Customers() {
     const digits = f.q.replace(/\D/g, "");
     return rows.filter((r) =>
       (!f.status || r.status === f.status)
+      && (!f.contact || r.contact.key === f.contact)
       && (!f.state || r.state === f.state)
       && (!f.city || normalize(r.city || "").includes(normalize(f.city.trim())))
       && (!f.seller || (f.seller === "none" ? !r.owner_id : String(r.owner_id) === f.seller))
@@ -102,6 +112,7 @@ export default function Customers() {
   const chips = [
     f.q && ["q", `Busca: ${f.q}`],
     f.status && ["status", `Status: ${CUSTOMER_STATUS[f.status].label}`],
+    f.contact && ["contact", `Contato: ${CONTACT_STATE[f.contact].label}`],
     f.state && ["state", `Estado: ${f.state}`],
     f.city && ["city", `Cidade: ${f.city}`],
     f.seller && ["seller", `Vendedor: ${f.seller === "none" ? "Sem vendedor" : options.sellers.find(([id]) => id === f.seller)[1]}`],
@@ -144,6 +155,8 @@ export default function Customers() {
             value={f.q} onChange={(e) => setFilter("q", e.target.value)} />
           {select("Status", "status", f.status,
             [["", "Todos"], ...Object.entries(CUSTOMER_STATUS).map(([k, s]) => [k, s.label])])}
+          {select("Contato", "contact", f.contact,
+            [["", "Todos"], ...Object.entries(CONTACT_STATE).map(([k, s]) => [k, s.label])])}
           {select("Estado", "state", f.state, [["", "Todos"], ...options.states.map((s) => [s, s])])}
           {/* matches part of the name ("rio" → Rio do Sul, Rio Negrinho) */}
           <CityFilter value={f.city} cities={cities} onChange={(c) => setFilter("city", c)} />
@@ -167,20 +180,26 @@ export default function Customers() {
 
       <div className={`customers-layout ${selected ? "with-panel" : ""}`}>
         <section className="customers-table">
-          <div className={`customers-row head ${isAdmin ? "admin" : ""}`}>
-            <span>Cliente</span>{isAdmin && <span>Vendedor</span>}<span className="num">Total</span><span className="num">Pedidos</span><span>Status</span>
+          <div className={`customers-row with-contact head ${isAdmin ? "admin" : ""}`}>
+            <span>Cliente</span><span>Status</span><span>Contato</span><span className="cell-optional">Último pedido</span>
+            <span className="num">Pedidos</span><span className="num">Total</span>{isAdmin && <span className="cell-optional">Vendedor</span>}
           </div>
           {pageRows.map((r) => (
             <button type="button" key={r.id} onClick={() => setSelectedId(r.id)}
-              className={`customers-row ${isAdmin ? "admin" : ""} ${r.id === selectedId ? "on" : ""}`}>
+              className={`customers-row with-contact ${isAdmin ? "admin" : ""} ${r.id === selectedId ? "on" : ""}`}>
               <span className="customers-cell-main">
                 <span className="customer-avatar">{initials(r.name)}</span>
                 <span><strong>{r.name}</strong><small>{r.city ? `${r.city}${r.state ? `/${r.state}` : ""}` : "—"}</small></span>
               </span>
-              {isAdmin && <span>{r.owner_name?.split(" ")[0] || "—"}</span>}
-              <span className="num">{r.total ? compactMoney(r.total) : "—"}</span>
-              <span className="num">{r.orders}</span>
-              <span><span className={`cstatus cstatus-${CUSTOMER_STATUS[r.status].tone}`}>{CUSTOMER_STATUS[r.status].label}</span></span>
+              <span className="cell-status"><span className={`cstatus cstatus-${CUSTOMER_STATUS[r.status].tone}`}>{CUSTOMER_STATUS[r.status].label}</span></span>
+              <span className="contact-cell">
+                <span className={`cstatus cstatus-${CONTACT_STATE[r.contact.key].tone}`}>{CONTACT_STATE[r.contact.key].label}</span>
+                {r.contact.detail && <small>{r.contact.detail}</small>}
+              </span>
+              <span className="cell-optional cell-when">{lastOrder(r.last_order_date, today)}</span>
+              <span className="num">{r.orders || "—"}</span>
+              <span className="num"><strong>{r.total ? compactMoney(r.total) : "—"}</strong></span>
+              {isAdmin && <span className="cell-optional muted">{r.owner_name?.split(" ")[0] || "Sem vendedor"}</span>}
             </button>
           ))}
           {!pageRows.length && <p className="customers-empty">Nenhum cliente com esses filtros.</p>}

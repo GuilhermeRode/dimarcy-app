@@ -4,6 +4,7 @@ import { api, errorMessage } from "../api";
 import { addDays, dateBR, localDate, money, orderNumber } from "../format";
 import { EmptyState, ErrorBox, Field, Modal, useConfirm } from "../components/ui";
 import { RevenueHeader } from "../components/RevenueTabs";
+import { PaperclipIcon } from "../components/icons";
 import PeriodPicker from "../components/PeriodPicker";
 import { useSort } from "../components/useSort";
 
@@ -101,8 +102,15 @@ export function PayModal({ entry, onClose, onDone }) {
   );
 }
 
+// Same day n months later, capped at the month's end (31/01 → 28/02) — as finance.add_months on the server
+function addMonths(iso, n) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const last = new Date(y, m - 1 + n + 1, 0).getDate();
+  return localDate(new Date(y, m - 1 + n, Math.min(d, last)));
+}
+
 const emptyEntry = () => ({ description: "", amount: "", due_date: localDate(), payment_method: "", notes: "", supplier: "",
-  category: "Outros", order_number: "", repeat_months: 1 });
+  category: "Outros", order_number: "", repeat: false, repeat_months: 12 });
 
 function EntryModal({ kind, entry, onClose, onDone }) {
   const [confirmDialog, ask] = useConfirm();
@@ -131,12 +139,13 @@ function EntryModal({ kind, entry, onClose, onDone }) {
   function save(e) {
     e.preventDefault();
     const body = {
-      description: f.description, amount: Number(f.amount), due_date: f.due_date,
+      // a payable without a description is named after who gets paid
+      description: f.description.trim() || f.supplier.trim(), amount: Number(f.amount), due_date: f.due_date,
       payment_method: f.payment_method || null, notes: f.notes || null,
       supplier: payable ? f.supplier || null : null, category: payable ? f.category : null,
     };
     run(() => (isNew
-      ? api.post("/finance/entries", { ...body, kind, repeat_months: Number(f.repeat_months) || 1,
+      ? api.post("/finance/entries", { ...body, kind, repeat_months: f.repeat ? Number(f.repeat_months) || 1 : 1,
           order_id: !payable && f.order_number ? Number(f.order_number) : null })
       : api.put(`/finance/entries/${entry.id}`, body)));
   }
@@ -149,36 +158,70 @@ function EntryModal({ kind, entry, onClose, onDone }) {
   const title = isNew ? (payable ? "Lançar conta a pagar" : "Lançar conta a receber") : entry.description;
   return (
     <Modal title={title} onClose={onClose}>
-      <form onSubmit={save} className="form-grid">
-        <Field label="Descrição" span={2}><input required maxLength={200} {...input("description")} /></Field>
+      <form onSubmit={save} className="form-grid entry-form">
+        <p className="form-block-title span-2">{payable ? "Para quem" : "De quem"}</p>
         {payable ? (
           <>
-            <Field label="Fornecedor / beneficiário"><input maxLength={160} {...input("supplier")} /></Field>
+            <Field label="Fornecedor / beneficiário" span={2}>
+              <input maxLength={160} autoFocus={isNew} placeholder="Ex.: Fios Serrano" {...input("supplier")} />
+            </Field>
+            <Field label={<>Descrição {f.supplier.trim() && <em className="field-note">(opcional)</em>}</>} span={2}>
+              <input required={!f.supplier.trim()} maxLength={200} placeholder="Ex.: Fio acrílico — lote de outubro" {...input("description")} />
+            </Field>
             <Field label="Categoria">
               <select {...input("category")}>{PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
             </Field>
           </>
-        ) : isNew && (
-          <Field label="Nº do pedido (opcional)" span={2}>
-            <input inputMode="numeric" {...input("order_number")} onChange={(e) => setF({ ...f, order_number: e.target.value.replace(/\D/g, "") })} />
-          </Field>
+        ) : (
+          <>
+            <Field label="Descrição" span={isNew ? 1 : 2}>
+              <input required autoFocus={isNew} maxLength={200} placeholder="Ex.: Pedido da Loja Bela" {...input("description")} />
+            </Field>
+            {isNew && (
+              <Field label={<>Nº do pedido <em className="field-note">(opcional)</em></>}>
+                <input inputMode="numeric" placeholder="Ex.: 12" {...input("order_number")}
+                  onChange={(e) => setF({ ...f, order_number: e.target.value.replace(/\D/g, "") })} />
+              </Field>
+            )}
+          </>
         )}
-        <Field label="Valor (R$)">
-          <input type="number" step="0.01" min="0.01" required disabled={paid} {...input("amount")} />
-        </Field>
-        <Field label={isNew ? "1º vencimento" : "Vencimento"}><input type="date" required {...input("due_date")} /></Field>
-        <Field label="Forma de pagamento">
+        <Field label={<>Forma de pagamento <em className="field-note">(opcional)</em></>}>
           <select {...input("payment_method")}>
-            <option value="">—</option>
+            <option value="">Não definida</option>
             {withValue(PAYMENT_METHODS, entry?.payment_method).map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </Field>
+
+        <p className="form-block-title span-2">Valor e vencimento</p>
+        <Field label="Valor">
+          <span className="input-prefix"><span aria-hidden="true">R$</span>
+            <input type="number" step="0.01" min="0.01" required disabled={paid} placeholder="0,00" {...input("amount")} />
+          </span>
+        </Field>
+        <Field label={isNew && f.repeat ? "1º vencimento" : "Vencimento"}><input type="date" required {...input("due_date")} /></Field>
         {isNew && (
-          <Field label="Repetir mensalmente por (meses)">
-            <input type="number" min="1" max="60" required {...input("repeat_months")} />
-          </Field>
+          <div className="span-2 repeat-box">
+            <label className="check">
+              <input type="checkbox" checked={f.repeat} onChange={(e) => setF({ ...f, repeat: e.target.checked })} />
+              Repete todo mês {payable ? "(aluguel, salário, mensalidade…)" : "(parcelamento combinado com o cliente)"}
+            </label>
+            {f.repeat && (
+              <span className="repeat-months">
+                por <input type="number" min="2" max="60" required aria-label="Quantidade de meses" {...input("repeat_months")} /> meses
+              </span>
+            )}
+          </div>
         )}
-        <Field label="Observações" span={2}><textarea rows={2} {...input("notes")} /></Field>
+        {isNew && Number(f.amount) > 0 && f.due_date && (
+          <p className="form-summary span-2">
+            {f.repeat && Number(f.repeat_months) > 1
+              ? <>Serão lançadas <strong>{f.repeat_months} contas de {money(Number(f.amount))}</strong>, todo dia {Number(f.due_date.slice(8))},
+                  de {dateBR(f.due_date)} a {dateBR(addMonths(f.due_date, Number(f.repeat_months) - 1))}.</>
+              : <>Será lançada <strong>1 conta de {money(Number(f.amount))}</strong> vencendo em {dateBR(f.due_date)}.</>}
+          </p>
+        )}
+
+        <Field label={<>Observações <em className="field-note">(opcional)</em></>} span={2}><textarea rows={2} {...input("notes")} /></Field>
         {paid && <p className="muted span-2">Paga em {dateBR(entry.paid_at)} · {money(entry.paid_amount)}. Para mudar o valor, desfaça a baixa.</p>}
         {!isNew && (
           <div className="span-2 field-row">
@@ -226,6 +269,7 @@ function EntryModal({ kind, entry, onClose, onDone }) {
             <button type="button" className="btn" onClick={() => setSplit({ amount: "", due_date: addDays(entry.due_date, 30) })}>Desmembrar</button>
           )}
           {paid && <button type="button" className="btn" disabled={busy} onClick={() => run(() => api.post(`/finance/entries/${entry.id}/unpay`))}>Desfazer baixa</button>}
+          {isNew && <button type="button" className="btn" onClick={onClose}>Cancelar</button>}
           <button className="btn btn-primary" disabled={busy}>{isNew ? "Lançar" : "Salvar"}</button>
         </div>
       </form>
@@ -744,7 +788,7 @@ export default function Finance({ kind }) {
     due: (x) => x.due_date,
     party: (x) => (receivable ? x.customer_name : x.supplier) || x.description,
     ref: (x) => (receivable ? x.order_id : x.category),
-    installment: (x) => x.installment,
+    method: (x) => x.payment_method || "",
     amount: (x) => x.amount,
     status: (x) => STATUS_RANK[x.status],
   }, { key: "due", dir: 1 });
@@ -798,14 +842,19 @@ export default function Finance({ kind }) {
         <td className={x.status === "overdue" ? "due-overdue" : ""}>{dateBR(x.due_date)}</td>
         <td>
           <span className="cell-stack">
-            <strong className="cell-main">{party || x.description}{x.attachment && <span className="muted" title="Tem anexo"> 📎</span>}</strong>
+            <strong className="cell-main">{party || x.description}</strong>
             {party && <span className="cell-sub">{x.description}</span>}
           </span>
         </td>
         <td>{receivable
           ? (x.order_id ? <Link className="ref" to={`/orders/${x.order_id}`} state={{ back: { to: "/revenue/receivables", label: "Contas a receber" } }} onClick={(e) => e.stopPropagation()}>{orderNumber(x.order_id)}</Link> : "—")
           : <span className="cat-tag">{x.category}</span>}</td>
-        <td className="muted">{x.installments ? `${x.installment}/${x.installments}` : "—"}</td>
+        <td>
+          <span className="fin-method">
+            {x.payment_method || <span className="muted">—</span>}
+            {x.attachment && <PaperclipIcon size={14} aria-label="Tem anexo" role="img" />}
+          </span>
+        </td>
         <td className="num"><strong>{money(x.amount)}</strong></td>
         <td><EntryStatus entry={x} today={today} /></td>
         <td className="num" onClick={(e) => e.stopPropagation()}>
@@ -868,7 +917,7 @@ export default function Finance({ kind }) {
                   {sortHeader("due", "Vencimento")}
                   {sortHeader("party", receivable ? "Cliente · Descrição" : "Fornecedor · Descrição")}
                   {sortHeader("ref", receivable ? "Pedido" : "Categoria")}
-                  {sortHeader("installment", "Parcela")}
+                  {sortHeader("method", "Forma")}
                   {sortHeader("amount", "Valor", "num")}
                   {sortHeader("status", "Situação")}
                   <th></th>

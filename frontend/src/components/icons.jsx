@@ -124,3 +124,9 @@ export const LeadsIcon = (p) => (
     <circle cx="12" cy="12" r="0.8" />
   </svg>
 );
+
+export const PaperclipIcon = (p) => (
+  <svg viewBox="0 0 24 24" width={p.size || 18} height={p.size || 18} {...base} {...p}>
+    <path d="m21 11.5-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9" />
+  </svg>
+);

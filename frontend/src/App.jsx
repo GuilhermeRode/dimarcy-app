@@ -13,6 +13,7 @@ import Customers from "./pages/Customers";
 import Leads from "./pages/Leads";
 import FollowUps from "./pages/FollowUps";
 import Products from "./pages/Products";
+import TopProducts from "./pages/TopProducts";
 import Colors from "./pages/Colors";
 import Users from "./pages/Users";
 import Revenue from "./pages/Revenue";
@@ -69,6 +70,7 @@ const router = createHashRouter(createRoutesFromElements(
         } />
       )}
       <Route path="products" element={<Protected><Products /></Protected>} />
+      <Route path="top-products" element={<TopProducts />} />
       <Route path="colors" element={<Protected admin><Colors /></Protected>} />
       <Route path="users" element={<Protected admin><Users /></Protected>} />
       <Route path="settings" element={<Protected admin><Settings /></Protected>} />

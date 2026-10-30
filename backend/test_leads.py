@@ -330,6 +330,7 @@ def check_contacts(ctx):
     assert c.get("/api/contacts/due", headers=ctx["b"]).json() == []
     assert [(d["name"], d["user_name"]) for d in c.get("/api/contacts/due", headers=admin).json()] == [("Loja Contato", "Ana")]
     assert c.get("/api/dashboard", headers=admin).json()["alerts"]["follow_ups_due"] == 1
+    assert c.get("/api/dashboard", headers=admin).json()["lead_follow_ups"] == {"overdue": 1, "today": 0, "week": 0}
     with SessionLocal() as db:  # a seller who left: their reminders no longer count against the team
         db.get(User, ctx["a_id"]).active = False
         db.commit()

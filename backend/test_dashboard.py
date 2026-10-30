@@ -129,6 +129,16 @@ with TestClient(app) as c:
     assert acida["orders"] == 5 and acida["total"] == 500.0  # delivered + confirmed x2 + in_production + shipped
     assert len(acida["recent_orders"]) == 3 and acida["colors"] == ["Preto"]
     assert acida["last_order_date"] == TODAY.isoformat()
+    assert (acida["last_contact_at"], acida["next_action_date"]) == (None, None)
+    r = c.post("/api/contacts", headers=seller_a, json={"channel": "call", "customer_id": acida["id"], "next_action_date": "2030-01-02"})
+    r2 = c.post("/api/contacts", headers=seller_a, json={"channel": "call", "customer_id": acida["id"], "next_action_date": "2030-01-09"})
+    assert r.status_code == r2.status_code == 201, r2.text
+    acida = {x["name"]: x for x in c.get("/api/customers/overview", headers=seller_a).json()}["Ácida Modas"]
+    assert acida["next_action_date"] == "2030-01-09" and acida["last_contact_at"]  # the latest contact wins
+    assert acida["no_answer"] is False
+    c.post("/api/contacts", headers=seller_a, json={"channel": "whatsapp", "customer_id": acida["id"], "notes": "Não respondeu"})
+    acida = {x["name"]: x for x in c.get("/api/customers/overview", headers=seller_a).json()}["Ácida Modas"]
+    assert acida["no_answer"] is True
     ov_b = c.get("/api/customers/overview", headers=seller_b).json()
     assert [r["name"] for r in ov_b] == ["Cliente do Bruno"]
     ov_admin = {r["name"]: r for r in c.get("/api/customers/overview", headers=admin).json()}

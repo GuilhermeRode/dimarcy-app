@@ -147,3 +147,31 @@ export const CUSTOMER_STATUS = {
   inactive: { label: "Inativo", tone: "inactive" },
   never_ordered: { label: "A conquistar", tone: "never" },  // history before the app (older collections) is unknown
 };
+
+// Clientes' "Contato" column, from the customer's latest contact and orders.
+// Keys are the filter values; tone picks .cstatus-<tone>.
+export const CONTACT_STATE = {
+  missing: { label: "Falta contato", tone: "inactive" },
+  late: { label: "Retorno atrasado", tone: "inactive" },
+  today: { label: "Retornar hoje", tone: "risk" },
+  no_answer: { label: "Aguardando resposta", tone: "risk" },
+  waiting: { label: "Aguardando cliente", tone: "waiting" },
+  ordered: { label: "Pedido realizado", tone: "active" },
+  contacted: { label: "Contatado", tone: "never" },
+};
+const daysFrom = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000); // ISO dates, b - a
+
+// Where the conversation with a customer stands: no order and never talked to, bought after the last
+// contact, a call-back due, the customer not replying, or the customer asking to wait
+export function contactState(c, today = localDate()) {
+  const last = c.last_contact_at && localDate(new Date(`${c.last_contact_at}Z`)); // naive UTC from the API
+  if (!last) return c.last_order_date ? { key: "ordered", detail: "" } : { key: "missing", detail: "nunca contatado" };
+  if (c.last_order_date && c.last_order_date >= last) return { key: "ordered", detail: "após o contato" };
+  const next = c.next_action_date;
+  if (next && next < today) return { key: "late", detail: `há ${daysFrom(next, today)} d` };
+  if (next === today) return { key: "today", detail: "" };
+  if (c.no_answer) return { key: "no_answer", detail: next ? `tentar de novo ${dateBR(next).slice(0, 5)}` : "" };
+  if (next) return { key: "waiting", detail: `até ${dateBR(next).slice(0, 5)}` };
+  const ago = daysFrom(last, today);
+  return { key: "contacted", detail: ago === 0 ? "hoje" : `há ${ago} d` };
+}

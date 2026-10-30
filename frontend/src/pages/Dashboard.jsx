@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Cell, Pie, PieChart } from "recharts";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { compactMoney, initials, money, plural, STATUS } from "../format";
-import { ErrorBox } from "../components/ui";
+import { compactMoney, CUSTOMER_STATUS, initials, localDate, money, plural, STATUS } from "../format";
+import { ErrorBox, Swatch } from "../components/ui";
+import { ColorStrip, pooledColors, ProductThumb } from "../components/ColorStrip";
 import AlertStrip from "../components/AlertStrip";
 import Delta from "../components/Delta";
 import PeriodPicker, { defaultPeriod } from "../components/PeriodPicker";
@@ -12,12 +12,6 @@ import RevenueHero from "../components/RevenueHero";
 import TeamRanking from "../components/TeamRanking";
 import usePeriodData from "../components/usePeriodData";
 
-const EXCLUDE_MAP = import.meta.env.VITE_EXCLUDE_MAP === "1";
-
-const STATUS_COLORS = {
-  quote: "#8b96b3", confirmed: "#2f6fed", in_production: "#b8862f",
-  shipped: "#0d95ac", delivered: "#0c2140", canceled: "#c0392b",
-};
 
 function greeting(h = new Date().getHours()) {
   if (h < 5) return "Boa noite"; // after midnight it's still night, not morning
@@ -36,20 +30,23 @@ const Empty = () => <p className="muted">Sem vendas no período.</p>;
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const monthLabel = (mmYY) => `${MONTHS[Number(mmYY.slice(0, 2)) - 1]}/${mmYY.slice(3)}`; // "10/26" -> "out/26"
 
-// 12 bars, current month dark; clicking a bar shows that month's numbers beside the chart.
+// 12 bars, current month dark; hovering a bar previews that month's numbers beside the chart, clicking keeps it there.
 function MonthlyBars({ months }) {
-  const [sel, setSel] = useState(months.length - 1);
+  const [picked, setSel] = useState(months.length - 1);
+  const [hover, setHover] = useState(null);
+  const sel = hover ?? picked;
   const max = Math.max(...months.map((m) => m.value), 1);
   const m = months[sel];
   const prev = months[sel - 1];
   return (
     <div className="month-chart">
-      <div className="month-bars" role="group" aria-label="Faturamento por mês">
+      <div className="month-bars" role="group" aria-label="Faturamento por mês" onMouseLeave={() => setHover(null)}>
         {months.map((x, i) => (
-          <button key={x.month} type="button" title={`${monthLabel(x.month)}: ${money(x.value)}`}
+          <button key={x.month} type="button" aria-label={`${monthLabel(x.month)}: ${money(x.value)}`}
             className={`${i === months.length - 1 ? "current" : ""} ${i === sel ? "on" : ""}`}
-            aria-pressed={i === sel} onClick={() => setSel(i)}>
-            <span style={{ height: `${Math.max(2, (x.value / max) * 100)}%` }} />
+            aria-pressed={i === picked} onClick={() => setSel(i)} onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)}
+            onBlur={() => setHover(null)}>
+            <span style={{ height: x.value > 0 ? `${Math.max(2, (x.value / max) * 100)}%` : 0 }} />
             <small>{MONTHS[Number(x.month.slice(0, 2)) - 1]}</small>
           </button>
         ))}
@@ -66,34 +63,54 @@ function MonthlyBars({ months }) {
   );
 }
 
+// The stages are an order (quote → delivered), so they take one blue from light to dark instead of six
+// unrelated hues; canceled is the gray outside the path. Ramp checked with the dataviz validator (--ordinal).
+const STATUS_ORDER = ["quote", "confirmed", "in_production", "shipped", "delivered", "canceled"];
+const STATUS_RAMP = { quote: "#7fa8f0", confirmed: "#4a82e8", in_production: "#2257c9", shipped: "#163f8f", delivered: "#0c2140", canceled: "#8b96b3" };
+const DONUT_R = 74;
+const DONUT_LEN = 2 * Math.PI * DONUT_R;
+
 function StatusDonut({ items }) {
   const [active, setActive] = useState(null);
   const total = items.reduce((t, s) => t + s.count, 0);
-  const sel = active == null ? null : items[active];
   if (!total) return <p className="muted">Sem pedidos no período.</p>;
+  const order = (k) => (STATUS_ORDER.includes(k) ? STATUS_ORDER.indexOf(k) : STATUS_ORDER.length);
+  const rows = items.filter((s) => s.count).sort((a, b) => order(a.status) - order(b.status));
+  const gap = rows.length > 1 ? 2 : 0; // the surface shows between touching segments
+  let offset = 0;
+  const arcs = rows.map((s) => {
+    const len = (s.count / total) * DONUT_LEN;
+    const arc = { ...s, dash: `${Math.max(len - gap, 1)} ${DONUT_LEN}`, offset: -offset };
+    offset += len;
+    return arc;
+  });
+  const sel = rows.find((s) => s.status === active);
   return (
     <div className="donut-row" onMouseLeave={() => setActive(null)}>
       <div className="donut">
-        <PieChart width={184} height={184}>
-          <Pie data={items} dataKey="count" nameKey="status" innerRadius={62} outerRadius={90} paddingAngle={2}
-            onMouseEnter={(_, i) => setActive(i)} isAnimationActive={false}>
-            {items.map((s, i) => (
-              <Cell key={s.status} fill={STATUS_COLORS[s.status] || "#8b96b3"} opacity={active == null || active === i ? 1 : 0.25} />
+        <svg viewBox="0 0 184 184" width="184" height="184" role="img"
+          aria-label={rows.map((s) => `${STATUS[s.status] || s.status}: ${s.count}`).join(", ")}>
+          <g transform="rotate(-90 92 92)">
+            {arcs.map((a) => (
+              <circle key={a.status} cx="92" cy="92" r={DONUT_R} fill="none" strokeWidth="24"
+                stroke={STATUS_RAMP[a.status] || "#8b96b3"} strokeDasharray={a.dash} strokeDashoffset={a.offset}
+                opacity={active == null || active === a.status ? 1 : 0.3} onMouseEnter={() => setActive(a.status)} />
             ))}
-          </Pie>
-        </PieChart>
+          </g>
+        </svg>
         <div className="donut-center">
           <strong>{sel ? sel.count : total}</strong>
-          <span>{sel ? STATUS[sel.status] : "pedidos no período"}</span>
-          {sel && <small>{Math.round((sel.count / total) * 100)}% do total</small>}
+          <span>{sel ? STATUS[sel.status] || sel.status : total === 1 ? "pedido" : "pedidos"}</span>
+          <small>{sel ? `${Math.round((sel.count / total) * 100)}% · ${compactMoney(sel.value)}` : "no período"}</small>
         </div>
       </div>
       <ul className="donut-legend">
-        {items.map((s, i) => (
-          <li key={s.status} className={active === i ? "on" : ""} onMouseEnter={() => setActive(i)}>
-            <span className="legend-dot" style={{ background: STATUS_COLORS[s.status] || "#8b96b3" }} />
+        {rows.map((s) => (
+          <li key={s.status} className={active === s.status ? "on" : ""} onMouseEnter={() => setActive(s.status)}>
+            <span className="legend-dot" style={{ background: STATUS_RAMP[s.status] || "#8b96b3" }} />
             <span className="legend-name">{STATUS[s.status] || s.status}</span>
-            <span className="legend-qty">{s.count}</span>
+            <strong>{s.count}</strong>
+            <small>{compactMoney(s.value)}</small>
           </li>
         ))}
       </ul>
@@ -101,40 +118,118 @@ function StatusDonut({ items }) {
   );
 }
 
-function Bars({ items, label, value, detail }) {
-  if (!items.length) return <Empty />;
-  const max = Math.max(...items.map(value), 1);
+const pct = (part, whole) => `${Math.round((part / Math.max(whole, 1)) * 100)}%`;
+const daysSince = (iso, today) => Math.round((Date.parse(today) - Date.parse(iso)) / 86400000);
+
+// Best customers of the period, each with its city, when it last bought and whether it is still active
+function TopCustomers({ customers, revenue, overview }) {
+  if (!customers.length) return <Empty />;
+  const today = localDate();
   return (
-    <ul className="hbars">
-      {items.map((i, k) => (
-        <li key={k}>
-          <div><span>{label(i)}</span><strong>{detail(i)}</strong></div>
-          <span className="hbar"><span style={{ width: `${(value(i) / max) * 100}%` }} /></span>
-        </li>
-      ))}
-    </ul>
+    <div className="top-customers">
+      <ol className="ranking">
+        {customers.map((c, i) => {
+          const o = overview.get(c.id);
+          const last = o?.last_order_date ? daysSince(o.last_order_date, today) : null;
+          const where = o?.city ? `${o.city}${o.state ? `/${o.state}` : ""}` : null;
+          return (
+            <li key={c.id}>
+              <span className="rank">{i + 1}</span>
+              <span className="customer-avatar">{initials(c.name)}</span>
+              <span className="grow">
+                <span className="rank-line"><span className="rank-title">{c.name}</span><strong>{compactMoney(c.value)}</strong></span>
+                <span className="rank-line">
+                  <small className="rank-sub">
+                    {[where, last == null ? null : last === 0 ? "comprou hoje" : `último pedido há ${last} d`].filter(Boolean).join(" · ")}
+                  </small>
+                  <small>{pct(c.value, revenue)}</small>
+                </span>
+              </span>
+              {o && <span className={`cstatus cstatus-${CUSTOMER_STATUS[o.status].tone}`}>{CUSTOMER_STATUS[o.status].label}</span>}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
-// With dozens of colors a strip or donut turns into slivers: rank the top ones and pool the rest.
+// The "Retornos pendentes" card: the headline count, a strip of its mix and the counts.
+// `parts` are [cssKey, label, count]; the head goes to the screen where they're worked.
+function ContactSide({ title, total, caption, parts, to, nav }) {
+  const all = parts.reduce((t, [, , n]) => t + n, 0);
+  return (
+    <div className="follow-side">
+      <button type="button" className="follow-head" onClick={() => nav(to)}>
+        <span>{title}</span>
+        <strong>{total}</strong>
+        <small>{caption}</small>
+      </button>
+      <div className="follow-strip" role="img" aria-label={parts.map(([, label, n]) => `${n} ${label}`).join(", ")}>
+        {all > 0 && parts.map(([k, , n]) => n > 0 && <span key={k} className={`fu-${k}`} style={{ flexGrow: n }} />)}
+      </div>
+      <ul className="follow-counts">
+        {parts.map(([k, label, n]) => (
+          <li key={k} className={n ? "" : "zero"}><i className={`fu-${k}`} aria-hidden="true" /><strong>{n}</strong> {label}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Leads with a call-back due (the Retornos screen), by urgency
+function ContactsCard({ leads, nav }) {
+  return (
+    <div className="follow-card">
+      <ContactSide title="Leads" total={leads.overdue + leads.today} caption="retornos para fazer" to="/follow-ups" nav={nav}
+        parts={[["late", "atrasados", leads.overdue], ["today", "para hoje", leads.today], ["week", "nos próximos 7 dias", leads.week]]} />
+    </div>
+  );
+}
+
+// One ranked row per item: position, an optional picture, a title with its measure, a sub-line with
+// a detail, and a bar for the measure. `measure` drives the bar, the rest is text.
+function Ranking({ rows }) {
+  if (!rows.length) return <Empty />;
+  const max = Math.max(...rows.map((r) => r.measure), 1);
+  return (
+    <ol className="ranking">
+      {rows.map((r, i) => (
+        <li key={r.key}>
+          <span className="rank">{i + 1}</span>
+          {r.lead}
+          <span className="grow">
+            <span className="rank-line"><span className="rank-title">{r.title}</span><strong>{r.value}</strong></span>
+            <span className="rank-line"><small className="rank-sub">{r.sub}</small><small>{r.detail}</small></span>
+            <span className="rank-bar"><span style={{ width: `${(r.measure / max) * 100}%` }} /></span>
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+// The mix of the period as one strip in the real fabric colors, then the ranking. With dozens of
+// colors the strip turns into slivers, so the top ones are ranked and the rest pooled.
 const TOP_COLORS = 8;
 function ColorRanking({ colors, totalPieces }) {
   if (!colors.length || !totalPieces) return <Empty />;
-  const top = colors.slice(0, TOP_COLORS); // the API sends every color, already ranked by pieces
-  const others = totalPieces - top.reduce((t, c) => t + c.pieces, 0);
-  const rows = others > 0 ? [...top, { name: "Outras cores", hex: null, pieces: others }] : top;
-  const max = Math.max(...rows.map((c) => c.pieces), 1);
+  const rows = pooledColors(colors, totalPieces, TOP_COLORS); // the API sends every color, already ranked by pieces
+  const pct = (c) => Math.round((c.pieces / totalPieces) * 100);
   return (
-    <ul className="color-ranking">
-      {rows.map((c) => (
-        <li key={c.name} className={c.hex ? "" : "others"}>
-          <span className="swatch" style={{ background: c.hex || "var(--line)", width: 12, height: 12 }} />
-          <span className="color-name">{c.name}</span>
-          <span className="hbar"><span style={{ width: `${(c.pieces / max) * 100}%`, background: c.hex || "var(--muted)" }} /></span>
-          <strong>{Math.round((c.pieces / totalPieces) * 100)}%</strong>
-        </li>
-      ))}
-    </ul>
+    <div className="color-mix">
+      <ColorStrip colors={rows} total={totalPieces} />
+      <ol className="color-ranking">
+        {rows.map((c) => (
+          <li key={c.name} className={c.hex ? "" : "others"}>
+            {c.hex ? <Swatch hex={c.hex} hex2={c.hex2} size={16} /> : <span className="swatch swatch-others" />}
+            <span className="color-name">{c.name}</span>
+            <span className="color-qty">{plural(c.pieces, "peça", "peças")}</span>
+            <strong>{pct(c)}%</strong>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 
@@ -144,21 +239,10 @@ export default function Dashboard() {
   const isAdmin = user?.role === "admin";
   const [period, setPeriod] = useState(defaultPeriod);
   const { data: d, error } = usePeriodData(period);
-  const [topCities, setTopCities] = useState([]);
-
-  useEffect(() => {
-    if (!isAdmin || EXCLUDE_MAP) return;
-    api.get("/customers").then((r) => {
-      const counts = new Map();
-      for (const c of r.data) {
-        if (!c.city) continue;
-        const key = `${c.city.trim()}/${(c.state || "").trim().toUpperCase()}`;
-        counts.set(key, (counts.get(key) || 0) + 1);
-      }
-      setTopCities([...counts.entries()].map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count).slice(0, 5));
-    });
-  }, [isAdmin]);
+  // The customer base (not the period): city, last order and status of the best customers
+  const [overview, setOverview] = useState([]);
+  useEffect(() => { api.get("/customers/overview").then((r) => setOverview(r.data)).catch(() => {}); }, []);
+  const byId = new Map(overview.map((c) => [c.id, c]));
 
   const sizeMax = d ? Math.max(...d.by_size.map((s) => s.pieces), 1) : 1;
   const kpis = d && [
@@ -216,7 +300,7 @@ export default function Dashboard() {
               {d.by_size.length ? (
                 <div className="vbars">
                   {d.by_size.map((s) => (
-                    <div key={s.size}>
+                    <div key={s.size} title={`${s.size}: ${plural(s.pieces, "peça", "peças")}`}>
                       <small>{Math.round((s.pieces / Math.max(d.kpis.pieces, 1)) * 100)}%</small>
                       <span className={s.pieces === sizeMax ? "top" : ""} style={{ height: `${(s.pieces / sizeMax) * 78}%` }} />
                       <strong>{s.size}</strong>
@@ -226,9 +310,17 @@ export default function Dashboard() {
               ) : <Empty />}
             </div>
             <div className="panel">
-              <h3>Produtos mais vendidos</h3>
-              <Bars items={d.top_products.slice(0, 5)} label={(i) => `${i.reference} · ${i.description}`}
-                value={(i) => i.pieces} detail={(i) => `${i.pieces} pç`} />
+              <div className="panel-header">
+                <h3>Referências mais vendidas</h3>
+                {d.top_products.length > 0 && (
+                  <button type="button" className="link-btn" onClick={() => nav("/top-products", { state: { period } })}>Ver todas →</button>
+                )}
+              </div>
+              <Ranking rows={d.top_products.slice(0, 5).map((p) => ({
+                key: p.reference, lead: <ProductThumb url={p.thumb_url} />, measure: p.pieces,
+                title: <span className="ref">{p.reference}</span>, value: `${p.pieces.toLocaleString("pt-BR")} pç`,
+                sub: p.description, detail: compactMoney(p.value),
+              }))} />
             </div>
           </section>
 
@@ -238,28 +330,15 @@ export default function Dashboard() {
                 <h3>Melhores clientes</h3>
                 <button type="button" className="link-btn" onClick={() => nav("/customers?sort=total")}>Ver todos →</button>
               </div>
-              {d.top_customers.length ? (
-                <ol className="top-customers">
-                  {d.top_customers.slice(0, 5).map((c, i) => (
-                    <li key={i}>
-                      <span className="rank">{i + 1}</span>
-                      <span className="customer-avatar">{initials(c.name)}</span>
-                      <span className="grow"><strong>{c.name}</strong><small>{plural(c.orders, "pedido", "pedidos")}</small></span>
-                      <strong>{compactMoney(c.value)}</strong>
-                    </li>
-                  ))}
-                </ol>
-              ) : <Empty />}
+              <TopCustomers customers={d.top_customers.slice(0, 5)} revenue={d.kpis.revenue} overview={byId} />
             </div>
-            {!EXCLUDE_MAP && isAdmin && topCities.length > 0 && (
-              <div className="panel">
-                <div className="panel-header">
-                  <h3>Clientes por cidade</h3>
-                  <button type="button" className="link-btn" onClick={() => nav("/customers-by-city")}>Ver mapa →</button>
-                </div>
-                <Bars items={topCities} label={(i) => i.name} value={(i) => i.count} detail={(i) => i.count} />
+            <div className="panel">
+              <div className="panel-header">
+                <h3>Retornos pendentes</h3>
+                <button type="button" className="link-btn" onClick={() => nav("/follow-ups")}>Ver retornos →</button>
               </div>
-            )}
+              <ContactsCard leads={d.lead_follow_ups} nav={nav} />
+            </div>
           </section>
         </>
       )}
