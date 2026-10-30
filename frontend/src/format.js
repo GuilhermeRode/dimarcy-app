@@ -1,6 +1,9 @@
 export const money = (v) =>
   Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+// The Painel's eye: `fmt` as is, or a mask while values are hidden
+export const hideable = (hide, fmt) => (hide ? () => "R$ ••••••" : fmt);
+
 export const dateBR = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("pt-BR") : "");
 
 export const orderNumber = (id) => String(id).padStart(5, "0");

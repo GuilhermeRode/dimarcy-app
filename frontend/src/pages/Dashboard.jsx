@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { compactMoney, CUSTOMER_STATUS, initials, localDate, money, plural, STATUS } from "../format";
+import { compactMoney, CUSTOMER_STATUS, hideable, initials, localDate, money, plural, STATUS } from "../format";
 import { ErrorBox, Swatch } from "../components/ui";
-import { ColorStrip, pooledColors, ProductThumb } from "../components/ColorStrip";
+import { ColorStrip, ProductThumb } from "../components/ColorStrip";
 import AlertStrip from "../components/AlertStrip";
 import Delta from "../components/Delta";
 import PeriodPicker, { defaultPeriod } from "../components/PeriodPicker";
@@ -31,7 +31,7 @@ const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "
 const monthLabel = (mmYY) => `${MONTHS[Number(mmYY.slice(0, 2)) - 1]}/${mmYY.slice(3)}`; // "10/26" -> "out/26"
 
 // 12 bars, current month dark; hovering a bar previews that month's numbers beside the chart, clicking keeps it there.
-function MonthlyBars({ months }) {
+function MonthlyBars({ months, hide }) {
   const [picked, setSel] = useState(months.length - 1);
   const [hover, setHover] = useState(null);
   const sel = hover ?? picked;
@@ -42,7 +42,7 @@ function MonthlyBars({ months }) {
     <div className="month-chart">
       <div className="month-bars" role="group" aria-label="Faturamento por mês" onMouseLeave={() => setHover(null)}>
         {months.map((x, i) => (
-          <button key={x.month} type="button" aria-label={`${monthLabel(x.month)}: ${money(x.value)}`}
+          <button key={x.month} type="button" aria-label={`${monthLabel(x.month)}: ${hideable(hide, money)(x.value)}`}
             className={`${i === months.length - 1 ? "current" : ""} ${i === sel ? "on" : ""}`}
             aria-pressed={i === picked} onClick={() => setSel(i)} onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)}
             onBlur={() => setHover(null)}>
@@ -53,7 +53,7 @@ function MonthlyBars({ months }) {
       </div>
       <div className="month-card">
         <span>{monthLabel(m.month)}{sel === months.length - 1 ? " (parcial)" : ""}</span>
-        <strong>{compactMoney(m.value)}</strong>
+        <strong>{hideable(hide, compactMoney)(m.value)}</strong>
         <small>{plural(m.orders, "pedido", "pedidos")} · {plural(m.pieces, "peça", "peças")}</small>
         {prev && prev.value > 0 && (
           <span className="month-card-delta"><Delta cur={m.value} prev={prev.value} /> vs. {MONTHS[Number(prev.month.slice(0, 2)) - 1]}</span>
@@ -70,7 +70,8 @@ const STATUS_RAMP = { quote: "#7fa8f0", confirmed: "#4a82e8", in_production: "#2
 const DONUT_R = 74;
 const DONUT_LEN = 2 * Math.PI * DONUT_R;
 
-function StatusDonut({ items }) {
+function StatusDonut({ items, hide }) {
+  const brl = hideable(hide, compactMoney);
   const [active, setActive] = useState(null);
   const total = items.reduce((t, s) => t + s.count, 0);
   if (!total) return <p className="muted">Sem pedidos no período.</p>;
@@ -101,7 +102,7 @@ function StatusDonut({ items }) {
         <div className="donut-center">
           <strong>{sel ? sel.count : total}</strong>
           <span>{sel ? STATUS[sel.status] || sel.status : total === 1 ? "pedido" : "pedidos"}</span>
-          <small>{sel ? `${Math.round((sel.count / total) * 100)}% · ${compactMoney(sel.value)}` : "no período"}</small>
+          <small>{sel ? `${Math.round((sel.count / total) * 100)}% · ${brl(sel.value)}` : "no período"}</small>
         </div>
       </div>
       <ul className="donut-legend">
@@ -110,7 +111,7 @@ function StatusDonut({ items }) {
             <span className="legend-dot" style={{ background: STATUS_RAMP[s.status] || "#8b96b3" }} />
             <span className="legend-name">{STATUS[s.status] || s.status}</span>
             <strong>{s.count}</strong>
-            <small>{compactMoney(s.value)}</small>
+            <small>{brl(s.value)}</small>
           </li>
         ))}
       </ul>
@@ -122,7 +123,7 @@ const pct = (part, whole) => `${Math.round((part / Math.max(whole, 1)) * 100)}%`
 const daysSince = (iso, today) => Math.round((Date.parse(today) - Date.parse(iso)) / 86400000);
 
 // Best customers of the period, each with its city, when it last bought and whether it is still active
-function TopCustomers({ customers, revenue, overview }) {
+function TopCustomers({ customers, revenue, overview, hide }) {
   if (!customers.length) return <Empty />;
   const today = localDate();
   return (
@@ -137,7 +138,7 @@ function TopCustomers({ customers, revenue, overview }) {
               <span className="rank">{i + 1}</span>
               <span className="customer-avatar">{initials(c.name)}</span>
               <span className="grow">
-                <span className="rank-line"><span className="rank-title">{c.name}</span><strong>{compactMoney(c.value)}</strong></span>
+                <span className="rank-line"><span className="rank-title">{c.name}</span><strong>{hideable(hide, compactMoney)(c.value)}</strong></span>
                 <span className="rank-line">
                   <small className="rank-sub">
                     {[where, last == null ? null : last === 0 ? "comprou hoje" : `último pedido há ${last} d`].filter(Boolean).join(" · ")}
@@ -177,12 +178,16 @@ function ContactSide({ title, total, caption, parts, to, nav }) {
   );
 }
 
-// Leads with a call-back due (the Retornos screen), by urgency
-function ContactsCard({ leads, nav }) {
+// Leads with a call-back due (the Retornos screen), by urgency; for an admin, also the queue awaiting first contact
+function ContactsCard({ leads, firstContact, nav }) {
   return (
     <div className="follow-card">
       <ContactSide title="Leads" total={leads.overdue + leads.today} caption="retornos para fazer" to="/follow-ups" nav={nav}
         parts={[["late", "atrasados", leads.overdue], ["today", "para hoje", leads.today], ["week", "nos próximos 7 dias", leads.week]]} />
+      {firstContact && (
+        <ContactSide title="Primeiro contato" total={firstContact.pending} caption="lojas sem contato" to="/leads" nav={nav}
+          parts={[["today", "sem contato", firstContact.pending], ...(firstContact.new ? [["week", "liberados", firstContact.new]] : [])]} />
+      )}
     </div>
   );
 }
@@ -209,20 +214,18 @@ function Ranking({ rows }) {
   );
 }
 
-// The mix of the period as one strip in the real fabric colors, then the ranking. With dozens of
-// colors the strip turns into slivers, so the top ones are ranked and the rest pooled.
+// The mix of the period as one strip in the real fabric colors (all of them), then the top ones ranked.
 const TOP_COLORS = 8;
 function ColorRanking({ colors, totalPieces }) {
   if (!colors.length || !totalPieces) return <Empty />;
-  const rows = pooledColors(colors, totalPieces, TOP_COLORS); // the API sends every color, already ranked by pieces
   const pct = (c) => Math.round((c.pieces / totalPieces) * 100);
   return (
     <div className="color-mix">
-      <ColorStrip colors={rows} total={totalPieces} />
+      <ColorStrip colors={colors} total={totalPieces} />
       <ol className="color-ranking">
-        {rows.map((c) => (
-          <li key={c.name} className={c.hex ? "" : "others"}>
-            {c.hex ? <Swatch hex={c.hex} hex2={c.hex2} size={16} /> : <span className="swatch swatch-others" />}
+        {colors.slice(0, TOP_COLORS).map((c) => (
+          <li key={c.name}>
+            <Swatch hex={c.hex} hex2={c.hex2} size={16} />
             <span className="color-name">{c.name}</span>
             <span className="color-qty">{plural(c.pieces, "peça", "peças")}</span>
             <strong>{pct(c)}%</strong>
@@ -244,11 +247,12 @@ export default function Dashboard() {
   useEffect(() => { api.get("/customers/overview").then((r) => setOverview(r.data)).catch(() => {}); }, []);
   const byId = new Map(overview.map((c) => [c.id, c]));
 
+  const [hide, setHide] = useState(true);  // the eye: every Painel visit starts with the values hidden
   const sizeMax = d ? Math.max(...d.by_size.map((s) => s.pieces), 1) : 1;
   const kpis = d && [
     ["Pedidos fechados", d.kpis.orders, d.previous_kpis.orders, (v) => v.toLocaleString("pt-BR")],
     ["Peças vendidas", d.kpis.pieces, d.previous_kpis.pieces, (v) => v.toLocaleString("pt-BR")],
-    ["Ticket médio", d.kpis.average_ticket, d.previous_kpis.average_ticket, money],
+    ["Ticket médio", d.kpis.average_ticket, d.previous_kpis.average_ticket, hideable(hide, money)],
   ];
 
   return (
@@ -265,7 +269,8 @@ export default function Dashboard() {
         <>
           <section className="hero-row">
             <RevenueHero title="Faturamento no período" revenue={d.kpis.revenue} prevRevenue={d.previous_kpis.revenue}
-              series={d.sales_series} goal={d.goal} goalValue={d.goal_value} onClick={isAdmin ? () => nav("/revenue") : undefined} />
+              series={d.sales_series} goal={d.goal} goalValue={d.goal_value} onClick={isAdmin ? () => nav("/revenue") : undefined}
+              hide={hide} onToggleHide={() => setHide(!hide)} />
             <div className="kpi-stack">
               {kpis.map(([label, cur, prev, fmt]) => (
                 <div key={label}>
@@ -280,15 +285,15 @@ export default function Dashboard() {
           <section className="dash-row">
             <div className="panel dash-wide">
               <h3>Faturamento nos últimos 12 meses</h3>
-              <MonthlyBars months={d.monthly_sales} />
+              <MonthlyBars months={d.monthly_sales} hide={hide} />
             </div>
             <div className="panel">
               <div className="panel-header"><h3>Situação dos pedidos</h3></div>
-              <StatusDonut items={d.by_status} />
+              <StatusDonut items={d.by_status} hide={hide} />
             </div>
           </section>
 
-          {isAdmin && <TeamRanking title="Equipe comercial no período" sellers={d.by_seller} />}
+          {isAdmin && <TeamRanking title="Equipe comercial no período" sellers={d.by_seller} hide={hide} />}
 
           <section className="dash-grid-3">
             <div className="panel">
@@ -298,11 +303,12 @@ export default function Dashboard() {
             <div className="panel">
               <div className="panel-header"><h3>Peças por tamanho</h3><span className="muted">{plural(d.kpis.pieces, "peça", "peças")}</span></div>
               {d.by_size.length ? (
-                <div className="vbars">
+                <div className="size-bars">
                   {d.by_size.map((s) => (
-                    <div key={s.size} title={`${s.size}: ${plural(s.pieces, "peça", "peças")}`}>
-                      <small>{Math.round((s.pieces / Math.max(d.kpis.pieces, 1)) * 100)}%</small>
-                      <span className={s.pieces === sizeMax ? "top" : ""} style={{ height: `${(s.pieces / sizeMax) * 78}%` }} />
+                    <div key={s.size} className={s.pieces === sizeMax ? "top" : ""} title={plural(s.pieces, "peça", "peças")}>
+                      <span style={{ height: `${(s.pieces / sizeMax) * 100}%` }}>
+                        <b>{Math.round((s.pieces / Math.max(d.kpis.pieces, 1)) * 100)}%</b>
+                      </span>
                       <strong>{s.size}</strong>
                     </div>
                   ))}
@@ -319,7 +325,7 @@ export default function Dashboard() {
               <Ranking rows={d.top_products.slice(0, 5).map((p) => ({
                 key: p.reference, lead: <ProductThumb url={p.thumb_url} />, measure: p.pieces,
                 title: <span className="ref">{p.reference}</span>, value: `${p.pieces.toLocaleString("pt-BR")} pç`,
-                sub: p.description, detail: compactMoney(p.value),
+                sub: p.description, detail: hideable(hide, compactMoney)(p.value),
               }))} />
             </div>
           </section>
@@ -330,14 +336,14 @@ export default function Dashboard() {
                 <h3>Melhores clientes</h3>
                 <button type="button" className="link-btn" onClick={() => nav("/customers?sort=total")}>Ver todos →</button>
               </div>
-              <TopCustomers customers={d.top_customers.slice(0, 5)} revenue={d.kpis.revenue} overview={byId} />
+              <TopCustomers customers={d.top_customers.slice(0, 5)} revenue={d.kpis.revenue} overview={byId} hide={hide} />
             </div>
             <div className="panel">
               <div className="panel-header">
                 <h3>Retornos pendentes</h3>
                 <button type="button" className="link-btn" onClick={() => nav("/follow-ups")}>Ver retornos →</button>
               </div>
-              <ContactsCard leads={d.lead_follow_ups} nav={nav} />
+              <ContactsCard leads={d.lead_follow_ups} firstContact={d.first_contact} nav={nav} />
             </div>
           </section>
         </>

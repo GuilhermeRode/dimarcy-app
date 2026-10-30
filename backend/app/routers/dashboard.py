@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..database import get_db
-from ..leads import due_follow_ups
+from ..leads import due_follow_ups, ranked_leads
 from ..models import SALE_STATUSES, Order, User, size_key
 from ..sales import customer_overview, late_filter, visible_orders
 from ..security import get_current_user
@@ -162,7 +162,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         "top_customers": _top(customers),
         "by_seller": _top(sellers, 50),
         "by_city": _top(cities, len(cities)),  # all of them: Faturamento sums the tail into "Outras"
-        "by_color": _top(colors, len(colors), by="pieces"),  # all colors: the Painel pools the tail into "Outras cores"
+        "by_color": _top(colors, len(colors), by="pieces"),  # all colors: the Painel's strip shows them all, its list the top ones
         "by_size": sorted(
             [{"size": t, "pieces": q} for t, q in sizes.items()],
             key=lambda x: size_key(x["size"]),
@@ -179,4 +179,6 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
             "today": sum(f["kind"] == "lead" and f["next_action_date"] == today for f in follow_ups),
             "week": sum(f["kind"] == "lead" and f["next_action_date"] > today for f in follow_ups),
         },
+        # admin only: same counts as the Prospecção tabs Pendentes / Liberados
+        "first_contact": {s: ranked_leads(db, user, status=s).count() for s in ("pending", "new")} if is_admin else None,
     }
