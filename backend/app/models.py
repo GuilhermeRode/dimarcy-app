@@ -252,6 +252,7 @@ class FinancialEntry(Base):
     category: Mapped[str | None] = mapped_column(String(40))  # payables, see PAYABLE_CATEGORIES
     installment: Mapped[int | None] = mapped_column(Integer)  # "2" of "2/3"
     installments: Mapped[int | None] = mapped_column(Integer)
+    attachment: Mapped[str | None] = mapped_column(String(80))  # file name in private/finance (boleto, receipt)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     order: Mapped["Order | None"] = relationship()

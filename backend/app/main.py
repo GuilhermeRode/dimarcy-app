@@ -99,6 +99,7 @@ async def lifespan(app: FastAPI):
                               "quick_quantity": "BOOLEAN DEFAULT TRUE"})
     _ensure_columns("colors", {"hex2": "VARCHAR(7)"})
     _ensure_columns("customers", {"state_registration": "VARCHAR(30)"})
+    _ensure_columns("financial_entries", {"attachment": "VARCHAR(80)"})
     _tidy_customers()
     _sort_product_sizes()
     _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'",

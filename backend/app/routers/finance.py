@@ -1,8 +1,11 @@
+import uuid
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, contains_eager
 
@@ -23,7 +26,7 @@ def _out(e: FinancialEntry, today: date) -> dict:
         "payment_method": e.payment_method, "notes": e.notes, "order_id": e.order_id,
         "customer_name": e.order.customer.name if e.order else None,  # always the order's current customer
         "supplier": e.supplier, "category": e.category,
-        "installment": e.installment, "installments": e.installments,
+        "installment": e.installment, "installments": e.installments, "attachment": bool(e.attachment),
         "status": finance.entry_status(e, today),
     }
 
@@ -160,16 +163,33 @@ def read_boleto(code: str = Form(""), file: UploadFile | None = File(None)):
         if not (file.filename or "").lower().endswith(".pdf"):
             raise HTTPException(400, "Envie o boleto em PDF.")
         try:
-            found = finance.find_boleto(finance.pdf_text(_read_upload(file)), clock.today_br())
+            text = finance.pdf_text(_read_upload(file))
         except ValueError as exc:
             raise HTTPException(400, str(exc))
+        found = finance.find_boleto(text, clock.today_br())
         if not found:
             raise HTTPException(400, "Não encontrei a linha digitável no PDF. Se for um boleto escaneado, cole a linha digitável.")
+        found.update(finance.boleto_parties(text))
     else:
         found = finance.parse_boleto_code(code, clock.today_br())
         if not found:
             raise HTTPException(400, "Linha digitável inválida. Confira os números (47 ou 48 dígitos).")
     return {**found, "amount": float(found["amount"]) if found["amount"] else None}
+
+
+@router.post("/pix")
+def read_pix(file: UploadFile = File(...)):
+    """Amount, date and payer from a Pix receipt PDF; nothing is saved."""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "Envie o comprovante em PDF.")
+    try:
+        found = finance.parse_pix(finance.pdf_text(_read_upload(file)), clock.today_br())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if not found:
+        raise HTTPException(400, "Não encontrei o valor no comprovante. Se for uma foto ou print, preencha os dados à mão.")
+    return {**found, "amount": float(found["amount"])}
+
 
 @router.put("/entries/{eid}")
 def update_entry(eid: int, data: EntryUpdate, db: Session = Depends(get_db)):
@@ -229,8 +249,60 @@ def split(eid: int, data: SplitIn, db: Session = Depends(get_db)):
 
 @router.delete("/entries/{eid}", status_code=204)
 def delete_entry(eid: int, db: Session = Depends(get_db)):
-    db.delete(_get(eid, db))
+    e = _get(eid, db)
+    old = e.attachment
+    db.delete(e)
     db.commit()
+    _drop_attachment(old)
+
+
+# Boletos and receipts carry bank and tax data: kept outside /uploads (which is public) and served to admins only
+ATTACH_DIR = Path(__file__).resolve().parent.parent.parent / "private" / "finance"
+ATTACH_TYPES = {b"%PDF": ("pdf", "application/pdf"), bytes.fromhex("89504e47"): ("png", "image/png"),
+                bytes.fromhex("ffd8ff"): ("jpg", "image/jpeg")}
+
+
+def _attach_type(name: str) -> tuple[str, str]:
+    return next(t for t in ATTACH_TYPES.values() if name.endswith(f".{t[0]}"))
+
+
+def _drop_attachment(name: str | None) -> None:
+    if name:
+        (ATTACH_DIR / name).unlink(missing_ok=True)
+
+
+@router.post("/entries/{eid}/attachment")
+def attach(eid: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    e = _get(eid, db)
+    data = _read_upload(file)
+    ext = next((t[0] for magic, t in ATTACH_TYPES.items() if data.startswith(magic)), None)
+    if not ext:  # by content, not by name
+        raise HTTPException(400, "Envie um PDF, PNG ou JPG.")
+    ATTACH_DIR.mkdir(parents=True, exist_ok=True)
+    name = f"{e.id}-{uuid.uuid4().hex[:8]}.{ext}"
+    (ATTACH_DIR / name).write_bytes(data)
+    old, e.attachment = e.attachment, name
+    db.commit()
+    _drop_attachment(old)
+    return _out(e, clock.today_br())
+
+
+@router.get("/entries/{eid}/attachment")
+def get_attachment(eid: int, db: Session = Depends(get_db)):
+    e = _get(eid, db)
+    if not e.attachment or not (ATTACH_DIR / e.attachment).is_file():
+        raise HTTPException(404, "Este lançamento não tem anexo.")
+    ext, media = _attach_type(e.attachment)
+    return FileResponse(ATTACH_DIR / e.attachment, media_type=media, filename=f"anexo-{e.id}.{ext}")
+
+
+@router.delete("/entries/{eid}/attachment")
+def remove_attachment(eid: int, db: Session = Depends(get_db)):
+    e = _get(eid, db)
+    old, e.attachment = e.attachment, None
+    db.commit()
+    _drop_attachment(old)
+    return _out(e, clock.today_br())
 
 
 @router.post("/orders/{order_id}/generate", status_code=201)

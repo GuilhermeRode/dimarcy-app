@@ -2,6 +2,7 @@
 .env
 !.env.example
 backend/uploads/
+backend/private/
 
 # --- customer lists / business documents (personal data) ---
 pdfs/
