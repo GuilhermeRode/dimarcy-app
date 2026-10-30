@@ -8,6 +8,7 @@ import LeadPanel, { isNewStore } from "../components/LeadPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
 
 const PAGE_SIZE = 50;
+const MAX_BULK = 500;  // the API's limit for release/discard
 export const sellerLabel = (u) => (u.role === "admin" ? `${u.name} (admin)` : u.name);  // admins can get leads too
 // Keys match the backend's DISCARD_REASONS
 const DISCARD_REASONS = { closed: "Loja fechou", not_target: "Não é o nosso público", competitor: "Já compra de concorrente",
@@ -37,7 +38,7 @@ export default function Leads() {
   const [filters, setFilters] = useState({ search: "", city: "", seller: "", tab: "pending" });
   const [searchText, setSearchText] = useState("");
   const [cityText, setCityText] = useState("");
-  // Searching is explicit: Enter, the magnifier or "Pesquisar" apply what was typed; picking a city applies it.
+  // Searching is explicit: Enter or the magnifier apply what was typed; picking a city applies it.
   const search = (city = cityText) => setFilters((f) => ({ ...f, search: searchText.trim(), city: city.trim() }));
   const [data, setData] = useState(null); // {items, total, cities}
   const [allCities, setAllCities] = useState([]);
@@ -118,6 +119,8 @@ export default function Leads() {
 
   const items = data?.items || [];
   const selected = items.find((l) => l.id === selectedId);
+  const pickable = items.slice(0, MAX_BULK);
+  const allChecked = pickable.length > 0 && pickable.every((l) => checked.has(l.id));
   const drop = (id) => {
     setData((d) => ({ ...d, items: d.items.filter((l) => l.id !== id), total: d.total - 1 }));
     setSelectedId(null);
@@ -186,13 +189,13 @@ export default function Leads() {
     const { id, name, phone, email, address, notes, cnpj, city, state } = editing;
     try {
       if (!id) {  // new lead: the admin's starts in Pendentes (first contact, then release); a seller's is already theirs
-        await api.post("/leads", { name, phone, email, address, notes, cnpj, city, state });
+        await api.post("/leads", { name, phone, notes, cnpj, city, state });
         setEditing(null);
-        setNotice(isAdmin ? "Lead cadastrado em Pendentes. Depois do primeiro contato, libere para o vendedor." : "Lead cadastrado. Ele já está na sua lista.");
+        setNotice(isAdmin ? "Lead cadastrado em Pendentes." : "Lead cadastrado. Ele já está na sua lista.");
         load(0);
         return;
       }
-      const { data: lead } = await api.put(`/leads/${id}`, { name, phone, email, address, notes });
+      const { data: lead } = await api.put(`/leads/${id}`, { name, phone, email, address, notes, cnpj });
       setData((d) => ({ ...d, items: d.items.map((l) => (l.id === id ? { ...l, ...lead } : l)) }));
       setEditing(null);
       setNotice("Dados do lead atualizados. As próximas importações não sobrescrevem essa edição.");
@@ -227,7 +230,7 @@ export default function Leads() {
   return (
     <div className="page">
       <header className="page-header">
-        <div>
+        <div className="leads-title">
           <h1>Prospecção</h1>
           {isAdmin && statusError && !importCfg && <p className="muted import-status">Não foi possível carregar o status da importação.</p>}
           {isAdmin && importCfg && (
@@ -241,23 +244,22 @@ export default function Leads() {
           )}
         </div>
         <div className="header-actions">
-          {(isAdmin || myCities.length > 0) && <button className="btn btn-primary" onClick={() => setEditing({ name: "", phone: "", email: "", address: "",
+          {(isAdmin || myCities.length > 0) && <button className="btn btn-primary" onClick={() => setEditing({ name: "", phone: "", notes: "",
             cnpj: "", city: "", state: "" })}>+ Novo lead</button>}
           {isAdmin && <button className="btn" onClick={importNow} disabled={!!importCfg?.lead_import_started_at}>Atualizar agora</button>}
           <button className="btn" onClick={() => nav("/follow-ups")}>Retornos</button>
         </div>
       </header>
 
-      {isAdmin && (
-        <nav className="tabs-underline" aria-label="Status dos leads">
-          {[["pending", "Pendentes"], ["contacted", "Primeiro contato"], ["new", "Liberados"]].map(([k, label]) => (
-            <button key={k} type="button" className={filters.tab === k ? "active" : ""}
-              onClick={() => { setNotice(""); setFilters({ ...filters, tab: k }); }}>{label}</button>
-          ))}
-        </nav>
-      )}
-
-      <section className="filters-bar">
+      <section className="leads-controls">
+        {isAdmin && (
+          <nav className="tabs-underline" aria-label="Status dos leads">
+            {[["pending", "Pendentes"], ["contacted", "Primeiro contato"], ["new", "Liberados"]].map(([k, label]) => (
+              <button key={k} type="button" className={filters.tab === k ? "active" : ""}
+                onClick={() => { setNotice(""); setFilters({ ...filters, tab: k }); }}>{label}</button>
+            ))}
+          </nav>
+        )}
         <form className="filters-row" onSubmit={(e) => { e.preventDefault(); search(); }}>
           <div className="search-box">
             <button type="submit" className="search-box-icon" aria-label="Pesquisar" title="Pesquisar" />
@@ -269,19 +271,24 @@ export default function Leads() {
             <PillSelect label="Vendedor" value={filters.seller} onChange={(v) => setFilters({ ...filters, seller: v })}
               options={[["", "Todos"], ["0", "Sem vendedor"], ...sellers.map((s) => [String(s.id), sellerLabel(s)])]} />
           )}
-          <button type="submit" className="btn btn-primary btn-search">Pesquisar</button>
         </form>
       </section>
 
       <ErrorBox msg={error} />
       {notice && <p className="muted">{notice}</p>}
+      {week && (
+        <p className="muted leads-week">
+          Esta semana: {week.released} de {week.quota} liberados para {sellers.find((s) => String(s.id) === filters.seller)?.name.split(" ")[0]}
+          {suggested > 0 && <> · <button type="button" className="link-btn" onClick={selectSuggested}>Selecionar os {suggested} sugeridos</button></>}
+        </p>
+      )}
 
       {data && data.total === 0 && !filters.search && !filters.city && filters.seller === "" ? (
         <p className="customers-empty">
           {isAdmin && filters.tab === "pending"
             ? "Nenhuma loja pendente. Clique em Atualizar agora ou aguarde a importação da madrugada."
             : releasing
-            ? "Nenhuma loja em primeiro contato. Fale com uma loja de Pendentes (WhatsApp → Contato feito) e ela aparece aqui."
+            ? "Nenhuma loja em primeiro contato. Abra uma loja em Pendentes e clique em Mover para Primeiro contato."
             : isAdmin
             ? "Nenhum lead ainda. Defina as cidades de cada vendedor em Usuários; a importação da Receita traz as lojas na madrugada seguinte."
             : "Nenhum lead disponível na sua região agora. Se você ainda não tem cidades cadastradas, peça ao administrador."}
@@ -289,38 +296,17 @@ export default function Leads() {
       ) : (
         <div className={`customers-layout ${selected ? "with-panel" : ""}`}>
           <section className="customers-table">
-            <div className={`customers-row leads-row head ${isAdmin ? "admin" : ""} ${queue ? "picking" : ""}`}>
-              <span>Loja</span><span>Telefone</span>{isAdmin && <span>Vendedor</span>}<span>Abertura</span>
-            </div>
-            {queue && (
-              <div className="leads-toolbar">
-                {week ? (
-                  <>
-                    <span className="muted">
-                      Esta semana: {week.released} de {week.quota} liberados para {sellers.find((s) => String(s.id) === filters.seller)?.name.split(" ")[0]}
-                    </span>
-                    <button type="button" className="btn" disabled={!suggested}
-                      onClick={selectSuggested}>
-                      Selecionar os {suggested} sugeridos
-                    </button>
-                  </>
-                ) : (
-                  <button type="button" className="btn" onClick={() => setChecked(new Set(items.slice(0, 20).map((l) => l.id)))}>Selecionar os 20 primeiros</button>
-                )}
-                <button type="button" className="btn" onClick={() => setChecked(new Set())}>Limpar seleção</button>
-                <button type="button" className="btn danger" disabled={!checked.size || busy}
-                  onClick={() => setDiscarding({ ids: [...checked], name: `${checked.size} ${checked.size === 1 ? "loja" : "lojas"}`, reason: "not_recommended" })}>
-                  Não recomendar ({checked.size})
-                </button>
-                {releasing && <>
-                  <PillSelect label="Liberar para" value={releaseTo} onChange={setReleaseTo} className="pill-release"
-                    options={[["", "Vendedor da cidade"], ...sellers.map((s) => [String(s.id), sellerLabel(s)])]} />
-                  <button type="button" className="btn btn-primary" disabled={!checked.size || busy}
-                    title={releaseTo ? "Lojas de cidades sem vendedor vão para este vendedor, e a cidade entra na região dele" : undefined}
-                    onClick={() => release([...checked], releaseTo)}>Liberar ({checked.size})</button>
-                </>}
+            <div className={queue ? "lead-pick lead-pick-head" : undefined} style={queue ? undefined : { display: "contents" }}>
+              {queue && <>
+                <input type="checkbox" checked={allChecked} aria-label="Selecionar todas as lojas carregadas"
+                  ref={(el) => { if (el) el.indeterminate = checked.size > 0 && !allChecked; }}
+                  onChange={() => setChecked(new Set(allChecked ? [] : pickable.map((l) => l.id)))} />
+                <span className="lead-pick-all">Selecionar todas</span>
+              </>}
+              <div className={`customers-row leads-row head ${isAdmin ? "admin" : ""}`}>
+                <span>Loja</span><span>Telefone</span>{isAdmin && <span>Vendedor</span>}<span>Abertura</span>
               </div>
-            )}
+            </div>
             {items.map((l) => (
               <div key={l.id} className={queue ? `lead-pick ${l.id === selectedId ? "on" : ""}` : undefined}
                 style={queue ? undefined : { display: "contents" }}>
@@ -349,6 +335,24 @@ export default function Leads() {
                 <button type="button" className="btn" onClick={() => load(items.length)}>Carregar mais</button>
               )}
             </footer>
+            {queue && checked.size > 0 && <div className="bulk-spacer" />}{/* keeps the last rows reachable above the bar */}
+            {queue && checked.size > 0 && (
+              <div className="bulk-bar leads-bulk" role="region" aria-label="Seleção">
+                <strong>{checked.size} {checked.size === 1 ? "selecionada" : "selecionadas"}</strong>
+                <button type="button" className="link-btn" onClick={() => setChecked(new Set())}>Limpar</button>
+                <button type="button" className="btn danger" disabled={busy}
+                  onClick={() => setDiscarding({ ids: [...checked], name: `${checked.size} ${checked.size === 1 ? "loja" : "lojas"}`, reason: "not_recommended" })}>
+                  Não recomendar
+                </button>
+                {releasing && <>
+                  <PillSelect label="Liberar para" value={releaseTo} onChange={setReleaseTo} className="pill-release"
+                    options={[["", "Vendedor da cidade"], ...sellers.map((s) => [String(s.id), sellerLabel(s)])]} />
+                  <button type="button" className="btn btn-primary" disabled={busy}
+                    title={releaseTo ? "Lojas de cidades sem vendedor vão para este vendedor, e a cidade entra na região dele" : undefined}
+                    onClick={() => release([...checked], releaseTo)}>Liberar</button>
+                </>}
+              </div>
+            )}
           </section>
 
           {selected && (
@@ -356,7 +360,7 @@ export default function Leads() {
               onReleased={(r) => afterRelease([selected.id], r)}
               onContacted={() => {
                 if (selected.status !== "pending") return refreshContact(selected.id);
-                drop(selected.id);  // the admin's first contact: on to Primeiro contato
+                drop(selected.id);  // on to Primeiro contato
                 setNotice(`${selected.name} foi para Primeiro contato. Libere para o vendedor quando a loja tiver interesse.`);
               }}
               catalogUrl={catalogUrl}
@@ -365,7 +369,7 @@ export default function Leads() {
                 else { refreshContact(selected.id); setNotice(`Tentativa ${r.tries} de 3 registrada. Retorno em ${dateBR(r.retry_on)}.`); }
               }}
               onEdit={() => setEditing({ id: selected.id, name: selected.name, phone: selected.phone || "",
-                email: selected.email || "", address: selected.address || "", notes: selected.notes || "" })}
+                email: selected.email || "", address: selected.address || "", notes: selected.notes || "", cnpj: "", noCnpj: !selected.cnpj })}
               onDiscard={() => setDiscarding({ id: selected.id, name: selected.name, reason: "closed" })}
               onOrder={() => setConverting({
                 ...EMPTY_CUSTOMER, name: selected.name, document: formatCnpj(selected.cnpj),
@@ -389,10 +393,12 @@ export default function Leads() {
             <Field label="Nome da loja" span={2}>
               <input required maxLength={160} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
             </Field>
-            {!editing.id && (<>
-              <Field label="CNPJ (em branco = a confirmar; é obrigatório no pedido)" span={2}>
+            {(!editing.id || editing.noCnpj) && (
+              <Field label="CNPJ (opcional)" span={2}>
                 <input value={editing.cnpj} onChange={(e) => setEditing({ ...editing, cnpj: maskDocument(e.target.value) })} />
               </Field>
+            )}
+            {!editing.id && (<>
               {isAdmin ? (<>
                 <Field label="Cidade">
                   <input required maxLength={100} value={editing.city} onChange={(e) => setEditing({ ...editing, city: e.target.value })} />
@@ -410,16 +416,18 @@ export default function Leads() {
                 </Field>
               )}
             </>)}
-            <Field label="Telefone">
+            <Field label="Telefone" span={2}>
               <input type="tel" inputMode="tel" placeholder="(00) 00000-0000" value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: maskPhone(e.target.value) })} />
             </Field>
-            <Field label="E-mail">
-              <input type="email" maxLength={160} value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
-            </Field>
-            <Field label="Endereço" span={2}>
-              <input maxLength={250} value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} />
-            </Field>
-            <Field label="Observação" span={2}>
+            {editing.id && (<>
+              <Field label="E-mail">
+                <input type="email" maxLength={160} value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
+              </Field>
+              <Field label="Endereço">
+                <input maxLength={250} value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} />
+              </Field>
+            </>)}
+            <Field label="Observação (opcional)" span={2}>
               <textarea rows={3} maxLength={2000} value={editing.notes || ""} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} />
             </Field>
             <div className="span-2"><ErrorBox msg={editing.error} /></div>

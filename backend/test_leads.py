@@ -457,6 +457,13 @@ def check_edit(ctx):
     assert blank[0].json()["cnpj"] is None
     r = c.put(f"/api/leads/{blank[0].json()['id']}", headers=admin, json={"name": "Sem CNPJ 1", "notes": " dois CNPJs possíveis "})
     assert r.json()["notes"] == "dois CNPJs possíveis", r.text
+    bid = blank[0].json()["id"]  # the CNPJ can be filled in later, with the usual checks, but never replaced
+    assert c.put(f"/api/leads/{bid}", headers=admin, json={"name": "Sem CNPJ 1", "cnpj": "123"}).status_code == 422
+    assert c.put(f"/api/leads/{bid}", headers=admin, json={"name": "Sem CNPJ 1", "cnpj": new["cnpj"]}).status_code == 409
+    r = c.put(f"/api/leads/{bid}", headers=admin, json={"name": "Sem CNPJ 1", "cnpj": "70000000000707"})
+    assert r.json()["cnpj"] == "70000000000707", r.text
+    r = c.put(f"/api/leads/{bid}", headers=admin, json={"name": "Sem CNPJ 1", "cnpj": "70000000000808"})
+    assert r.json()["cnpj"] == "70000000000707", r.text
     assert "Sem CNPJ 1" in [x["name"] for x in c.get("/api/leads", headers=admin, params={"status": "pending", "limit": 200}).json()["items"]]
     with SessionLocal() as db:
         lead_import.apply(db, {}, "2026-11", "t", TODAY)
@@ -520,6 +527,13 @@ def check_pending_release(ctx):
     r = c.get("/api/leads", headers=admin, params={"status": "pending", "limit": 200})
     got = {x["id"]: x for x in r.json()["items"]}
     assert set(got) == {pa, pb, pn} and got[pa]["size"] == "me", got
+    pm = add_lead("80000000000199", "Pend Mover", status="pending")
+    assert c.post(f"/api/leads/{pm}/first-contact", headers=a).status_code == 403
+    assert c.post(f"/api/leads/{pm}/first-contact", headers=admin).status_code == 204
+    assert c.post(f"/api/leads/{pm}/first-contact", headers=admin).status_code == 409
+    assert c.get(f"/api/leads/{pm}", headers=admin).json()["status"] == "contacted"
+    assert c.get("/api/contacts", headers=admin, params={"lead_id": pm}).json() == []  # moved, not contacted
+    assert c.post(f"/api/leads/{pm}/discard", headers=admin, json={"reason": "other"}).status_code == 204
     assert c.post("/api/leads/release", headers=a, json={"ids": [pa]}).status_code == 403
     assert c.post("/api/leads/release", headers=admin, json={"ids": []}).status_code == 422
     # release only after the admin's first contact: pending -> contacted ("Primeiro contato") -> new

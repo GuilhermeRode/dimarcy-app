@@ -118,19 +118,24 @@ def _typed_fields(data: LeadEditIn) -> dict:
     return fields
 
 
+def _checked_cnpj(db: Session, value: str | None) -> str | None:
+    cnpj = normalize_cnpj(value) or None  # blank: "a confirmar", the order asks for it
+    if cnpj:
+        if len(cnpj) != 14:
+            raise HTTPException(422, "CNPJ inválido.")
+        if db.query(Lead.id).filter(Lead.cnpj == cnpj).first():
+            raise HTTPException(409, "Esse CNPJ já está na Prospecção.")
+        if cnpj in customer_cnpjs(db):
+            raise HTTPException(409, "Esse CNPJ já é cliente.")
+    return cnpj
+
+
 @router.post("", status_code=201)
 def create_lead(data: LeadCreateIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """A lead typed in by hand; edited=True: the import neither overwrites nor drops it. The admin's starts
     pending and is released the usual way; a seller's must be in their region and is already theirs (new)."""
     fields = _typed_fields(data)
-    fields["cnpj"] = normalize_cnpj(fields["cnpj"]) or None  # blank: "a confirmar", the order asks for it
-    if fields["cnpj"]:
-        if len(fields["cnpj"]) != 14:
-            raise HTTPException(422, "CNPJ inválido.")
-        if db.query(Lead.id).filter(Lead.cnpj == fields["cnpj"]).first():
-            raise HTTPException(409, "Esse CNPJ já está na Prospecção.")
-        if fields["cnpj"] in customer_cnpjs(db):
-            raise HTTPException(409, "Esse CNPJ já é cliente.")
+    fields["cnpj"] = _checked_cnpj(db, fields["cnpj"])
     fields["state"] = fields["state"].upper()
     city_key = _city_key(fields["city"])
     status = "pending"
@@ -155,7 +160,11 @@ def edit_lead(lid: int, data: LeadEditIn, db: Session = Depends(get_db)):
     lead = db.get(Lead, lid)
     if not lead:
         raise HTTPException(404, "Lead não encontrado.")
-    for k, v in _typed_fields(data).items():
+    fields = _typed_fields(data)
+    cnpj = fields.pop("cnpj")
+    if not lead.cnpj:
+        lead.cnpj = _checked_cnpj(db, cnpj)
+    for k, v in fields.items():
         setattr(lead, k, v)
     lead.edited = True
     db.commit()
@@ -207,6 +216,15 @@ def no_answer(lid: int, db: Session = Depends(get_db), user: User = Depends(get_
                                                      synchronize_session=False)
     db.commit()
     return {"tries": tries, "discarded": discarded, "retry_on": None if discarded else retry}
+
+
+@router.post("/{lid}/first-contact", status_code=204, dependencies=[Depends(require_admin)])
+def move_to_first_contact(lid: int, db: Session = Depends(get_db)):
+    """Pendentes -> Primeiro contato by hand: no contact is logged, the admin only sorts the queue."""
+    if not db.query(Lead).filter(Lead.id == lid, Lead.status == "pending").update({"status": "contacted"}, synchronize_session=False):
+        raise HTTPException(409, ALREADY_HANDLED)
+    db.commit()
+    return Response(status_code=204)
 
 
 @router.post("/{lid}/discard", status_code=204)

@@ -821,7 +821,6 @@ section.item-group { margin-top: 0; }
   border: 0; border-radius: 999px; cursor: pointer;
   background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat center; }
 .search-box-icon:hover { background-color: var(--accent-light); }
-.btn-search { height: 40px; border-radius: 999px; padding: 0 18px; }
 .pill-select { position: relative; display: inline-flex; align-items: center; gap: 4px; height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 13px; white-space: nowrap; cursor: pointer; box-shadow: 0 1px 2px rgba(13, 42, 82, .06); }
 .pill-select:hover { border-color: #bcd2fb; }
 .pill-select:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
@@ -850,7 +849,7 @@ section.item-group { margin-top: 0; }
 @media (max-width: 600px) {
   /* Phones: search on top, filters in an even 2-column grid, sort across the bottom. */
   .filters-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .filters-search, .search-box, .btn-search { grid-column: 1 / -1; }
+  .filters-search, .search-box { grid-column: 1 / -1; }
   .search-box { max-width: none; }
   .pill-select { width: 100%; min-width: 0; }
   .pill-value, .pill-input { flex: 1; min-width: 0; max-width: none; }
@@ -1249,12 +1248,34 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
 .lead-pick.on { background: var(--accent-light); box-shadow: inset 3px 0 0 var(--accent); }
 .lead-pick > input { margin: 0 0 0 14px; flex: none; }
 .lead-pick > .leads-row, .lead-pick > .leads-row:hover, .lead-pick > .leads-row.on { flex: 1; min-width: 0; border-bottom: 0; background: transparent; box-shadow: none; }
-.customers-row.leads-row.head.picking { padding-left: 45px; } /* 14 margin + 13 checkbox + 18 row padding */
-.leads-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 18px; border-bottom: 1px solid var(--line); }
-.import-status { margin: 2px 0 0; font-size: 12px; }
+.lead-pick.lead-pick-head { background: var(--surface-2); }
+.lead-pick-all { display: none; }  /* phones: the column titles are hidden, so the checkbox needs its own words */
+.import-status { font-size: 12px; }
+.leads-title { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; }
+.leads-title .import-status { margin: 0; }
+.leads-controls { display: flex; flex-direction: column; gap: 10px; }
+/* wide screens: tabs and filters share one line, so the list starts higher */
+@media (min-width: 1280px) {
+  .leads-controls { flex-direction: row; gap: 0; }
+  .leads-controls .filters-row { flex: 1; flex-wrap: nowrap; }
+  .leads-controls .tabs-underline + .filters-row { justify-content: flex-end; padding: 0 0 7px 16px; border-bottom: 1px solid var(--line); }
+  .leads-controls .search-box .filters-search, .leads-controls .pill-select { height: 36px; }
+  .leads-controls input, .leads-controls select { min-height: 0 !important; }  /* the global input rule's :not() chain outranks any class */
+}
+.leads-week { margin: -6px 0; }
+.leads-bulk .pill-select { color: var(--ink); box-shadow: none; }
+@media (min-width: 1100px) { .leads-bulk { left: calc(50% + 115px); } }  /* centered on the content, beside the 230px sidebar */
+.with-panel .leads-bulk { left: calc(50% - 60px); }  /* clears the side panel */
 @media (max-width: 860px) {
   .customers-row.leads-row, .customers-row.leads-row.admin { grid-template-columns: minmax(0, 1fr) auto; }
   .customer-panel-actions { flex-wrap: wrap; }
+  .lead-pick-head { padding: 10px 0; }
+  .lead-pick-all { display: inline; margin-left: 18px; font-size: 13px; color: var(--muted); }
+  .with-panel .leads-bulk { left: 50%; }
+}
+@media (max-width: 600px) {
+  .with-panel .leads-bulk { left: 16px; }
+  .bulk-bar.leads-bulk .btn { flex: 1 1 0; }
 }
 .followup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .followup-late { color: var(--danger); font-weight: 600; font-size: 13px; white-space: nowrap; }
