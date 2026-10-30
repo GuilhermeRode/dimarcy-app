@@ -13,14 +13,13 @@ from sqlalchemy.orm import Session, aliased, contains_eager, joinedload
 
 from . import clock
 from .br_format import format_phone
-from .models import SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
+from .models import NO_ANSWER, SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
 from .sales import _city_key
 from .settings_store import get_app_settings
 
 REGION_ROLES = ("seller", "admin")  # an admin may also keep a region and work leads like a seller
 ADMIN_QUEUE = ("pending", "contacted")  # the admin's first contact, before releasing to the seller
 QUEUE = (*ADMIN_QUEUE, "new")  # the statuses the Prospecção list shows (and that get a score)
-NO_ANSWER = "Não respondeu"  # the note of a "Não respondeu" attempt: not a conversation with the store
 ESTABLISHED_DAYS = 5 * 365  # opened within 5 years: past the first months, still choosing suppliers
 
 

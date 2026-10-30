@@ -11,6 +11,7 @@ from ..models import SALE_STATUSES, Order, User, size_key
 from ..sales import customer_overview, late_filter, visible_orders
 from ..security import get_current_user
 from ..settings_store import get_app_settings
+from ..uploads import thumb_name
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -94,7 +95,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
 
     products, customers, colors, cities, sizes = {}, {}, {}, {}, defaultdict(int)
     for o in sales:
-        c = customers.setdefault(o.customer_id, {"name": o.customer.name, "orders": 0, "pieces": 0, "value": 0.0})
+        c = customers.setdefault(o.customer_id, {"id": o.customer_id, "name": o.customer.name, "orders": 0, "pieces": 0, "value": 0.0})
         c["orders"] += 1
         c["pieces"] += o.pieces
         c["value"] += o.total
@@ -107,12 +108,21 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         ci["orders"] += 1
         ci["pieces"] += o.pieces
         ci["value"] += o.total
+        in_order = set()  # products already counted in this order's "orders"
         for i in o.items:
-            pr = products.setdefault(i.product_id, {"reference": i.product.reference,
-                                                     "description": i.product.description, "pieces": 0, "value": 0.0})
+            img = i.product.image_url
+            pr = products.setdefault(i.product_id, {"reference": i.product.reference, "description": i.product.description,
+                                                     "thumb_url": f"/uploads/products/{thumb_name(img)}" if img else None,
+                                                     "orders": 0, "pieces": 0, "value": 0.0, "colors": {}})
+            if i.product_id not in in_order:
+                in_order.add(i.product_id)
+                pr["orders"] += 1
             pr["pieces"] += i.quantity
             pr["value"] += i.subtotal
-            co = colors.setdefault(i.color_id, {"name": i.color.name, "hex": i.color.hex, "pieces": 0, "value": 0.0})
+            pc = pr["colors"].setdefault(i.color_id, {"name": i.color.name, "hex": i.color.hex, "hex2": i.color.hex2, "pieces": 0})
+            pc["pieces"] += i.quantity
+            co = colors.setdefault(i.color_id, {"name": i.color.name, "hex": i.color.hex, "hex2": i.color.hex2,
+                                                 "pieces": 0, "value": 0.0})
             co["pieces"] += i.quantity
             co["value"] += i.subtotal
             sizes[i.size] += i.quantity
@@ -135,6 +145,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
     statuses = Counter(r["status"] for r in customer_overview(db, user, today))
     late = visible_orders(db, user).filter(late_filter(today)).all()
 
+    follow_ups = due_follow_ups(db, user, today, everyone=is_admin, until=today + timedelta(days=7))
     company_goal = get_app_settings(db).annual_goal if is_admin else user.annual_goal
     return {
         "period": {"start": start, "end": end},
@@ -145,7 +156,9 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         "goal_value": round(sum(year_sales.values()), 2),
         "monthly_sales": [{"month": f"{m:02d}/{str(y)[2:]}", **series[(y, m)]} for y, m in months],
         "by_status": [{"status": s, **v} for s, v in by_status.items()],
-        "top_products": _top(products, by="pieces"),  # the Painel ranks products by pieces sold
+        # every product sold, ranked by pieces: the Painel shows the top 5, "Referências mais vendidas" all of them
+        "top_products": [{**p, "colors": _top(p["colors"], len(p["colors"]), by="pieces")}
+                         for p in _top(products, len(products), by="pieces")],
         "top_customers": _top(customers),
         "by_seller": _top(sellers, 50),
         "by_city": _top(cities, len(cities)),  # all of them: Faturamento sums the tail into "Outras"
@@ -159,6 +172,12 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
             "customers_never_ordered": statuses["never_ordered"],
             "late_orders": len(late),
             "oldest_late_days": max(((today - o.delivery_date).days for o in late), default=None),
-            "follow_ups_due": len(due_follow_ups(db, user, today, everyone=user.role == "admin")),  # same as Retornos
+            "follow_ups_due": sum(f["next_action_date"] <= today for f in follow_ups),  # same as Retornos
+        },
+        # the Painel's "Retornos pendentes" card: leads to call back, late / today / coming week (customers come from the overview)
+        "lead_follow_ups": {
+            "overdue": sum(f["kind"] == "lead" and f["next_action_date"] < today for f in follow_ups),
+            "today": sum(f["kind"] == "lead" and f["next_action_date"] == today for f in follow_ups),
+            "week": sum(f["kind"] == "lead" and f["next_action_date"] > today for f in follow_ups),
         },
     }

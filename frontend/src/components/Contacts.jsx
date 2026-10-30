@@ -5,12 +5,13 @@ import { ErrorBox, Field, Modal } from "./ui";
 
 // Keys match the backend's CONTACT_CHANNELS
 export const CHANNELS = { whatsapp: "WhatsApp", call: "Ligação", visit: "Visita", email: "E-mail" };
+const NO_ANSWER = "Não respondeu"; // backend's models.NO_ANSWER: the customer shows as "Aguardando resposta"
 
 // created_at is UTC without a zone (SQLite CURRENT_TIMESTAMP); "Z" makes the browser convert it to local time
 
 // "Aguardar" (the store asked to be called back later) uses it with a title, a preset note and a required date
 export function ContactModal({ target, onClose, onSaved, title = "Registrar contato", notes = "", requireDate = false }) {
-  const [form, setForm] = useState({ channel: "whatsapp", notes, next_action_date: "" });
+  const [form, setForm] = useState({ channel: "whatsapp", notes, next_action_date: "", noAnswer: false });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const today = localDate();
@@ -20,7 +21,7 @@ export function ContactModal({ target, onClose, onSaved, title = "Registrar cont
     setBusy(true);
     setError("");
     try {
-      await api.post("/contacts", { ...target, channel: form.channel, notes: form.notes.trim() || null,
+      await api.post("/contacts", { ...target, channel: form.channel, notes: form.noAnswer ? NO_ANSWER : form.notes.trim() || null,
                                     next_action_date: form.next_action_date || null });
       onSaved();
     } catch (err) { setError(errorMessage(err)); } finally { setBusy(false); }
@@ -34,10 +35,16 @@ export function ContactModal({ target, onClose, onSaved, title = "Registrar cont
             {Object.entries(CHANNELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </select>
         </Field>
-        <Field label="Anotação" span={2}>
+        {target.customer_id && (
+          <label className="check span-2">
+            <input type="checkbox" checked={form.noAnswer} onChange={(e) => setForm({ ...form, noAnswer: e.target.checked })} />
+            Cliente não respondeu
+          </label>
+        )}
+        {!form.noAnswer && <Field label="Anotação" span={2}>
           <textarea rows={3} maxLength={2000} placeholder="Ex.: pediu o catálogo, falar com a dona na segunda"
             value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-        </Field>
+        </Field>}
         <div className="field span-2">
           <span>{requireDate ? "Retornar em" : "Retornar em (opcional)"}</span>
           <div className="contact-next">

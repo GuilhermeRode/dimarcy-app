@@ -30,6 +30,7 @@ LEAD_STATUSES = ["pending", "contacted", "new", "converted", "discarded"]
 # until released to the seller (new)
 DISCARD_REASONS = ["closed", "not_target", "competitor", "not_recommended", "no_answer", "other"]
 CONTACT_CHANNELS = ["whatsapp", "call", "visit", "email"]
+NO_ANSWER = "Não respondeu"  # the note of a "Não respondeu" attempt: not a conversation with the store
 
 # Customer status by days since the last sale (see customer_status)
 ACTIVE_DAYS = 60

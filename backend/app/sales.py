@@ -7,10 +7,10 @@ import unicodedata
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 
-from sqlalchemy import and_
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from .models import LATE_STATUSES, SALE_STATUSES, Customer, Order, PastOrder, User, customer_status
+from .models import LATE_STATUSES, NO_ANSWER, SALE_STATUSES, Contact, Customer, Order, PastOrder, User, customer_status
 
 
 def late_filter(today: date):
@@ -89,6 +89,9 @@ def customer_overview(db: Session, user: User, today: date) -> list[dict]:
     past: dict[int, list[PastOrder]] = defaultdict(list)
     for p in db.query(PastOrder).order_by(PastOrder.date.desc()):
         past[p.customer_id].append(p)
+    # each customer's latest contact: when it was and the follow-up it left (the "Contato" column)
+    latest = select(func.max(Contact.id)).where(Contact.customer_id.isnot(None)).group_by(Contact.customer_id)
+    contacts = {ct.customer_id: ct for ct in db.query(Contact).filter(Contact.id.in_(latest))}
 
     rows = []
     for c in visible_customers(db, user):
@@ -108,5 +111,8 @@ def customer_overview(db: Session, user: User, today: date) -> list[dict]:
             "recent_orders": [{"id": o.id, "date": o.date, "pieces": o.pieces, "total": o.total}
                               for o in orders[:3]],
             "past_orders": [{"date": p.date, "amount": float(p.amount)} for p in past.get(c.id, [])],
+            "last_contact_at": contacts[c.id].created_at if c.id in contacts else None,
+            "next_action_date": contacts[c.id].next_action_date if c.id in contacts else None,
+            "no_answer": c.id in contacts and contacts[c.id].notes == NO_ANSWER,
         })
     return rows
