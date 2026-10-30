@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import {
   ColorsIcon, CustomersIcon, DashboardIcon, LeadsIcon, MenuIcon, OrdersIcon, ProductionIcon,
-  ProductsIcon, RevenueIcon, SettingsIcon, UsersAdminIcon,
+  ProductsIcon, RegionsIcon, RevenueIcon, SettingsIcon, UsersAdminIcon,
 } from "./icons";
 import { Avatar } from "./ui";
 import UpdateBanner from "./UpdateBanner";
@@ -24,6 +24,7 @@ const ADMIN_LINKS = [
   PRODUCTS_LINK,
   { to: "/colors", label: "Cores", Icon: ColorsIcon },
   { to: "/users", label: "Usuários", Icon: UsersAdminIcon },
+  { to: "/regions", label: "Regiões", Icon: RegionsIcon },
   { to: "/settings", label: "Configurações", Icon: SettingsIcon },
 ];
 

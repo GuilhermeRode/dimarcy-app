@@ -1,7 +1,8 @@
 """Prospecting rules shared by the leads/contacts routers, the dashboard and the importer.
 
 A lead's seller is never stored: it's the active seller whose region (seller_cities) has the
-lead's city, so moving a city between sellers moves its leads with no migration.
+lead's city, so moving a city between sellers moves its leads with no migration. A shared city's
+leads belong to all its sellers, until one of them places the order.
 Spec: docs/superpowers/specs/2026-10-16-prospeccao-crm-design.md"""
 import re
 from collections import Counter
@@ -28,15 +29,20 @@ def normalize_cnpj(value: str | None) -> str:
     return re.sub(r"[^0-9A-Za-z]", "", value or "").upper()
 
 
-def city_owners(db: Session) -> dict[tuple[str, str], User]:
-    """(city_key, state) -> the ACTIVE seller whose region has that city."""
+def city_owners(db: Session) -> dict[tuple[str, str], list[User]]:
+    """(city_key, state) -> the ACTIVE sellers whose region has that city."""
     rows = db.query(SellerCity).join(User, SellerCity.user_id == User.id).options(contains_eager(SellerCity.user)) \
-             .filter(User.active.is_(True), User.role.in_(REGION_ROLES)).all()
-    return {(r.city_key, r.state): r.user for r in rows}
+             .filter(User.active.is_(True), User.role.in_(REGION_ROLES)).order_by(SellerCity.id).all()
+    owners: dict[tuple[str, str], list[User]] = {}
+    for r in rows:
+        owners.setdefault((r.city_key, r.state), []).append(r.user)
+    return owners
 
 
-def lead_owner(owners: dict[tuple[str, str], User], lead: Lead) -> User | None:
-    return owners.get((lead.city_key, lead.state))
+def lead_owner(owners: dict[tuple[str, str], list[User]], lead: Lead, user: User | None = None) -> User | None:
+    """The lead's seller: `user` when they're one of a shared city's sellers, else the first."""
+    sellers = owners.get((lead.city_key, lead.state), [])
+    return next((s for s in sellers if user and s.id == user.id), sellers[0] if sellers else None)
 
 
 def customer_cnpjs(db: Session) -> set[str]:
@@ -60,7 +66,7 @@ def visible_lead(db: Session, user: User, lead_id: int) -> Lead:
     if lead and user.role != "admin":
         if lead.status in ADMIN_QUEUE:  # awaiting admin release: invisible to sellers
             raise HTTPException(404, "Lead não encontrado.")
-        owner = lead_owner(city_owners(db), lead)
+        owner = lead_owner(city_owners(db), lead, user)
         if not owner or owner.id != user.id:
             lead = None
     if not lead:
@@ -161,7 +167,7 @@ def _follow_up_checker(db: Session, user: User, everyone: bool):
             if lead.status in ADMIN_QUEUE:  # before release: every admin's
                 return (lead, who) if user.role == "admin" and who is not None else None
             if lead.status == "new":
-                who = lead_owner(owners, lead) or who
+                who = lead_owner(owners, lead, who) or who
         if who is None or not who.active or (who.id != user.id and not everyone):
             return None
         admin = who.role == "admin"
@@ -170,7 +176,7 @@ def _follow_up_checker(db: Session, user: User, everyone: bool):
                 leads_ok[who.id] = leads_open(db, who)  # Prospecção off for sellers: their lead follow-ups wait too
             if not leads_ok[who.id] or (open_only and lead.status not in (QUEUE if admin else ("new",))):
                 return None
-            return (lead, who) if admin or getattr(lead_owner(owners, lead), "id", None) == who.id else None
+            return (lead, who) if admin or getattr(lead_owner(owners, lead, who), "id", None) == who.id else None
         customer = ct.customer
         return (customer, who) if customer is not None and (admin or customer.owner_id == who.id) else None
     return check

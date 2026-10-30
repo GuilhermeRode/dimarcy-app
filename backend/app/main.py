@@ -80,6 +80,31 @@ def _contacted_leads():
         db.commit()
 
 
+def _shared_seller_cities():
+    """Two sellers may share a city: the old UNIQUE (city_key, state) becomes per seller. SQLite can't drop
+    a constraint, so the table is rebuilt from its own DDL. Idempotent."""
+    if not any(u["name"] == "uq_seller_cities_city" for u in inspect(engine).get_unique_constraints("seller_cities")):
+        return
+    with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            conn.execute(text("ALTER TABLE seller_cities DROP CONSTRAINT uq_seller_cities_city"))
+            conn.execute(text("ALTER TABLE seller_cities ADD CONSTRAINT uq_seller_cities_user_city UNIQUE (user_id, city_key, state)"))
+            return
+        ddl = conn.execute(text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'seller_cities'")).scalar()
+        indexes = conn.execute(text("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'seller_cities' "
+                                    "AND sql IS NOT NULL")).scalars().all()
+        new = ddl.replace("CREATE TABLE seller_cities", "CREATE TABLE seller_cities_new", 1).replace(
+            "CONSTRAINT uq_seller_cities_city UNIQUE (city_key, state)", "CONSTRAINT uq_seller_cities_user_city UNIQUE (user_id, city_key, state)", 1)
+        assert "seller_cities_new" in new and "uq_seller_cities_user_city" in new
+        conn.execute(text("DROP TABLE IF EXISTS seller_cities_new"))  # a rebuild cut short before its commit
+        conn.execute(text(new))
+        conn.execute(text("INSERT INTO seller_cities_new SELECT * FROM seller_cities"))
+        conn.execute(text("DROP TABLE seller_cities"))
+        conn.execute(text("ALTER TABLE seller_cities_new RENAME TO seller_cities"))
+        for sql in indexes:
+            conn.execute(text(sql))
+
+
 def _sort_product_sizes():
     """Sizes used to be saved in the order they were ticked ("GG,P,M"); store them in SIZE_ORDER ("P,M,GG").
     Idempotent: products already in order are left alone."""
@@ -129,6 +154,7 @@ async def lifespan(app: FastAPI):
     _ensure_columns("leads", {"size": "VARCHAR(5) DEFAULT ''", "capital": "NUMERIC(14,2)", "in_debt": "BOOLEAN",
                               "released_at": "TIMESTAMP", "score": "INTEGER", "city_active": "INTEGER",
                               "edited": "BOOLEAN DEFAULT FALSE"})
+    _shared_seller_cities()
     _drop_lead_phones()
     _contacted_leads()
     with SessionLocal() as db:
