@@ -306,10 +306,10 @@ export default function Dashboard() {
                 <div className="size-bars">
                   {d.by_size.map((s) => (
                     <div key={s.size} className={s.pieces === sizeMax ? "top" : ""} title={plural(s.pieces, "peça", "peças")}>
-                      <b>{Math.round((s.pieces / Math.max(d.kpis.pieces, 1)) * 100)}%</b>
-                      <i><i style={{ height: `${(s.pieces / sizeMax) * 100}%` }} /></i>
+                      <span style={{ height: `${(s.pieces / sizeMax) * 100}%` }}>
+                        <b>{Math.round((s.pieces / Math.max(d.kpis.pieces, 1)) * 100)}%</b>
+                      </span>
                       <strong>{s.size}</strong>
-                      <span>{s.pieces.toLocaleString("pt-BR")} pç</span>
                     </div>
                   ))}
                 </div>
