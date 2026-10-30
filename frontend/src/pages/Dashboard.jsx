@@ -178,15 +178,15 @@ function ContactSide({ title, total, caption, parts, to, nav }) {
   );
 }
 
-// Leads with a call-back due (the Retornos screen), by urgency; for an admin, also the queue awaiting first contact
+// Leads with a call-back due (the Retornos screen), by urgency; for an admin, also the stores being worked (not Pendentes)
 function ContactsCard({ leads, firstContact, nav }) {
   return (
     <div className="follow-card">
       <ContactSide title="Leads" total={leads.overdue + leads.today} caption="retornos para fazer" to="/follow-ups" nav={nav}
         parts={[["late", "atrasados", leads.overdue], ["today", "para hoje", leads.today], ["week", "nos próximos 7 dias", leads.week]]} />
       {firstContact && (
-        <ContactSide title="Primeiro contato" total={firstContact.pending} caption="lojas sem contato" to="/leads" nav={nav}
-          parts={[["today", "sem contato", firstContact.pending], ...(firstContact.new ? [["week", "liberados", firstContact.new]] : [])]} />
+        <ContactSide title="Prospecção" total={firstContact.contacted + firstContact.new} caption="lojas em andamento" to="/leads" nav={nav}
+          parts={[["today", "em primeiro contato", firstContact.contacted], ...(firstContact.new ? [["week", "liberados", firstContact.new]] : [])]} />
       )}
     </div>
   );

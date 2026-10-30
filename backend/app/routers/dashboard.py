@@ -179,6 +179,6 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
             "today": sum(f["kind"] == "lead" and f["next_action_date"] == today for f in follow_ups),
             "week": sum(f["kind"] == "lead" and f["next_action_date"] > today for f in follow_ups),
         },
-        # admin only: same counts as the Prospecção tabs Pendentes / Liberados
-        "first_contact": {s: ranked_leads(db, user, status=s).count() for s in ("pending", "new")} if is_admin else None,
+        # admin only: same counts as the Prospecção tabs Primeiro contato / Liberados (Pendentes is just the raw import)
+        "first_contact": {s: ranked_leads(db, user, status=s).count() for s in ("contacted", "new")} if is_admin else None,
     }
