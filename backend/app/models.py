@@ -32,15 +32,15 @@ DISCARD_REASONS = ["closed", "not_target", "competitor", "not_recommended", "no_
 CONTACT_CHANNELS = ["whatsapp", "call", "visit", "email"]
 NO_ANSWER = "Não respondeu"  # the note of a "Não respondeu" attempt: not a conversation with the store
 
-# Customer status by days since the last sale (see customer_status)
+# Customer status by days since the last purchase, no history = inactive (see customer_status)
 ACTIVE_DAYS = 60
 AT_RISK_DAYS = 150
 
 
 def customer_status(last_sale: date | None, today: date) -> str:
-    if last_sale is None:
-        return "never_ordered"
-    days = (today - last_sale).days
+    days = (today - last_sale).days if last_sale else None
+    if days is None:
+        return "inactive"
     if days <= ACTIVE_DAYS:
         return "active"
     if days <= AT_RISK_DAYS:
@@ -189,7 +189,7 @@ class OrderItem(Base):
 
 class PastOrder(Base):
     """Purchase history from before the app (spreadsheet import): date and amount only, no items.
-    Shown on the customer panel; kept out of dashboard, revenue and customer status on purpose."""
+    Shown on the customer panel and counts for the last order date and status; kept out of revenue on purpose."""
     __tablename__ = "past_orders"
     id: Mapped[int] = mapped_column(primary_key=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)

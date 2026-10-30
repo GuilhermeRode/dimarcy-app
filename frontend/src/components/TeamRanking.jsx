@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { money, plural } from "../format";
+import { hideable, money, plural } from "../format";
 import { Avatar } from "./ui";
 
 // Index i always gets the same color, so a seller keeps their color across components.
@@ -13,7 +13,8 @@ const METRICS = {
 };
 
 // `sellers` = dashboard by_seller (already sorted by revenue).
-export default function TeamRanking({ title, sellers, showGoalGap = false }) {
+export default function TeamRanking({ title, sellers, showGoalGap = false, hide = false }) {
+  const brl = hideable(hide, money);
   const [metric, setMetric] = useState("value");
   const hasGoal = sellers.some((s) => s.goal);
   const m = metric === "goal" && !hasGoal ? "value" : metric;
@@ -48,17 +49,17 @@ export default function TeamRanking({ title, sellers, showGoalGap = false }) {
               <div><strong>{s.name}</strong><span>{i + 1}º lugar</span></div>
             </div>
             <strong className="team-value">
-              {m === "goal" ? (s.goal ? `${Math.round(score(s))}%` : "Sem meta") : METRICS[m].fmt(s[m])}
+              {m === "goal" ? (s.goal ? `${Math.round(score(s))}%` : "Sem meta") : m === "value" ? brl(s.value) : METRICS[m].fmt(s[m])}
             </strong>
             <div className="team-bar"><span style={{ width: `${Math.max(0, score(s)) / best * 100}%`, background: s.color }} /></div>
             <span className="team-sub">
               {m === "goal"
-                ? (s.goal ? `Meta anual ${money(s.goal)}` : "Defina em Usuários")
+                ? (s.goal ? `Meta anual ${brl(s.goal)}` : "Defina em Usuários")
                 : `${teamTotal ? Math.round((s[m] / teamTotal) * 100) : 0}% do total da equipe`}
             </span>
             {showGoalGap && s.goal > 0 && (
               <span className="team-sub">
-                {s.goal_value >= s.goal ? "Meta anual batida" : `Faltam ${money(s.goal - s.goal_value)} para a meta anual`}
+                {s.goal_value >= s.goal ? "Meta anual batida" : `Faltam ${brl(s.goal - s.goal_value)} para a meta anual`}
               </span>
             )}
           </div>

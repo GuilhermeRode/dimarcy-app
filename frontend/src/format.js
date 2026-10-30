@@ -1,6 +1,9 @@
 export const money = (v) =>
   Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+// The Painel's eye: `fmt` as is, or a mask while values are hidden
+export const hideable = (hide, fmt) => (hide ? () => "R$ ••••••" : fmt);
+
 export const dateBR = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("pt-BR") : "");
 
 export const orderNumber = (id) => String(id).padStart(5, "0");
@@ -145,7 +148,6 @@ export const CUSTOMER_STATUS = {
   active: { label: "Ativo", tone: "active" },
   at_risk: { label: "Em risco", tone: "risk" },
   inactive: { label: "Inativo", tone: "inactive" },
-  never_ordered: { label: "A conquistar", tone: "never" },  // history before the app (older collections) is unknown
 };
 
 // Clientes' "Contato" column, from the customer's latest contact and orders.
@@ -165,7 +167,7 @@ const daysFrom = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000
 // contact, a call-back due, the customer not replying, or the customer asking to wait
 export function contactState(c, today = localDate()) {
   const last = c.last_contact_at && localDate(new Date(`${c.last_contact_at}Z`)); // naive UTC from the API
-  if (!last) return c.last_order_date ? { key: "ordered", detail: "" } : { key: "missing", detail: "nunca contatado" };
+  if (!last) return { key: c.last_order_date ? "ordered" : "missing", detail: "" };
   if (c.last_order_date && c.last_order_date >= last) return { key: "ordered", detail: "após o contato" };
   const next = c.next_action_date;
   if (next && next < today) return { key: "late", detail: `há ${daysFrom(next, today)} d` };

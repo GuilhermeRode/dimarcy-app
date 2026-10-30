@@ -497,6 +497,12 @@ def check_pending_release(ctx):
     c, admin, a, b = ctx["c"], ctx["admin"], ctx["a"], ctx["b"]
     pa = add_lead("80000000000101", "Pend Jaragua", status="pending", size="me")
     pb = add_lead("80000000000102", "Pend Guaramirim", city="Guaramirim", status="pending")
+    # the Painel's first-contact counts match the Prospecção tabs; sellers don't get them
+    fc = c.get("/api/dashboard", headers=admin).json()["first_contact"]
+    assert fc["pending"] >= 2 and fc == {
+        s: c.get("/api/leads", headers=admin, params={"status": s, "limit": 1}).json()["total"]
+        for s in ("pending", "new")}, fc
+    assert c.get("/api/dashboard", headers=ctx["a"]).json()["first_contact"] is None
     pn = add_lead("80000000000103", "Pend Sem Vendedor", city="Cidade Sem Vendedor", status="pending")
     for h in (a, b):
         r = c.get("/api/leads", headers=h, params={"limit": 200})
