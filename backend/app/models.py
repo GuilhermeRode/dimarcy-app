@@ -277,7 +277,7 @@ class Lead(Base):
     __tablename__ = "leads"
     __table_args__ = (Index("ix_leads_area", "state", "city_key", "status"), {"sqlite_autoincrement": True})
     id: Mapped[int] = mapped_column(primary_key=True)
-    cnpj: Mapped[str] = mapped_column(String(14), unique=True)  # leads.normalize_cnpj
+    cnpj: Mapped[str | None] = mapped_column(String(14), unique=True)  # leads.normalize_cnpj; None = "a confirmar", the order asks for it
     name: Mapped[str] = mapped_column(String(160))
     phone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str | None] = mapped_column(String(160))
@@ -298,6 +298,7 @@ class Lead(Base):
     score: Mapped[int | None] = mapped_column(Integer)  # leads.lead_score
     city_active: Mapped[int | None] = mapped_column(Integer)  # active Di Marcy customers in the city (tie-break)
     edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")  # admin fixed name/contact: the import keeps them
+    notes: Mapped[str | None] = mapped_column(Text)  # free text, unlike a contact it isn't an event in the history
 
 
 class Contact(Base):

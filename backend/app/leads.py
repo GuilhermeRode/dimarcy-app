@@ -221,7 +221,8 @@ def ranked_leads(db: Session, user: User, city: str = "", search: str = "",
     """Query of the leads the user may see, best first: stored score, then more active customers in the
     city, opened most recently, name. `seller_id` (admin) 0 = no seller. Callers .count() / .offset().limit()."""
     q = db.query(Lead).filter(Lead.status == status,
-                              ~Lead.cnpj.in_(select(_normalized_document()).where(Customer.document.isnot(None))))
+                              or_(Lead.cnpj.is_(None),  # NOT IN alone would drop a lead without a CNPJ
+                                  ~Lead.cnpj.in_(select(_normalized_document()).where(Customer.document.isnot(None)))))
     # a lead's seller: the ACTIVE seller whose region has its city (see city_owners)
     owner = select(SellerCity.id).join(User, SellerCity.user_id == User.id).where(
         SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state, User.active.is_(True), User.role.in_(REGION_ROLES))
@@ -261,7 +262,7 @@ def released_this_week(db: Session, seller_id: int) -> int:
 
 def lead_out(lead: Lead, owner: User | None) -> dict:
     return {"id": lead.id, "cnpj": lead.cnpj, "name": lead.name, "phone": lead.phone, "email": lead.email,
-            "address": lead.address, "city": lead.city, "state": lead.state, "opened_at": lead.opened_at, "size": lead.size,
+            "address": lead.address, "notes": lead.notes, "city": lead.city, "state": lead.state, "opened_at": lead.opened_at, "size": lead.size,
             "capital": float(lead.capital) if lead.capital is not None else None, "in_debt": lead.in_debt,
             "score": getattr(lead, "score", None), "status": lead.status, "seller_id": owner.id if owner else None,
             "seller_name": owner.name if owner else None}

@@ -183,16 +183,16 @@ export default function Leads() {
     e.preventDefault();
     if (editing.busy) return;
     setEditing({ ...editing, busy: true, error: "" });
-    const { id, name, phone, email, address, cnpj, city, state } = editing;
+    const { id, name, phone, email, address, notes, cnpj, city, state } = editing;
     try {
       if (!id) {  // new lead: the admin's starts in Pendentes (first contact, then release); a seller's is already theirs
-        await api.post("/leads", { name, phone, email, address, cnpj, city, state });
+        await api.post("/leads", { name, phone, email, address, notes, cnpj, city, state });
         setEditing(null);
         setNotice(isAdmin ? "Lead cadastrado em Pendentes. Depois do primeiro contato, libere para o vendedor." : "Lead cadastrado. Ele já está na sua lista.");
         load(0);
         return;
       }
-      const { data: lead } = await api.put(`/leads/${id}`, { name, phone, email, address });
+      const { data: lead } = await api.put(`/leads/${id}`, { name, phone, email, address, notes });
       setData((d) => ({ ...d, items: d.items.map((l) => (l.id === id ? { ...l, ...lead } : l)) }));
       setEditing(null);
       setNotice("Dados do lead atualizados. As próximas importações não sobrescrevem essa edição.");
@@ -329,7 +329,7 @@ export default function Leads() {
                 className={`customers-row leads-row ${isAdmin ? "admin" : ""} ${l.id === selectedId ? "on" : ""}`}>
                 <span className="customers-cell-main">
                   <span className="customer-avatar">{initials(l.name)}</span>
-                  <span><strong>{l.name}</strong><small>{l.city}/{l.state} · {formatCnpj(l.cnpj)} · {LEAD_SIZES[l.size] || "—"}{l.in_debt ? " · dívida ativa" : ""}</small>
+                  <span><strong>{l.name}</strong><small>{l.city}/{l.state} · {formatCnpj(l.cnpj) || "CNPJ a confirmar"} · {LEAD_SIZES[l.size] || "—"}{l.in_debt ? " · dívida ativa" : ""}</small>
                     {contactText(l) && <small className="contact-due">{contactText(l)}</small>}</span>
                 </span>
                 <span>{l.phone || "—"}</span>
@@ -365,12 +365,12 @@ export default function Leads() {
                 else { refreshContact(selected.id); setNotice(`Tentativa ${r.tries} de 3 registrada. Retorno em ${dateBR(r.retry_on)}.`); }
               }}
               onEdit={() => setEditing({ id: selected.id, name: selected.name, phone: selected.phone || "",
-                email: selected.email || "", address: selected.address || "" })}
+                email: selected.email || "", address: selected.address || "", notes: selected.notes || "" })}
               onDiscard={() => setDiscarding({ id: selected.id, name: selected.name, reason: "closed" })}
               onOrder={() => setConverting({
                 ...EMPTY_CUSTOMER, name: selected.name, document: formatCnpj(selected.cnpj),
                 phone: selected.phone || "", email: selected.email || "", city: selected.city,
-                state: selected.state, address: selected.address || "", owner_id: selected.seller_id || "",
+                state: selected.state, address: selected.address || "", notes: selected.notes || "", owner_id: selected.seller_id || "",
                 leadId: selected.id,
               })} />
           )}
@@ -390,8 +390,8 @@ export default function Leads() {
               <input required maxLength={160} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
             </Field>
             {!editing.id && (<>
-              <Field label="CNPJ" span={2}>
-                <input required value={editing.cnpj} onChange={(e) => setEditing({ ...editing, cnpj: maskDocument(e.target.value) })} />
+              <Field label="CNPJ (em branco = a confirmar; é obrigatório no pedido)" span={2}>
+                <input value={editing.cnpj} onChange={(e) => setEditing({ ...editing, cnpj: maskDocument(e.target.value) })} />
               </Field>
               {isAdmin ? (<>
                 <Field label="Cidade">
@@ -418,6 +418,9 @@ export default function Leads() {
             </Field>
             <Field label="Endereço" span={2}>
               <input maxLength={250} value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} />
+            </Field>
+            <Field label="Observação" span={2}>
+              <textarea rows={3} maxLength={2000} value={editing.notes || ""} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} />
             </Field>
             <div className="span-2"><ErrorBox msg={editing.error} /></div>
             <div className="actions span-2"><button className="btn btn-primary" disabled={editing.busy}>Salvar</button></div>

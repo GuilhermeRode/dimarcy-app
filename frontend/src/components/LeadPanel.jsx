@@ -102,8 +102,9 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
       <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} canAdd={!["pending", "contacted"].includes(lead.status)} />
       <section className="lead-section">
         <h3>Dados da loja</h3>
+        {lead.notes && <p className="lead-notes">{lead.notes}</p>}
         <dl className="customer-panel-info">
-          <dt>CNPJ</dt><dd>{formatCnpj(lead.cnpj)}</dd>
+          <dt>CNPJ</dt><dd>{formatCnpj(lead.cnpj) || "A confirmar"}</dd>
           <dt>Aberta em</dt><dd>{lead.opened_at ? dateBR(lead.opened_at) : "—"}</dd>
           <dt>Porte</dt><dd>{LEAD_SIZES[lead.size] || "—"}</dd>
           <dt>Capital social</dt><dd>{lead.capital != null ? money(lead.capital) : "—"}</dd>

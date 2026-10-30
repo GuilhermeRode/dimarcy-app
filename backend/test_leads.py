@@ -451,9 +451,26 @@ def check_edit(ctx):
     made = r.json()
     assert (made["cnpj"], made["state"], made["status"], made["phone"]) == ("70000000000404", "SC", "pending", "(47) 99999-1111")
     assert c.post("/api/leads", headers=admin, json=new).status_code == 409
+    # CNPJ "a confirmar": two blanks don't collide, the lead is listed and survives the import
+    blank = [c.post("/api/leads", headers=admin, json={**new, "cnpj": cnpj, "name": name}) for cnpj, name in (("", "Sem CNPJ 1"), (None, "Sem CNPJ 2"))]
+    assert [r.status_code for r in blank] == [201, 201], blank[0].text
+    assert blank[0].json()["cnpj"] is None
+    r = c.put(f"/api/leads/{blank[0].json()['id']}", headers=admin, json={"name": "Sem CNPJ 1", "notes": " dois CNPJs possíveis "})
+    assert r.json()["notes"] == "dois CNPJs possíveis", r.text
+    assert "Sem CNPJ 1" in [x["name"] for x in c.get("/api/leads", headers=admin, params={"status": "pending", "limit": 200}).json()["items"]]
     with SessionLocal() as db:
         lead_import.apply(db, {}, "2026-11", "t", TODAY)
         assert db.get(Lead, made["id"]) is not None and db.get(Lead, old) is None
+        assert db.get(Lead, blank[0].json()["id"]) is not None
+    assert c.post("/api/leads/discard", headers=admin, json={"ids": [r.json()["id"] for r in blank], "reason": "other"}).status_code == 200
+    # the order is where the CNPJ becomes mandatory
+    with SessionLocal() as db:
+        no_doc = Customer(name="Sem documento", email="s@test.com", city="Joinville", state="SC")
+        db.add(no_doc)
+        db.commit()
+        no_doc_id = no_doc.id
+    r = c.post("/api/orders", headers=admin, json={"customer_id": no_doc_id, "date": str(TODAY), "delivery_date": str(TODAY), "payment_method": "PIX", "payment_terms": "À vista", "items": [{"product_id": 1, "color_id": 1, "size": "P", "quantity": 1}]})
+    assert r.status_code == 400 and "CPF/CNPJ" in r.text, r.text
     assert c.post("/api/leads/discard", headers=admin, json={"ids": [made["id"]], "reason": "other"}).status_code == 200
 
 

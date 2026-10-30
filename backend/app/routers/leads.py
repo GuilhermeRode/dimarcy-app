@@ -123,13 +123,14 @@ def create_lead(data: LeadCreateIn, db: Session = Depends(get_db), user: User = 
     """A lead typed in by hand; edited=True: the import neither overwrites nor drops it. The admin's starts
     pending and is released the usual way; a seller's must be in their region and is already theirs (new)."""
     fields = _typed_fields(data)
-    fields["cnpj"] = normalize_cnpj(fields["cnpj"])
-    if len(fields["cnpj"]) != 14:
-        raise HTTPException(422, "CNPJ inválido.")
-    if db.query(Lead.id).filter(Lead.cnpj == fields["cnpj"]).first():
-        raise HTTPException(409, "Esse CNPJ já está na Prospecção.")
-    if fields["cnpj"] in customer_cnpjs(db):
-        raise HTTPException(409, "Esse CNPJ já é cliente.")
+    fields["cnpj"] = normalize_cnpj(fields["cnpj"]) or None  # blank: "a confirmar", the order asks for it
+    if fields["cnpj"]:
+        if len(fields["cnpj"]) != 14:
+            raise HTTPException(422, "CNPJ inválido.")
+        if db.query(Lead.id).filter(Lead.cnpj == fields["cnpj"]).first():
+            raise HTTPException(409, "Esse CNPJ já está na Prospecção.")
+        if fields["cnpj"] in customer_cnpjs(db):
+            raise HTTPException(409, "Esse CNPJ já é cliente.")
     fields["state"] = fields["state"].upper()
     city_key = _city_key(fields["city"])
     status = "pending"

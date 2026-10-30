@@ -82,12 +82,14 @@ def _build_items(data: OrderIn, db: Session, user: User, app_settings: AppSettin
     return items
 
 
-def _check_customer(db: Session, customer_id: int, user: User, require_email: bool = True) -> None:
+def _check_customer(db: Session, customer_id: int, user: User, complete: bool = True) -> None:
     customer = db.get(Customer, customer_id)
     if not customer or (user.role != "admin" and customer.owner_id != user.id):
         raise HTTPException(400, "Customer not found.")
-    if require_email and not (customer.email or "").strip():
+    if complete and not (customer.email or "").strip():
         raise HTTPException(400, "Este cliente não tem e-mail cadastrado. Cadastre o e-mail do cliente antes de lançar o pedido.")
+    if complete and not (customer.document or "").strip():
+        raise HTTPException(400, "Este cliente não tem CPF/CNPJ cadastrado. Cadastre o documento do cliente antes de lançar o pedido.")
 
 
 def _check_delivery(order_date, delivery_date) -> None:
@@ -196,7 +198,7 @@ def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = 
             raise HTTPException(403, "O prazo de 1 hora para editar este pedido terminou. Fale com o administrador.")
         raise HTTPException(404, "Order not found.")
     # Legacy orders keep working; only a newly chosen customer must have an email.
-    _check_customer(db, data.customer_id, user, require_email=data.customer_id != o.customer_id)
+    _check_customer(db, data.customer_id, user, complete=data.customer_id != o.customer_id)
     if user.role != "admin":
         data.status = o.status  # only the admin moves an order through its statuses
     _check_delivery(data.date or o.date, data.delivery_date)
