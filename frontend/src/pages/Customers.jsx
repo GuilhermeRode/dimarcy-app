@@ -17,7 +17,7 @@ const SORTS = {
 };
 // "há 15 dias" for the last order; the exact date is in the side panel
 function lastOrder(iso, today) {
-  if (!iso) return <span className="muted">Nunca</span>;
+  if (!iso) return <span className="muted">Sem contato</span>;
   const days = Math.round((Date.parse(today) - Date.parse(iso)) / 86400000);
   return days <= 0 ? "Hoje" : days === 1 ? "Ontem" : `há ${days} dias`;
 }

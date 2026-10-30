@@ -169,7 +169,6 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         ),
         "alerts": {
             "customers_at_risk": statuses["at_risk"],
-            "customers_never_ordered": statuses["never_ordered"],
             "late_orders": len(late),
             "oldest_late_days": max(((today - o.delivery_date).days for o in late), default=None),
             "follow_ups_due": sum(f["next_action_date"] <= today for f in follow_ups),  # same as Retornos

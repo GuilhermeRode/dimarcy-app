@@ -76,6 +76,8 @@ with TestClient(app) as c:
     assert telma["past_orders"] == [{"date": "2026-06-01", "amount": 100.0}, {"date": "2026-05-12", "amount": 2378.8}]
     assert telma["total"] == 0 and telma["orders"] == 0  # kept out of the app's own numbers
     assert rows[("Telma", "Irati")]["past_orders"] == []
+    assert telma["last_order_date"] == "2026-06-01"  # no app order: the last past purchase counts
+    assert rows[("Telma", "Irati")]["last_order_date"] is None and rows[("Telma", "Irati")]["status"] == "inactive"
     dudi = rows[("Loja Dudi", "Rodeio")]
     assert c.delete(f"/api/customers/{dudi['id']}", headers=h).status_code == 400  # history blocks delete
 
