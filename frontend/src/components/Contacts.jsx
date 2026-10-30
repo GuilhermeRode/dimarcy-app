@@ -56,7 +56,7 @@ export function ContactModal({ target, onClose, onSaved, title = "Registrar cont
   );
 }
 
-export function ContactHistory({ target, onSaved }) {
+export function ContactHistory({ target, onSaved, canAdd = true }) {
   const query = target.lead_id ? `lead_id=${target.lead_id}` : `customer_id=${target.customer_id}`;
   const [list, setList] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -71,7 +71,7 @@ export function ContactHistory({ target, onSaved }) {
     <div>
       <div className="contacts-head">
         <h3>Contatos</h3>
-        <button type="button" className="btn" onClick={() => setAdding(true)}>Registrar contato</button>
+        {canAdd && <button type="button" className="btn" onClick={() => setAdding(true)}>Registrar contato</button>}
       </div>
       <ErrorBox msg={error} />
       {list && (list.length ? list.map((ct) => (
