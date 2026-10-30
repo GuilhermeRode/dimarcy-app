@@ -80,6 +80,31 @@ def _contacted_leads():
         db.commit()
 
 
+def _shared_seller_cities():
+    """Two sellers may share a city: the old UNIQUE (city_key, state) becomes per seller. SQLite can't drop
+    a constraint, so the table is rebuilt from its own DDL. Idempotent."""
+    if not any(u["name"] == "uq_seller_cities_city" for u in inspect(engine).get_unique_constraints("seller_cities")):
+        return
+    with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            conn.execute(text("ALTER TABLE seller_cities DROP CONSTRAINT uq_seller_cities_city"))
+            conn.execute(text("ALTER TABLE seller_cities ADD CONSTRAINT uq_seller_cities_user_city UNIQUE (user_id, city_key, state)"))
+            return
+        ddl = conn.execute(text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'seller_cities'")).scalar()
+        indexes = conn.execute(text("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'seller_cities' "
+                                    "AND sql IS NOT NULL")).scalars().all()
+        new = ddl.replace("CREATE TABLE seller_cities", "CREATE TABLE seller_cities_new", 1).replace(
+            "CONSTRAINT uq_seller_cities_city UNIQUE (city_key, state)", "CONSTRAINT uq_seller_cities_user_city UNIQUE (user_id, city_key, state)", 1)
+        assert "seller_cities_new" in new and "uq_seller_cities_user_city" in new
+        conn.execute(text("DROP TABLE IF EXISTS seller_cities_new"))  # a rebuild cut short before its commit
+        conn.execute(text(new))
+        conn.execute(text("INSERT INTO seller_cities_new SELECT * FROM seller_cities"))
+        conn.execute(text("DROP TABLE seller_cities"))
+        conn.execute(text("ALTER TABLE seller_cities_new RENAME TO seller_cities"))
+        for sql in indexes:
+            conn.execute(text(sql))
+
+
 def _nullable_lead_cnpj():
     """A lead may wait for its CNPJ ("a confirmar"), but create_all doesn't touch an existing column and SQLite
     can't drop NOT NULL: there the table is rebuilt from its own DDL (ids kept, contacts still point to them). Idempotent."""
@@ -153,6 +178,7 @@ async def lifespan(app: FastAPI):
                               "released_at": "TIMESTAMP", "score": "INTEGER", "city_active": "INTEGER",
                               "edited": "BOOLEAN DEFAULT FALSE", "notes": "TEXT"})
     _nullable_lead_cnpj()
+    _shared_seller_cities()
     _drop_lead_phones()
     _contacted_leads()
     with SessionLocal() as db:

@@ -16,6 +16,7 @@ import Products from "./pages/Products";
 import TopProducts from "./pages/TopProducts";
 import Colors from "./pages/Colors";
 import Users from "./pages/Users";
+import Regions from "./pages/Regions";
 import Revenue from "./pages/Revenue";
 import Finance from "./pages/Finance";
 import Production from "./pages/Production";
@@ -73,6 +74,7 @@ const router = createHashRouter(createRoutesFromElements(
       <Route path="top-products" element={<TopProducts />} />
       <Route path="colors" element={<Protected admin><Colors /></Protected>} />
       <Route path="users" element={<Protected admin><Users /></Protected>} />
+      <Route path="regions" element={<Protected admin><Regions /></Protected>} />
       <Route path="settings" element={<Protected admin><Settings /></Protected>} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />

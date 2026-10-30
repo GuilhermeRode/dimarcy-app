@@ -260,9 +260,9 @@ class FinancialEntry(Base):
 
 
 class SellerCity(Base):
-    """A city in a seller's region. A city belongs to at most one seller (see leads.py)."""
+    """A city in a seller's region. Two sellers may share a city: both work its leads (see leads.py)."""
     __tablename__ = "seller_cities"
-    __table_args__ = (UniqueConstraint("city_key", "state", name="uq_seller_cities_city"),)
+    __table_args__ = (UniqueConstraint("user_id", "city_key", "state", name="uq_seller_cities_user_city"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     city: Mapped[str] = mapped_column(String(100))

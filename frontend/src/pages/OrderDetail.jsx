@@ -66,7 +66,7 @@ export default function OrderDetail() {
         <div>
           <Link to={back.to} className="back-link">‹ {back.label}</Link>
           <h1>Pedido {orderNumber(o.id)}</h1>
-          <p className="muted">{o.customer_name} · {dateBR(o.date)} · vendedor {o.seller_name}</p>
+          <p className="muted">{o.customer_name}{o.customer_city ? ` · ${o.customer_city}${o.customer_state ? `/${o.customer_state}` : ""}` : ""} · {dateBR(o.date)} · vendedor {o.seller_name}</p>
         </div>
         <div className="actions">
           {isAdmin ? (

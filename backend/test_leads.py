@@ -134,7 +134,7 @@ def check_regions(ctx):
     assert r.status_code == 200, r.text
     assert r.json() == [{"city": "Jaraguá do Sul", "state": "SC"}]  # same key twice -> once
     r = c.put(f"/api/users/{b_id}/cities", headers=admin, json=[{"city": "JARAGUA DO SUL", "state": "SC"}])
-    assert r.status_code == 409 and r.json()["detail"] == "JARAGUA DO SUL já é da região de Ana.", r.text
+    assert r.status_code == 200, r.text  # two sellers may share a city
     assert c.put(f"/api/users/{b_id}/cities", headers=admin, json=[{"city": "Corupá", "state": "SC"}]).status_code == 200
     assert c.get(f"/api/users/{b_id}/cities", headers=admin).json() == [{"city": "Corupá", "state": "SC"}]
     assert c.put("/api/users/9999/cities", headers=admin, json=[]).status_code == 404
@@ -145,12 +145,11 @@ def check_regions(ctx):
     assert c.get(f"/api/users/{a_id}/cities", headers=ctx["a"]).status_code == 403  # admin only
     assert c.put(f"/api/users/{a_id}/cities", headers=admin, json=[{"city": "", "state": "SC"}]).status_code == 422
 
-    # suggestions: Ana's customers' cities, marking the ones another seller has
+    # suggestions: Ana's customers' cities
     c.post("/api/customers", headers=ctx["a"], json={**REQ, "name": "Loja Corupá", "document": "1", "city": "Corupa", "state": "SC"})
     c.post("/api/customers", headers=ctx["a"], json={**REQ, "name": "Loja Guará", "document": "2", "city": "Guaramirim", "state": "SC"})
     sug = c.get(f"/api/users/{a_id}/cities/suggestions", headers=admin).json()
-    assert {"city": "Corupa", "state": "SC", "taken_by": "Bruno"} in sug, sug
-    assert {"city": "Guaramirim", "state": "SC", "taken_by": None} in sug, sug
+    assert {"city": "Corupa", "state": "SC"} in sug and {"city": "Guaramirim", "state": "SC"} in sug, sug
 
     add_lead("11111111000111", "Lead Blumenau", city="Blumenau")
     opts = c.get("/api/users/cities/options", headers=admin).json()
@@ -426,6 +425,15 @@ def check_edit(ctx):
     _drop_lead_phones()
     with SessionLocal() as db:
         assert db.get(Lead, old).phone is None and db.get(Lead, lid).phone == "(47) 99999-1111"
+    # a shared city's lead reaches both sellers, and the admin's list names both
+    keep = c.get(f"/api/users/{ctx['b_id']}/cities", headers=admin).json()
+    assert c.put(f"/api/users/{ctx['b_id']}/cities", headers=admin, json=keep + [{"city": "Jaraguá do Sul", "state": "SC"}]).status_code == 200
+    both = add_lead("70000000000909", "Compartilhada", status="new")
+    assert [c.get(f"/api/leads/{both}", headers=h).status_code for h in (a, ctx["b"])] == [200, 200]
+    row = next(x for x in c.get("/api/leads", headers=admin, params={"search": "Compartilhada"}).json()["items"])
+    assert row["seller_name"] == "Ana, Bruno", row
+    assert c.post("/api/leads/discard", headers=admin, json={"ids": [both], "reason": "other"}).status_code == 200
+    assert c.put(f"/api/users/{ctx['b_id']}/cities", headers=admin, json=keep).status_code == 200
     # a lead typed in by the admin: pending, kept by the import even when the Receita doesn't list it
     new = {**body, "cnpj": "70.000.000/0004-04", "city": "Joinville", "state": "sc"}
     # a seller's: only in their region, and already theirs (new, not waiting for release)

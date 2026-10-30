@@ -34,11 +34,12 @@ def list_leads(city: str = "", search: str = "", seller_id: int | None = None,
     ensure_scores(db, clock.today_br())
     q = ranked_leads(db, user, city, search, seller_id if admin else None, status if admin else "new")
     owners = city_owners(db)
-    page = [(lead, lead_owner(owners, lead)) for lead in rank_order(q).offset(offset).limit(limit)]
+    page = [(lead, lead_owner(owners, lead, user)) for lead in rank_order(q).offset(offset).limit(limit)]
     latest: dict[int, Contact] = {}  # the list shows where the seller left off
     for ct in db.query(Contact).filter(Contact.lead_id.in_([lead.id for lead, _ in page])).order_by(Contact.id):
         latest[ct.lead_id] = ct
-    items = [{**lead_out(lead, owner), "last_contact_at": getattr(latest.get(lead.id), "created_at", None),
+    items = [{**lead_out(lead, owner), "seller_name": ", ".join(s.name for s in owners.get((lead.city_key, lead.state), [])) or None,
+              "last_contact_at": getattr(latest.get(lead.id), "created_at", None),
               "next_action_date": getattr(latest.get(lead.id), "next_action_date", None)} for lead, owner in page]
     out = {"items": items, "total": q.count(),
            "cities": sorted(c for (c,) in q.with_entities(Lead.city).distinct())}  # for the screen's city filter
@@ -61,15 +62,16 @@ def release(data: ReleaseToIn, db: Session = Depends(get_db)):
     leads = db.query(Lead).filter(Lead.id.in_(data.ids), Lead.status == "contacted").all()
     ok, other, added = [], {}, []
     for lead in leads:
-        owner = lead_owner(owners, lead)
+        owner = lead_owner(owners, lead, seller)
         if owner is None and seller:
-            # the row may exist for an inactive seller (a city has one row): hand it over
+            # the row may exist for an inactive seller: hand it over
             sc = db.query(SellerCity).filter_by(city_key=lead.city_key, state=lead.state).first()
             if sc:
                 sc.user_id = seller.id
             else:
                 db.add(SellerCity(user_id=seller.id, city=lead.city, state=lead.state, city_key=lead.city_key))
-            owners[(lead.city_key, lead.state)] = owner = seller
+            owner = seller
+            owners[(lead.city_key, lead.state)] = [seller]
             added.append(f"{lead.city}/{lead.state}")
         if owner is None:
             continue
