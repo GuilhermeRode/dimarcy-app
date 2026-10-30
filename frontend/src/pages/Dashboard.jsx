@@ -303,16 +303,16 @@ export default function Dashboard() {
             <div className="panel">
               <div className="panel-header"><h3>Peças por tamanho</h3><span className="muted">{plural(d.kpis.pieces, "peça", "peças")}</span></div>
               {d.by_size.length ? (
-                <ul className="size-rows">
+                <div className="size-bars">
                   {d.by_size.map((s) => (
-                    <li key={s.size} className={s.pieces === sizeMax ? "top" : ""} title={plural(s.pieces, "peça", "peças")}>
-                      <strong>{s.size}</strong>
-                      <i><i style={{ width: `${(s.pieces / sizeMax) * 100}%` }} /></i>
-                      <span>{s.pieces.toLocaleString("pt-BR")} pç</span>
+                    <div key={s.size} className={s.pieces === sizeMax ? "top" : ""} title={plural(s.pieces, "peça", "peças")}>
                       <b>{Math.round((s.pieces / Math.max(d.kpis.pieces, 1)) * 100)}%</b>
-                    </li>
+                      <i><i style={{ height: `${(s.pieces / sizeMax) * 100}%` }} /></i>
+                      <strong>{s.size}</strong>
+                      <span>{s.pieces.toLocaleString("pt-BR")} pç</span>
+                    </div>
                   ))}
-                </ul>
+                </div>
               ) : <Empty />}
             </div>
             <div className="panel">
