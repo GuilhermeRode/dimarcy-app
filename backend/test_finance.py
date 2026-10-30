@@ -331,4 +331,46 @@ with TestClient(app) as c:
     assert c.post("/api/finance/boleto", headers=admin, files={"file": ("b.pdf", b"nada")}).status_code == 400
     assert c.post("/api/finance/boleto", headers=A, data={"code": bb}).status_code == 403  # admins only
 
+    # who's on the boleto: the name after the label, on the same line or the next one
+    assert finance.boleto_parties("Beneficiário: MALHARIA SERRANA LTDA - CNPJ 12.345.678/0001-90\nPagador: Loja da Ana ME CPF 123.456.789-00") \
+        == {"payee": "MALHARIA SERRANA LTDA", "payer": "Loja da Ana ME"}
+    assert finance.boleto_parties("Recibo do Pagador\nBeneficiário Agência/Código do Beneficiário\nFIOS SUL LTDA 1234/56789-0\n"
+                                  "Nome do Pagador\nBOUTIQUE BELLA") == {"payee": "FIOS SUL LTDA", "payer": "BOUTIQUE BELLA"}
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    for line in ("Beneficiario: MALHARIA SERRANA LTDA", bb):
+        pdf.cell(text=line)
+        pdf.ln()
+    r = c.post("/api/finance/boleto", headers=admin, files={"file": ("boleto.pdf", bytes(pdf.output()))})
+    assert r.json()["payee"] == "MALHARIA SERRANA LTDA", r.text
+
+    # Pix receipts, in the layouts of a few banks
+    nubank = ("Comprovante de transferência\n14 OUT 2026 - 10:47:14\nValor R$ 1.250,00\nTipo de transferência Pix\n"
+              "Destino\nNome DI MARCY MALHAS LTDA\nCNPJ 12.345.678/0001-90\nOrigem\nNome Ana Paula Souza\n"
+              "Instituição NU PAGAMENTOS\nID da transação: E18236120202610291347s0123456789")
+    assert finance.parse_pix(nubank, TODAY) == {"amount": Decimal("1250.00"), "paid_at": date(2026, 10, 14),
+                                                "payer": "Ana Paula Souza", "payee": "DI MARCY MALHAS LTDA", "e2e_id": "E18236120202610291347s0123456789"}
+    inter = "Pix enviado\nR$ 89,90\n13/10/2026 às 09:12\nQuem pagou\nNome\nBOUTIQUE BELLA LTDA\nCPF/CNPJ ***.456.789-**"
+    assert finance.parse_pix(inter, TODAY)["payer"] == "BOUTIQUE BELLA LTDA"
+    assert finance.parse_pix(inter, TODAY)["amount"] == Decimal("89.90")
+    assert finance.parse_pix("De:\nJoão Silva\nPara:\nDi Marcy\nValor: 10,00", TODAY)["payer"] == "João Silva"
+    assert finance.parse_pix("nada aqui", TODAY) is None
+    assert c.post("/api/finance/pix", headers=admin, files={"file": ("p.png", b"x")}).status_code == 400
+    assert finance.parse_pix("Para:\nMalharia Z\nValor: 10,00", TODAY)["payee"] == "Malharia Z"
+
+    # attachments: PDF/PNG/JPG by content, admins only, gone with the entry
+    (e,) = c.post("/api/finance/entries", headers=admin, json={"kind": "payable", "description": "Anexo", "amount": 5,
+                                                               "due_date": "2026-11-01", "category": "Outros"}).json()
+    url = f"/api/finance/entries/{e['id']}/attachment"
+    assert c.post(url, headers=admin, files={"file": ("x.pdf", b"<html>")}).status_code == 400
+    assert c.post(url, headers=admin, files={"file": ("x.pdf", b"%PDF-1.4 ok")}).json()["attachment"] is True
+    r = c.get(url, headers=admin)
+    assert r.content == b"%PDF-1.4 ok" and r.headers["content-type"] == "application/pdf", r.headers
+    assert c.get(url, headers=A).status_code == 403
+    name = SessionLocal().get(FinancialEntry, e["id"]).attachment
+    assert c.delete(f"/api/finance/entries/{e['id']}", headers=admin).status_code == 204
+    from app.routers.finance import ATTACH_DIR
+    assert not (ATTACH_DIR / name).exists()
+
 print("finance checks OK")

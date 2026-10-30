@@ -42,8 +42,24 @@ export function EntryStatus({ entry, today = localDate() }) {
 // Keeps a value that isn't in the list (e.g. a payment method typed on an old order) selectable
 const withValue = (list, v) => (v && !list.includes(v) ? [...list, v] : list);
 
+// The boleto or receipt kept with an entry (PDF, PNG or JPG); the server keeps it private, so it's fetched with the token
+const ATTACH_ACCEPT = ".pdf,.png,.jpg,.jpeg";
+const uploadAttachment = (id, file) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  return api.post(`/finance/entries/${id}/attachment`, fd);
+};
+async function downloadAttachment(entry) {
+  const r = await api.get(`/finance/entries/${entry.id}/attachment`, { responseType: "blob" });
+  const ext = { "application/pdf": "pdf", "image/png": "png" }[r.data.type] || "jpg";
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(r.data), download: `anexo-${entry.id}.${ext}` });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 export function PayModal({ entry, onClose, onDone }) {
   const [f, setF] = useState({ paid_at: localDate(), paid_amount: entry.amount, payment_method: entry.payment_method || "" });
+  const [receipt, setReceipt] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -54,6 +70,7 @@ export function PayModal({ entry, onClose, onDone }) {
       await api.post(`/finance/entries/${entry.id}/pay`, {
         paid_at: f.paid_at, paid_amount: Number(f.paid_amount), payment_method: f.payment_method || null,
       });
+      if (receipt) await uploadAttachment(entry.id, receipt);
       onDone();
     } catch (err) { setError(errorMessage(err)); setBusy(false); }
   }
@@ -74,6 +91,9 @@ export function PayModal({ entry, onClose, onDone }) {
             {withValue(PAYMENT_METHODS, entry.payment_method).map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </Field>
+        <Field label="Comprovante (opcional)" span={2}>
+          <input type="file" accept={ATTACH_ACCEPT} onChange={(e) => setReceipt(e.target.files[0] || null)} />
+        </Field>
         <div className="span-2"><ErrorBox msg={error} /></div>
         <div className="actions span-2"><button className="btn btn-primary" disabled={busy}>Confirmar baixa</button></div>
       </form>
@@ -92,12 +112,20 @@ function EntryModal({ kind, entry, onClose, onDone }) {
   const [f, setF] = useState(() => (entry ? { ...emptyEntry(), ...entry, supplier: entry.supplier || "", notes: entry.notes || "",
     payment_method: entry.payment_method || "", category: entry.category || "Outros" } : emptyEntry()));
   const [split, setSplit] = useState(null); // { amount, due_date } while splitting
+  const [hasAttachment, setHasAttachment] = useState(Boolean(entry?.attachment));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const input = (k) => ({ value: f[k] ?? "", onChange: (e) => setF({ ...f, [k]: e.target.value }) });
   async function run(request) {
     setError(""); setBusy(true);
     try { await request(); onDone(); } catch (err) { setError(errorMessage(err)); setBusy(false); }
+  }
+
+  // Attaching doesn't close the modal: the form may have unsaved edits
+  async function attachment(request) {
+    setError(""); setBusy(true);
+    try { const r = await request(); if (r) setHasAttachment(r.data.attachment); } catch (err) { setError(errorMessage(err)); }
+    setBusy(false);
   }
 
   function save(e) {
@@ -125,7 +153,7 @@ function EntryModal({ kind, entry, onClose, onDone }) {
         <Field label="Descrição" span={2}><input required maxLength={200} {...input("description")} /></Field>
         {payable ? (
           <>
-            <Field label="Fornecedor / favorecido"><input maxLength={160} {...input("supplier")} /></Field>
+            <Field label="Fornecedor / beneficiário"><input maxLength={160} {...input("supplier")} /></Field>
             <Field label="Categoria">
               <select {...input("category")}>{PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
             </Field>
@@ -152,6 +180,26 @@ function EntryModal({ kind, entry, onClose, onDone }) {
         )}
         <Field label="Observações" span={2}><textarea rows={2} {...input("notes")} /></Field>
         {paid && <p className="muted span-2">Paga em {dateBR(entry.paid_at)} · {money(entry.paid_amount)}. Para mudar o valor, desfaça a baixa.</p>}
+        {!isNew && (
+          <div className="span-2 field-row">
+            <span className="muted">{hasAttachment ? "Boleto/comprovante anexado" : "Sem anexo"}</span>
+            {hasAttachment && (
+              <>
+                <button type="button" className="btn btn-light" disabled={busy} onClick={() => attachment(() => downloadAttachment(entry))}>Baixar anexo</button>
+                <button type="button" className="link-btn" disabled={busy}
+                  onClick={() => attachment(() => api.delete(`/finance/entries/${entry.id}/attachment`))}>Remover</button>
+              </>
+            )}
+            <label className="btn btn-light">
+              {hasAttachment ? "Trocar anexo" : "Anexar boleto ou comprovante"}
+              <input type="file" hidden accept={ATTACH_ACCEPT} disabled={busy} onChange={(e) => {
+                const file = e.target.files[0];
+                e.target.value = "";
+                if (file) attachment(() => uploadAttachment(entry.id, file));
+              }} />
+            </label>
+          </div>
+        )}
 
         {split && (
           <div className="span-2 form-grid">
@@ -228,14 +276,24 @@ function BulkPayModal({ entries, onClose, onDone }) {
   );
 }
 
+// Loose name match between a Pix/boleto payer and a customer; words every shop name has don't count
+const NAME_STOP = new Set(["ltda", "eireli", "comercio", "moda", "modas", "confeccoes", "boutique", "loja", "lojas", "store"]);
+const nameWords = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/[^a-z0-9]+/)
+  .filter((w) => w.length > 3 && !NAME_STOP.has(w));
+const sameName = (a, b) => { const w = new Set(nameWords(a)); return nameWords(b).some((x) => w.has(x)); };
+
+const emptyPix = () => ({ amount: "", paid_at: localDate(), party: "", category: "Outros", e2e_id: null });
+
 // Reads a CSV/XLSX on the server, shows what it understood, and only then creates the entries
 function ImportModal({ kind, onClose, onDone }) {
   const payable = kind === "payable";
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null); // { entries, items, errors }
   const [card, setCard] = useState(null); // { card_due, card_name, category } while importing a card statement
-  const [mode, setModeState] = useState("list"); // "list" | "card" | "boleto"
+  const [mode, setModeState] = useState("list"); // "list" | "card" | "boleto" | "pix"
   const [bol, setBol] = useState(null); // the boleto read, plus what the user types: supplier, description, category
+  const [pix, setPix] = useState(null); // { amount, paid_at, party, category, e2e_id } from a Pix receipt or typed in
+  const [openList, setOpenList] = useState([]); // open entries, to match a boleto or Pix to one that already exists
   const [code, setCode] = useState(""); // pasted linha digitável
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -255,6 +313,16 @@ function ImportModal({ kind, onClose, onDone }) {
 
   const [over, setOver] = useState(false); // a file is being dragged over the drop zone
 
+  useEffect(() => {
+    api.get("/finance/entries", { params: { kind, status: "open" } }).then((r) => setOpenList(r.data)).catch(() => {});
+  }, [kind]);
+
+  async function run(request) {
+    setError(""); setBusy(true);
+    try { await request(); onDone(); } catch (err) { setError(errorMessage(err)); setBusy(false); }
+  }
+  const attach = (id) => (file ? uploadAttachment(id, file) : null); // the boleto/receipt read stays with the entry
+
   // Value and due date from the boleto's PDF or its linha digitável; the user completes the rest
   async function readBoleto(key, value) {
     const fd = new FormData();
@@ -262,28 +330,73 @@ function ImportModal({ kind, onClose, onDone }) {
     setError(""); setBusy(true);
     try {
       const { data } = await api.post("/finance/boleto", fd);
-      setBol((cur) => ({ supplier: "", description: "Boleto", category: "Outros", ...cur,
+      setBol((cur) => ({ supplier: "", description: "Boleto", category: "Outros", order_number: "", payer: "", ...cur,
+        ...(payable && data.payee ? { supplier: data.payee } : {}),
+        ...(!payable && data.payer ? { payer: data.payer, description: `Boleto — ${data.payer}`.slice(0, 200) } : {}),
         code: data.code, amount: data.amount ?? "", due_date: data.due_date ?? "" }));
       setCode(data.code);
     } catch (err) { setError(errorMessage(err)); }
     setBusy(false);
   }
 
-  async function saveBoleto() {
+  const saveBoleto = () => run(async () => {
+    const { data } = await api.post("/finance/entries", {
+      kind, description: bol.description, amount: Number(bol.amount), due_date: bol.due_date, payment_method: "Boleto",
+      notes: `Linha digitável: ${bol.code}`,
+      ...(payable ? { supplier: bol.supplier || null, category: bol.category }
+        : { order_id: bol.order_number ? Number(bol.order_number) : null }),
+    });
+    await attach(data[0].id);
+  });
+
+  // The boleto is for an entry that already exists (an order's installment, a monthly bill): its code and due date go there
+  const linkBoleto = (x) => run(async () => {
+    await api.put(`/finance/entries/${x.id}`, {
+      description: x.description, amount: x.amount, due_date: bol.due_date || x.due_date, payment_method: "Boleto",
+      notes: [x.notes, `Linha digitável: ${bol.code}`].filter(Boolean).join("\n"), supplier: x.supplier, category: x.category,
+    });
+    await attach(x.id);
+  });
+
+  async function readPix(f) {
+    const fd = new FormData();
+    fd.append("file", f);
     setError(""); setBusy(true);
     try {
-      await api.post("/finance/entries", {
-        kind, description: bol.description, amount: Number(bol.amount), due_date: bol.due_date, payment_method: "Boleto",
-        notes: `Linha digitável: ${bol.code}`, supplier: bol.supplier || null, category: bol.category,
-      });
-      onDone();
-    } catch (err) { setError(errorMessage(err)); setBusy(false); }
+      const { data } = await api.post("/finance/pix", fd);
+      setPix({ ...emptyPix(), amount: data.amount, paid_at: data.paid_at || localDate(),
+        party: (payable ? data.payee : data.payer) || "", e2e_id: data.e2e_id });
+    } catch (err) { setError(errorMessage(err)); }
+    setBusy(false);
   }
+
+  const payPix = (x) => run(async () => {
+    await api.post(`/finance/entries/${x.id}/pay`, { paid_at: pix.paid_at, paid_amount: Number(pix.amount), payment_method: "Pix" });
+    await attach(x.id);
+  });
+
+  // A Pix that doesn't settle any open entry: a new one, already paid
+  const savePix = () => run(async () => {
+    const { data } = await api.post("/finance/entries", {
+      kind, description: pix.party ? `Pix — ${pix.party}`.slice(0, 200) : payable ? "Pix enviado" : "Pix recebido",
+      amount: Number(pix.amount), due_date: pix.paid_at, payment_method: "Pix", notes: pix.e2e_id ? `ID do Pix: ${pix.e2e_id}` : null,
+      ...(payable ? { supplier: pix.party || null, category: pix.category } : {}),
+    });
+    await api.post(`/finance/entries/${data[0].id}/pay`, { paid_at: pix.paid_at, payment_method: "Pix" });
+    await attach(data[0].id);
+  });
 
   function choose(f) {
     setOver(false);
     if (!f) return;
-    if (payable && mode !== "card" && /\.pdf$/i.test(f.name)) {  // a PDF dropped on "Lista de contas" is a boleto too
+    if (mode === "pix") {
+      setError("");
+      if (/\.(png|jpe?g)$/i.test(f.name)) { setFile(f); return setPix(emptyPix()); } // a photo has no text: typed in, kept attached
+      if (!/\.pdf$/i.test(f.name)) return setError("Envie o comprovante em PDF, PNG ou JPG.");
+      setFile(f);
+      return readPix(f);
+    }
+    if (mode !== "card" && /\.pdf$/i.test(f.name)) {  // a PDF dropped on "Lista de contas" is a boleto too
       setModeState("boleto"); setFile(f); setPreview(null);
       return readBoleto("file", f);
     }
@@ -307,7 +420,7 @@ function ImportModal({ kind, onClose, onDone }) {
     if (m === mode) return;
     const next = m === "card" ? { card_due: "", card_name: "", category: "Outros" } : null;
     setModeState(m); setCard(next); setPreview(null); setError("");
-    if (m === "boleto" || mode === "boleto") { setFile(null); setBol(null); setCode(""); return; }
+    if (["boleto", "pix"].includes(m) || ["boleto", "pix"].includes(mode)) { setFile(null); setBol(null); setPix(null); setCode(""); return; }
     send(file, false, next);
   }
 
@@ -315,9 +428,20 @@ function ImportModal({ kind, onClose, onDone }) {
   const items = preview?.items || [];
   const errors = preview?.errors || [];
   const total = entries.reduce((sum, x) => sum + x.amount, 0);
+  // Open entries that look like the boleto/Pix: same amount first, then same customer/supplier
+  const doc = mode === "pix" ? pix : mode === "boleto" ? bol : null;
+  const party = mode === "pix" ? pix?.party : payable ? bol?.supplier : bol?.payer;
+  const partyOf = (x) => (payable ? x.supplier : x.customer_name);
+  const matches = !doc ? [] : openList
+    .map((x) => ({ x, score: (Math.abs(x.amount - Number(doc.amount)) < 0.005) * 2 + sameName(partyOf(x) || x.description, party) }))
+    .filter((m) => m.score > 0)
+    .sort((a, b) => b.score - a.score || a.x.due_date.localeCompare(b.x.due_date))
+    .slice(0, 6).map((m) => m.x);
+  const pdfMode = mode === "boleto" || mode === "pix";
   let status = "";
   if (busy) status = "Lendo o arquivo…";
   else if (mode === "boleto") status = bol ? "Boleto lido — confira e complete abaixo" : "";
+  else if (mode === "pix") status = pix ? "Comprovante lido — confira abaixo" : "";
   else if (card && file && !card.card_due) status = "Informe o vencimento da fatura para ver a prévia";
   else if (errors.length) status = `${errors.length} ${errors.length === 1 ? "problema encontrado" : "problemas encontrados"}`;
   else if (entries.length) status = `${entries.length} ${entries.length === 1 ? "lançamento pronto" : "lançamentos prontos"} para importar`;
@@ -325,13 +449,12 @@ function ImportModal({ kind, onClose, onDone }) {
   return (
     <Modal title={payable ? "Importar contas a pagar" : "Importar contas a receber"} onClose={onClose} wide>
       <div className="import">
-        {payable && (
-          <div className="segmented import-mode" role="group" aria-label="Tipo de arquivo">
-            {[["list", "Lista de contas"], ["card", "Fatura de cartão"], ["boleto", "Boleto (PDF)"]].map(([m, label]) => (
-              <button key={m} type="button" className={mode === m ? "on" : ""} aria-pressed={mode === m} onClick={() => setMode(m)}>{label}</button>
-            ))}
-          </div>
-        )}
+        <div className="segmented import-mode" role="group" aria-label="Tipo de arquivo">
+          {(payable ? [["list", "Lista de contas"], ["card", "Fatura de cartão"], ["boleto", "Boleto (PDF)"], ["pix", "Comprovante Pix"]]
+            : [["list", "Lista de contas"], ["boleto", "Boleto (PDF)"], ["pix", "Comprovante Pix"]]).map(([m, label]) => (
+            <button key={m} type="button" className={mode === m ? "on" : ""} aria-pressed={mode === m} onClick={() => setMode(m)}>{label}</button>
+          ))}
+        </div>
 
         {card && (
           <div className="import-card">
@@ -352,7 +475,7 @@ function ImportModal({ kind, onClose, onDone }) {
           onDragOver={(e) => { e.preventDefault(); if (!over) setOver(true); }}
           onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(false); }}
           onDrop={(e) => { e.preventDefault(); choose(e.dataTransfer.files[0]); }}>
-          <input type="file" accept={mode === "boleto" ? ".pdf" : payable && !card ? ".csv,.xlsx,.txt,.pdf" : ".csv,.xlsx,.txt"} hidden disabled={busy}
+          <input type="file" accept={mode === "pix" ? ATTACH_ACCEPT : pdfMode ? ".pdf" : !card ? ".csv,.xlsx,.txt,.pdf" : ".csv,.xlsx,.txt"} hidden disabled={busy}
             onChange={(e) => { choose(e.target.files[0]); e.target.value = ""; }} />
           <svg className="dropzone-icon" viewBox="0 0 24 24" aria-hidden="true">
             {file
@@ -367,8 +490,9 @@ function ImportModal({ kind, onClose, onDone }) {
             </span>
           ) : (
             <span className="dropzone-text">
-              <strong>{over ? "Solte o arquivo aqui" : mode === "boleto" ? "Arraste o PDF do boleto para cá" : "Arraste o arquivo para cá"}</strong>
-              <span className="muted">ou <span className="dropzone-link">clique para escolher</span> · {mode === "boleto" ? "PDF" : "CSV ou XLSX"}, até 5 MB</span>
+              <strong>{over ? "Solte o arquivo aqui" : mode === "boleto" ? "Arraste o PDF do boleto para cá"
+                : mode === "pix" ? "Arraste o PDF do comprovante para cá" : "Arraste o arquivo para cá"}</strong>
+              <span className="muted">ou <span className="dropzone-link">clique para escolher</span> · {mode === "pix" ? "PDF ou imagem" : pdfMode ? "PDF" : "CSV ou XLSX"}, até 5 MB</span>
             </span>
           )}
         </label>
@@ -389,15 +513,25 @@ function ImportModal({ kind, onClose, onDone }) {
               <span className="muted boleto-code">{bol.code}</span>
             </div>
             <div className="form-grid boleto-form">
-              <Field label="Fornecedor / favorecido"><input maxLength={160} autoFocus value={bol.supplier}
-                onChange={(e) => setBol({ ...bol, supplier: e.target.value })} /></Field>
-              <Field label="Categoria">
-                <select value={bol.category} onChange={(e) => setBol({ ...bol, category: e.target.value })}>
-                  {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-                </select>
-              </Field>
-              <Field label="Descrição" span={2}><input required maxLength={200} value={bol.description}
+              {payable && (
+                <>
+                  <Field label="Beneficiário (quem recebe)"><input maxLength={160} autoFocus value={bol.supplier}
+                    onChange={(e) => setBol({ ...bol, supplier: e.target.value })} /></Field>
+                  <Field label="Categoria">
+                    <select value={bol.category} onChange={(e) => setBol({ ...bol, category: e.target.value })}>
+                      {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                    </select>
+                  </Field>
+                </>
+              )}
+              <Field label="Descrição" span={payable ? 2 : 1}><input required maxLength={200} value={bol.description}
                 onChange={(e) => setBol({ ...bol, description: e.target.value })} /></Field>
+              {!payable && (
+                <Field label="Nº do pedido (opcional)">
+                  <input inputMode="numeric" value={bol.order_number}
+                    onChange={(e) => setBol({ ...bol, order_number: e.target.value.replace(/\D/g, "") })} />
+                </Field>
+              )}
               <Field label="Valor (R$)"><input type="number" step="0.01" min="0.01" required value={bol.amount}
                 onChange={(e) => setBol({ ...bol, amount: e.target.value })} /></Field>
               <Field label="Vencimento"><input type="date" required value={bol.due_date}
@@ -407,9 +541,76 @@ function ImportModal({ kind, onClose, onDone }) {
           </div>
         )}
 
+        {mode === "pix" && !pix && !busy && (
+          <button type="button" className="link-btn" onClick={() => setPix(emptyPix())}>Sem o arquivo? Preencher à mão</button>
+        )}
+
+        {mode === "pix" && pix && (
+          <div className="import-preview">
+            <div className="import-preview-head">
+              <strong>{payable ? "Pix enviado" : "Pix recebido"}</strong>
+              {pix.e2e_id && <span className="muted boleto-code">{pix.e2e_id}</span>}
+            </div>
+            <div className="form-grid boleto-form">
+              <Field label={payable ? "Pago para" : "Quem pagou"} span={payable ? 1 : 2}><input maxLength={160} value={pix.party}
+                onChange={(e) => setPix({ ...pix, party: e.target.value })} /></Field>
+              {payable && (
+                <Field label="Categoria">
+                  <select value={pix.category} onChange={(e) => setPix({ ...pix, category: e.target.value })}>
+                    {PAYABLE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                </Field>
+              )}
+              <Field label="Valor (R$)"><input type="number" step="0.01" min="0.01" required value={pix.amount}
+                onChange={(e) => setPix({ ...pix, amount: e.target.value })} /></Field>
+              <Field label="Data do pagamento"><input type="date" required value={pix.paid_at}
+                onChange={(e) => setPix({ ...pix, paid_at: e.target.value })} /></Field>
+            </div>
+          </div>
+        )}
+
+        {matches.length > 0 && (
+          <div className="import-preview">
+            <div className="import-preview-head">
+              <strong>{mode === "pix" ? "É o pagamento de alguma destas" : "Este boleto é de alguma destas"} {payable ? "contas?" : "parcelas?"}</strong>
+              <span className="muted">mesmo valor ou mesmo {payable ? "fornecedor" : "cliente"}</span>
+            </div>
+            <div className="table-scroll">
+              <table className="table">
+                <tbody>
+                  {matches.map((x) => (
+                    <tr key={x.id}>
+                      <td>{dateBR(x.due_date)}</td>
+                      <td>
+                        <span className="cell-stack">
+                          <strong className="cell-main">{partyOf(x) || x.description}</strong>
+                          {partyOf(x) && <span className="cell-sub">{x.description}</span>}
+                        </span>
+                      </td>
+                      <td className="num"><strong>{money(x.amount)}</strong></td>
+                      <td className="num">
+                        <button type="button" className="btn btn-light"
+                          disabled={busy || !(Number(doc.amount) > 0) || (mode === "pix" && !pix.paid_at)}
+                          onClick={() => (mode === "pix" ? payPix(x) : linkBoleto(x))}>
+                          {mode === "pix" ? "Dar baixa nesta" : "Vincular a esta"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         <details className="import-help">
-          <summary>{mode === "boleto" ? "Que boleto funciona?" : "Como a planilha precisa estar?"}</summary>
-          {mode === "boleto" ? (
+          <summary>{mode === "boleto" ? "Que boleto funciona?" : mode === "pix" ? "Que comprovante funciona?" : "Como a planilha precisa estar?"}</summary>
+          {mode === "pix" ? (
+            <p>O PDF do comprovante que o banco gera{payable ? "" : " (o cliente pode encaminhar pelo WhatsApp)"}. São lidos o valor, a data e
+              {payable ? " para quem foi pago" : " quem pagou"}; depois é só escolher {payable ? "a conta" : "a parcela"} em aberto para dar baixa,
+              ou lançar {payable ? "como conta já paga" : "como recebimento avulso"}. Foto ou print não tem texto para ler: os dados são
+              preenchidos à mão e a imagem fica anexada ao lançamento.</p>
+          ) : mode === "boleto" ? (
             <p>O PDF do boleto como o banco ou o fornecedor envia: o valor e o vencimento são lidos da linha digitável e conferidos pelos
               dígitos verificadores. Boleto escaneado ou foto não tem texto para ler — nesse caso, cole a linha digitável. Contas de
               luz, água e impostos nem sempre trazem o vencimento no código.</p>
@@ -487,7 +688,12 @@ function ImportModal({ kind, onClose, onDone }) {
           <button type="button" className="btn" onClick={onClose}>Cancelar</button>
           {mode === "boleto" ? (
             <button type="button" className="btn btn-primary" onClick={saveBoleto}
-              disabled={busy || !bol || !(Number(bol.amount) > 0) || !bol.due_date || !bol.description.trim()}>Lançar boleto</button>
+              disabled={busy || !bol || !(Number(bol.amount) > 0) || !bol.due_date || !bol.description.trim()}>
+              {matches.length ? "Lançar como conta nova" : "Lançar boleto"}</button>
+          ) : mode === "pix" ? (
+            <button type="button" className="btn btn-primary" onClick={savePix}
+              disabled={busy || !pix || !(Number(pix.amount) > 0) || !pix.paid_at}>
+              {payable ? "Lançar como conta paga" : "Lançar como recebimento avulso"}</button>
           ) : (
             <button type="button" className="btn btn-primary" disabled={busy || !entries.length || errors.length > 0} onClick={() => send(file, true)}>
               {entries.length ? `Importar ${entries.length} ${entries.length === 1 ? "lançamento" : "lançamentos"}` : "Importar"}
@@ -592,7 +798,7 @@ export default function Finance({ kind }) {
         <td className={x.status === "overdue" ? "due-overdue" : ""}>{dateBR(x.due_date)}</td>
         <td>
           <span className="cell-stack">
-            <strong className="cell-main">{party || x.description}</strong>
+            <strong className="cell-main">{party || x.description}{x.attachment && <span className="muted" title="Tem anexo"> 📎</span>}</strong>
             {party && <span className="cell-sub">{x.description}</span>}
           </span>
         </td>
@@ -687,7 +893,7 @@ export default function Finance({ kind }) {
       {paying && <PayModal entry={paying} onClose={() => setPaying(null)} onDone={done} />}
       {bulkPaying && <BulkPayModal entries={picked} onClose={done} onDone={done} />}
       {importing && <ImportModal kind={kind} onClose={() => setImporting(false)} onDone={done} />}
-      {editing && <EntryModal kind={kind} entry={editing === "new" ? null : editing} onClose={() => setEditing(null)} onDone={done} />}
+      {editing && <EntryModal kind={kind} entry={editing === "new" ? null : editing} onClose={done} onDone={done} />}
     </div>
   );
 }

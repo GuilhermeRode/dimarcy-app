@@ -336,6 +336,82 @@ def find_boleto(text: str, today: date) -> dict | None:
     return None
 
 
+# ---- names and Pix receipts: no standard layout, so these are suggestions the user confirms ----
+
+_TAX_ID = re.compile(r"\b(?:CNPJ|CPF)\b.*|\d{2}\.?\d{3}\.?\d{3}/\d{4}-?\d{2}.*|\d{3}\.\d{3}\.\d{3}-\d{2}.*", re.I)
+_NOT_NAME = ("agencia", "codigo", "data", "vencimento", "nosso", "valor", "cnpj", "cpf", "endereco", "local", "numero",
+             "carteira", "especie", "beneficiario", "pagador", "sacado", "cedente", "recibo", "autentica", "instituicao",
+             "banco", "nome", "tipo", "chave", "id ", "identificador", "destino", "origem", "conta", "documento")
+
+
+def _name(s: str) -> str | None:
+    """'MALHARIA X LTDA - CNPJ 12.345.678/0001-90' → 'MALHARIA X LTDA'; None for a label or a code."""
+    s = _TAX_ID.sub("", s or "")
+    s = re.sub(r"(\s+\S*\d\S*)+$", "", s)  # trailing agency/account codes on the same line
+    s = s.strip(" :-–—\t")
+    p = _plain(s)
+    if len(re.sub(r"[^a-z]", "", p)) < 3 or p.startswith(_NOT_NAME):
+        return None
+    return s[:160]
+
+
+def find_name(text: str, label: str) -> str | None:
+    """The name after a label that starts a line: on the same line, or else on the next non-empty one."""
+    lines = [ln.strip() for ln in (text or "").splitlines()]
+    for i, line in enumerate(lines):
+        m = re.match(rf"(?:{label})\b\s*:?", line, re.I)
+        if not m:
+            continue
+        name = _name(line[m.end():])
+        if not name:
+            nxt = next((ln for ln in lines[i + 1:i + 4] if ln and _plain(ln).rstrip(":") != "nome"), "")
+            name = _name(re.sub(r"^nome\b\s*:?", "", nxt, flags=re.I))  # "Nome: FULANO" under a section title
+        if name:
+            return name
+    return None
+
+
+def boleto_parties(text: str) -> dict:
+    """Who gets the money (payables) and who pays it (receivables), read from a boleto PDF."""
+    return {"payee": find_name(text, r"benefici[aá]rio|cedente"),
+            "payer": find_name(text, r"(?:nome do\s+)?(?:pagador|sacado)")}
+
+
+_MONTHS = ("jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez")
+
+
+def _first_date(text: str, today: date) -> date | None:
+    """29/10/2026, '29 OUT 2026' or '29 de outubro de 2026', whichever comes first and is plausible."""
+    found = []
+    for m in re.finditer(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b", text):
+        found.append((m.start(), int(m[3]), int(m[2]), int(m[1])))
+    for m in re.finditer(r"\b(\d{1,2})\s+(?:de\s+)?([a-zç]{3})[a-zç]*\.?\s+(?:de\s+)?(\d{4})\b", text, re.I):
+        if m[2].lower() in _MONTHS:
+            found.append((m.start(), int(m[3]), _MONTHS.index(m[2].lower()) + 1, int(m[1])))
+    for _, y, mo, d in sorted(found):
+        try:
+            dt = date(y, mo, d)
+        except ValueError:
+            continue
+        if today - timedelta(days=730) <= dt <= today + timedelta(days=1):
+            return dt
+    return None
+
+
+def parse_pix(text: str, today: date) -> dict | None:
+    """A Pix receipt's text → {amount, paid_at, payer, payee, e2e_id}, or None when there's no amount."""
+    m = re.search(r"valor[^\d]{0,40}?(\d{1,3}(?:\.\d{3})*,\d{2})", text or "", re.I) \
+        or re.search(r"R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})", text or "")
+    amount = parse_money(m[1]) if m else None
+    if amount is None:
+        return None
+    e2e = re.search(r"\bE\d{20}[0-9A-Za-z]{11}\b", text)  # the end-to-end id every Pix gets from the Central Bank
+    return {"amount": amount, "paid_at": _first_date(text, today), "e2e_id": e2e[0] if e2e else None,
+            "payer": find_name(text, r"origem|pagador|quem pagou|dados do pagador|dados de quem pagou|de(?=\s*(?::|$))"),
+            "payee": find_name(text, r"destino|recebedor|favorecido|quem recebeu|dados do recebedor|dados de quem recebeu"
+                                     r"|para(?=\s*(?::|$))")}
+
+
 def pdf_text(data: bytes) -> str:
     from pypdf import PdfReader
     try:
