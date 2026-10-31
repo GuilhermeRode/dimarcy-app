@@ -5,7 +5,7 @@ import { useAuth } from "../auth";
 import { customerFieldError, localDate, maskDocument, maskPhone, money, orderNumber, sortSizes, tablePrice } from "../format";
 import { Field, ErrorBox, Modal, Swatch, PhotoZoom, ConfirmDialog } from "../components/ui";
 import { EditIcon, PlusIcon } from "../components/icons";
-import { CnpjNote, StateRegistrationField, useCnpjAutofill } from "../components/CustomerFormModal";
+import { CnpjNote, CustomerTypeField, EMPTY_CUSTOMER, RetailCustomerFields, StateRegistrationField, useCnpjAutofill } from "../components/CustomerFormModal";
 
 // "09/37 - Nuvem/Marrom Terra" -> the card number stands out, the name goes small underneath,
 // so long two-tone names don't push the size columns off screen
@@ -22,7 +22,6 @@ function ColorLabel({ name, hex, hex2, size }) {
 const key = (i) => `${i.color_id}|${i.size}`;
 const customerLabel = (c) => `${c.name}${c.city ? ` — ${c.city}/${c.state || ""}` : ""}`;
 
-const EMPTY_CUSTOMER = { name: "", document: "", state_registration: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
 const PAYMENT_METHODS = ["Dinheiro", "Pix", "Boleto", "Cheque"];
 const PAYMENT_TERMS = ["À vista", "30/60", "30/60/90", "30/60/90/120", "30/60/90/120/150", "Quinzenal"];
 
@@ -128,7 +127,8 @@ const REQUIRED_CUSTOMER_FIELDS = { document: "CPF/CNPJ", state_registration: "In
 // An admin may leave the IE blank (AdminCustomerIn on the server); the e-mail is still needed for an order.
 const ADMIN_OPTIONAL = ["state_registration"];
 const missingCustomerFields = (c, isAdmin) =>
-  Object.entries(REQUIRED_CUSTOMER_FIELDS).filter(([k]) => !(isAdmin && ADMIN_OPTIONAL.includes(k)) && !String(c?.[k] || "").trim())
+  Object.entries(REQUIRED_CUSTOMER_FIELDS)
+    .filter(([k]) => (c?.price_table === "retail" ? k === "phone" : !(isAdmin && ADMIN_OPTIONAL.includes(k))) && !String(c?.[k] || "").trim())
     .map(([, label]) => label);
 
 // Full customer form, used both to create and to edit without leaving the order
@@ -159,6 +159,8 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
     <Modal title={editing ? `Editar cliente — ${customer.name}` : "Cadastrar cliente"} onClose={onClose} wide>
       <form onSubmit={save} className="form-grid">
         <div className="span-2"><ErrorBox msg={error} /></div>
+        <CustomerTypeField value={f.price_table} onChange={(v) => setF({ ...f, price_table: v })} />
+        {f.price_table === "retail" ? <RetailCustomerFields form={f} set={(v) => setF({ ...f, ...v })} /> : <>
         <Field label="Nome / razão social" span={2}><input required autoFocus {...field("name")} /></Field>
         <Field label="CPF/CNPJ"><input required inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" {...field("document")}
           onChange={(e) => setF({ ...f, document: maskDocument(e.target.value) })} /><CnpjNote note={cnpjNote} /></Field>
@@ -182,6 +184,7 @@ function CustomerForm({ customer, onSaved, onClose, isAdmin, sellers }) {
         </Field>
         <Field label="Endereço" span={2}><input required {...field("address")} /></Field>
         <Field label="Observações do cliente (opcional)" span={2}><textarea rows={2} {...field("notes")} /></Field>
+        </>}
         <div className="actions span-2">
           <button className="btn btn-primary">{editing ? "Salvar alterações" : "Cadastrar cliente"}</button>
         </div>
@@ -352,6 +355,14 @@ export default function OrderForm() {
 
   const selectedCustomer = customers.find((c) => c.id === Number(header.customer_id));
 
+  // New order: "Tipo de venda" follows the customer (picked, preset or just edited) when this seller may use that
+  // table. It stays editable, and a seller limited to the other table keeps theirs.
+  const customerTable = selectedCustomer?.price_table;
+  useEffect(() => {
+    if (!id && settings.price_tables.includes(customerTable) && customerTable !== header.price_table) changePriceTable(customerTable);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, customerTable, selectedCustomer?.id, settings.price_tables]);
+
   const filteredProducts = modalSearch
     ? products.filter((p) => `${p.reference} ${p.description}`.toLowerCase().includes(modalSearch.toLowerCase()))
     : products;
@@ -382,7 +393,7 @@ export default function OrderForm() {
   async function save() {
     setError("");
     if (!header.customer_id) return setError("Escolha o cliente.");
-    if (!selectedCustomer?.email?.trim() && (!id || Number(header.customer_id) !== loadedCustomerId))
+    if (selectedCustomer?.price_table !== "retail" && !selectedCustomer?.email?.trim() && (!id || Number(header.customer_id) !== loadedCustomerId))
       return setError("Este cliente não tem e-mail cadastrado. Cadastre o e-mail do cliente antes de lançar o pedido.");
     if (!header.delivery_date) return setError("Informe a data de entrega.");
     if (header.delivery_date < header.date) return setError("A data de entrega não pode ser anterior à data do pedido.");

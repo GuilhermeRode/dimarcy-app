@@ -87,6 +87,8 @@ class Customer(Base):
     lat: Mapped[float | None] = mapped_column(nullable=True)  # geocoded from city/state, best-effort
     lng: Mapped[float | None] = mapped_column(nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
+    price_table: Mapped[str] = mapped_column(String(10), default="wholesale",
+                                             server_default="wholesale")  # see PRICE_TABLES; a new order starts on it
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)  # seller this customer belongs to
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     orders: Mapped[list["Order"]] = relationship(back_populates="customer")

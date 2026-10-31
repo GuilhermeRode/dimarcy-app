@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { money, plural } from "../format";
 import { EmptyState, ErrorBox } from "../components/ui";
-import { ColorStrip, pooledColors, ProductThumb } from "../components/ColorStrip";
+import { ProductThumb, RefColors } from "../components/ColorStrip";
 import PeriodPicker, { defaultPeriod } from "../components/PeriodPicker";
 import usePeriodData from "../components/usePeriodData";
 import { useSort } from "../components/useSort";
@@ -83,12 +83,7 @@ export default function TopProducts() {
                       </span>
                     </td>
                     <td>
-                      <span className="ref-colors">
-                        <ColorStrip colors={pooledColors(p.colors, p.pieces, 5)} total={p.pieces} />
-                        <span className="cell-sub">
-                          {p.colors[0].name}{p.colors.length > 1 && ` + ${plural(p.colors.length - 1, "cor", "cores")}`}
-                        </span>
-                      </span>
+                      <RefColors className="ref-colors" colors={p.colors} total={p.pieces} />
                     </td>
                     <td className="num">{p.orders}</td>
                     <td className="num">

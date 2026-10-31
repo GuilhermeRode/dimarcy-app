@@ -38,6 +38,8 @@ export const utcDateBR = (iso) => new Date(`${iso}Z`).toLocaleDateString("pt-BR"
 export const localDate = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+export const PRICE_TABLES = { wholesale: "Atacado", retail: "Varejo" };
+
 // Integer cents, half up — same as the server's retail_price; the server prices the order again on save.
 export const tablePrice = (price, table, markup) =>
   table === "retail" ? Math.round(Math.round(price * 100) * Math.round((100 + Number(markup)) * 100) / 10000) / 100 : price;

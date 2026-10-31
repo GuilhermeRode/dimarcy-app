@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
-import { STATUS, normalize } from "../format";
+import { PRICE_TABLES, STATUS, normalize } from "../format";
 import { fileUrl } from "../api";
 import { EyeIcon, EyeOffIcon, WarningIcon } from "./icons";
+
+// Atacado / Varejo tabs of a list; `rows` (each with a price_table) give the count on each tab
+export function PriceTableTabs({ value, rows, onChange }) {
+  return (
+    <div className="tabs-underline" role="group" aria-label="Tipo de venda">
+      {Object.entries(PRICE_TABLES).map(([k, label]) => (
+        <button key={k} type="button" className={value === k ? "active" : ""} aria-pressed={value === k} onClick={() => onChange(k)}>
+          {label} {rows.filter((r) => r.price_table === k).length}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // A product photo shown full screen; click anywhere, × or Esc closes it. Renders above modals.
 export function PhotoZoom({ src, caption, onClose }) {

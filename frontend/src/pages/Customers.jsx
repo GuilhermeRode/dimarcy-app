@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, errorMessage, screenCache } from "../api";
 import { useAuth } from "../auth";
 import { CONTACT_STATE, contactState, CUSTOMER_STATUS, compactMoney, initials, localDate, normalize } from "../format";
-import { CityFilter, ErrorBox, PillSelect } from "../components/ui";
+import { CityFilter, ErrorBox, PillSelect, PriceTableTabs } from "../components/ui";
 import CustomerPanel from "../components/CustomerPanel";
 import CustomerFormModal, { EMPTY_CUSTOMER } from "../components/CustomerFormModal";
 
@@ -69,6 +69,7 @@ export default function Customers() {
     const get = (k) => params.get(k) || "";
     const seller = get("seller");
     return {
+      tab: get("tab") === "retail" ? "retail" : "wholesale",
       q: get("q"),
       status: Object.hasOwn(CUSTOMER_STATUS, get("status")) ? get("status") : "",
       contact: Object.hasOwn(CONTACT_STATE, get("contact")) ? get("contact") : "",
@@ -94,7 +95,8 @@ export default function Customers() {
     const text = normalize(f.q.trim());
     const digits = f.q.replace(/\D/g, "");
     return rows.filter((r) =>
-      (!f.status || r.status === f.status)
+      r.price_table === f.tab
+      && (!f.status || r.status === f.status)
       && (!f.contact || r.contact.key === f.contact)
       && (!f.state || r.state === f.state)
       && (!f.city || normalize(r.city || "").includes(normalize(f.city.trim())))
@@ -144,9 +146,11 @@ export default function Customers() {
               Exportar CSV{chips.length ? ` (${visible.length})` : ""}
             </button>
           )}
-          <button className="btn btn-primary" onClick={() => setForm(EMPTY_CUSTOMER)}>+ Cadastrar cliente</button>
+          <button className="btn btn-primary" onClick={() => setForm({ ...EMPTY_CUSTOMER, price_table: f.tab })}>+ Cadastrar cliente</button>
         </div>
       </header>
+
+      <PriceTableTabs value={f.tab} rows={rows} onChange={(t) => setFilter("tab", t === "retail" ? t : "")} />
 
       <section className="filters-bar">
         <div className="filters-row">
@@ -171,7 +175,7 @@ export default function Customers() {
             {chips.map(([key, label]) => (
               <button type="button" key={key} className="filter-chip" onClick={() => setFilter(key, "")}>{label} ×</button>
             ))}
-            <button type="button" className="link-btn" onClick={() => setParams({}, { replace: true })}>Limpar tudo</button>
+            <button type="button" className="link-btn" onClick={() => setParams(f.tab === "retail" ? { tab: f.tab } : {}, { replace: true })}>Limpar tudo</button>
           </div>
         )}
       </section>

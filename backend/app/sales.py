@@ -105,7 +105,7 @@ def customer_overview(db: Session, user: User) -> list[dict]:
         rows.append({
             "id": c.id, "name": c.name, "city": c.city, "state": c.state, "phone": c.phone,
             "document": c.document, "state_registration": c.state_registration, "owner_id": c.owner_id, "owner_name": c.owner_name,
-            "created_at": c.created_at,
+            "created_at": c.created_at, "price_table": c.price_table,
             "total": round(sum(o.total for o in orders), 2), "orders": len(orders),
             "last_order_date": last, "status": customer_status(last),
             "colors": [name for name, _ in colors.most_common()],

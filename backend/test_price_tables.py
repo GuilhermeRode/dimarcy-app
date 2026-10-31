@@ -143,4 +143,29 @@ with TestClient(app) as c:
     assert sale_refs(admin2) == ["R1"] and refs(admin2) == ["R1", "R2"]
     assert order(admin2, only_r).status_code == 400
 
+    # ---- customer type: drives the Atacado/Varejo tabs ----
+    new = {"name": "Loja Varejo", "document": "2", **FULL}
+    assert c.post("/api/customers", headers=B, json=new).json()["price_table"] == "wholesale"  # default
+    assert c.post("/api/customers", headers=B, json={**new, "price_table": "both"}).status_code == 422
+    cid = c.post("/api/customers", headers=B, json={**new, "price_table": "retail"}).json()["id"]
+    assert c.get(f"/api/customers/{cid}", headers=B).json()["price_table"] == "retail"
+    assert next(x for x in c.get("/api/customers/overview", headers=B).json() if x["id"] == cid)["price_table"] == "retail"
+    assert c.put(f"/api/customers/{cid}", headers=B, json=new).json()["price_table"] == "retail"  # older app: kept
+    assert c.put(f"/api/customers/{cid}", headers=admin, json={"name": "Loja Varejo", "phone": FULL["phone"], "owner_id": ids["b"]}).json()["price_table"] == "retail"
+    assert c.put(f"/api/customers/{cid}", headers=B, json={**new, "price_table": "wholesale"}).json()["price_table"] == "wholesale"
+    o = c.get("/api/orders", headers=B).json()
+    assert {x["price_table"] for x in o} == {"wholesale", "retail"}, o
+
+    # a retail customer needs only name and phone, and can buy without an e-mail
+    short = {"name": "Maria", "phone": "54999998888", "price_table": "retail"}
+    assert c.post("/api/customers", headers=B, json={**short, "phone": ""}).status_code == 422
+    assert c.post("/api/customers", headers=B, json={"name": "Maria", "phone": "54999998888"}).status_code == 422  # wholesale needs it all
+    cid = c.post("/api/customers", headers=B, json={**short, "document": "", "address": ""}).json()["id"]
+    assert c.post("/api/customers", headers=admin, json=short).json()["owner_id"] == 1  # no seller field on the retail form
+    assert c.put(f"/api/customers/{cid}", headers=B, json={**short, "address": "Rua B, 2"}).json()["address"] == "Rua B, 2"
+    r = c.post("/api/orders", headers=B, json={
+        "customer_id": cid, "delivery_date": TODAY, "status": "confirmed", "payment_method": "Pix", "payment_terms": "À vista",
+        "price_table": "retail", "items": [{"product_id": common, "color_id": color, "size": "P", "quantity": 1}]})
+    assert r.status_code == 201, r.text
+
 print("price tables + product sellers OK")
