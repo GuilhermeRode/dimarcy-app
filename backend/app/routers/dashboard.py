@@ -1,4 +1,4 @@
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,7 +8,7 @@ from .. import clock
 from ..database import get_db
 from ..leads import due_follow_ups, ranked_leads
 from ..models import SALE_STATUSES, Order, User, size_key
-from ..sales import customer_overview, late_filter, visible_orders
+from ..sales import late_filter, visible_orders
 from ..security import get_current_user
 from ..settings_store import get_app_settings
 from ..uploads import thumb_name
@@ -142,7 +142,6 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
             series[k]["pieces"] += o.pieces
             series[k]["orders"] += 1
 
-    statuses = Counter(r["status"] for r in customer_overview(db, user, today))
     late = visible_orders(db, user).filter(late_filter(today)).all()
 
     follow_ups = due_follow_ups(db, user, today, everyone=is_admin, until=today + timedelta(days=7))
@@ -168,7 +167,6 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
             key=lambda x: size_key(x["size"]),
         ),
         "alerts": {
-            "customers_at_risk": statuses["at_risk"],
             "late_orders": len(late),
             "oldest_late_days": max(((today - o.delivery_date).days for o in late), default=None),
             "follow_ups_due": sum(f["next_action_date"] <= today for f in follow_ups),  # same as Retornos

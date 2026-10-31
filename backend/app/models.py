@@ -32,20 +32,12 @@ DISCARD_REASONS = ["closed", "not_target", "competitor", "not_recommended", "no_
 CONTACT_CHANNELS = ["whatsapp", "call", "visit", "email"]
 NO_ANSWER = "Não respondeu"  # the note of a "Não respondeu" attempt: not a conversation with the store
 
-# Customer status by days since the last purchase, no history = inactive (see customer_status)
-ACTIVE_DAYS = 60
-AT_RISK_DAYS = 150
+ACTIVE_DAYS = 60  # lead scoring: a customer who bought this recently makes the city a proven market
 
 
-def customer_status(last_sale: date | None, today: date) -> str:
-    days = (today - last_sale).days if last_sale else None
-    if days is None:
-        return "inactive"
-    if days <= ACTIVE_DAYS:
-        return "active"
-    if days <= AT_RISK_DAYS:
-        return "at_risk"
-    return "inactive"
+def customer_status(last_purchase: date | None) -> str:
+    """Active: any purchase, in the app or in the history. Inactive: none."""
+    return "active" if last_purchase else "inactive"
 
 product_color = Table(
     "product_color",
