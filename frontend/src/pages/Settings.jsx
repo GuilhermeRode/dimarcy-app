@@ -41,16 +41,15 @@ export default function Settings() {
   }
   const removeCatalog = () => catalogRequest(() => api.delete("/settings/catalog"));
 
-  function toggleAreaCode(code) {
-    const current = (form.lead_area_codes || "").split(",").filter(Boolean);
-    const next = current.includes(code) ? current.filter((c) => c !== code) : [...current, code];
-    setForm({ ...form, lead_area_codes: next.join(",") });
-  }
-
-  function toggleSize(code) {
-    const current = (form.lead_sizes || "").split(",").filter(Boolean);
-    const next = current.includes(code) ? current.filter((c) => c !== code) : [...current, code];
-    setForm({ ...form, lead_sizes: next.join(",") });
+  // A toggle over one of the comma-separated settings (DDDs, company sizes)
+  function chip(code, label, key) {
+    const current = (form[key] || "").split(",").filter(Boolean);
+    const on = current.includes(code);
+    const next = on ? current.filter((c) => c !== code) : [...current, code];
+    return (
+      <button type="button" key={code} className={`period-chip ${on ? "on" : ""}`} aria-pressed={on}
+        onClick={() => setForm({ ...form, [key]: next.join(",") })}>{label}</button>
+    );
   }
 
   async function save(e) {
@@ -156,85 +155,77 @@ export default function Settings() {
 
           <section className="panel">
             <h3>Prospecção</h3>
-            <div className="form-grid">
-              <label className="switch-row span-2">
-                <span>
-                  Liberar a Prospecção para os vendedores
-                  <small className="muted">Desligado, só administradores veem a tela: o menu some para os vendedores e os leads ficam bloqueados para eles.</small>
-                </span>
-                <input type="checkbox" role="switch" className="switch" checked={!!form.leads_for_sellers}
-                  onChange={(e) => setForm({ ...form, leads_for_sellers: e.target.checked })} />
-              </label>
-              <Field label="Estados da prospecção" span={2}>
-                <input placeholder="PR, RS, SC" value={form.lead_states || ""}
-                  onChange={(e) => setForm({ ...form, lead_states: e.target.value })} />
-                <small className="muted">Siglas separadas por vírgula. A importação traz as lojas desses estados.</small>
-              </Field>
-              <div className="span-2">
-                <span>DDDs da prospecção</span>
-                {stateList(form.lead_states).map((uf) => (
-                  <div key={uf} style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 6 }}>
-                    <strong style={{ minWidth: 28 }}>{uf}</strong>
-                    {AREA_CODES[uf].map((code) => (
-                      <label className="check" key={code}>
-                        <input type="checkbox" checked={(form.lead_area_codes || "").split(",").includes(code)}
-                          onChange={() => toggleAreaCode(code)} />
-                        {code}
-                      </label>
-                    ))}
-                  </div>
-                ))}
-                <small className="muted">
-                  Nenhum marcado = todos os DDDs dos estados acima. Marcando algum, a importação traz só as lojas
-                  com telefone desses DDDs.
-                </small>
+            <label className="switch-row">
+              <span>
+                Liberar a Prospecção para os vendedores
+                <small className="muted">Desligado, só administradores veem a tela.</small>
+              </span>
+              <input type="checkbox" role="switch" className="switch" checked={!!form.leads_for_sellers}
+                onChange={(e) => setForm({ ...form, leads_for_sellers: e.target.checked })} />
+            </label>
+
+            <div className="settings-group">
+              <div className="settings-group-head">
+                <h4>Onde buscar</h4>
+                <small className="muted">Mudar um filtro faz a próxima importação buscar as lojas de novo.</small>
               </div>
-              <Field label="CNAEs da prospecção" span={2}>
-                <input placeholder="4781-4/00" value={form.lead_cnaes || ""}
-                  onChange={(e) => setForm({ ...form, lead_cnaes: e.target.value })} />
-                <small className="muted">Atividade principal das lojas trazidas da Receita Federal (separe por vírgula). Padrão: 4781-4/00, comércio varejista de artigos do vestuário e acessórios.</small>
-              </Field>
-              <div className="span-2">
-                <span>Porte da empresa</span>
-                <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 6 }}>
-                  {LEAD_SIZES.map(([code, label]) => (
-                    <label className="check" key={code}>
-                      <input type="checkbox" checked={(form.lead_sizes || "").split(",").includes(code)}
-                        onChange={() => toggleSize(code)} />
-                      {label}
-                    </label>
+              <div className="form-grid">
+                <Field label="Estados">
+                  <input placeholder="PR, RS, SC" value={form.lead_states || ""}
+                    onChange={(e) => setForm({ ...form, lead_states: e.target.value })} />
+                  <small className="muted">Siglas separadas por vírgula.</small>
+                </Field>
+                <Field label="CNAEs">
+                  <input placeholder="4781-4/00" value={form.lead_cnaes || ""}
+                    onChange={(e) => setForm({ ...form, lead_cnaes: e.target.value })} />
+                  <small className="muted">Separe por vírgula. Padrão: 4781-4/00 (vestuário e acessórios).</small>
+                </Field>
+                <div className="field span-2">
+                  <span>DDDs</span>
+                  {stateList(form.lead_states).map((uf) => (
+                    <div key={uf} className="ddd-row">
+                      <strong>{uf}</strong>
+                      <div className="chip-row">
+                        {AREA_CODES[uf].map((code) => chip(code, code, "lead_area_codes"))}
+                      </div>
+                    </div>
                   ))}
+                  <small className="muted">Nenhum marcado = todos os DDDs dos estados acima.</small>
                 </div>
               </div>
-              <label className="switch-row span-2">
-                <span>Excluir MEI</span>
-                <input type="checkbox" role="switch" className="switch" checked={form.lead_exclude_mei}
-                  onChange={(e) => setForm({ ...form, lead_exclude_mei: e.target.checked })} />
-              </label>
-              <label className="switch-row span-2">
-                <span>Só a matriz (sem filiais)</span>
-                <input type="checkbox" role="switch" className="switch" checked={form.lead_head_office_only}
-                  onChange={(e) => setForm({ ...form, lead_head_office_only: e.target.checked })} />
-              </label>
-              <label className="switch-row span-2">
-                <span>Só lojas com telefone na Receita (o número não é importado)</span>
-                <input type="checkbox" role="switch" className="switch" checked={form.lead_require_contact}
-                  onChange={(e) => setForm({ ...form, lead_require_contact: e.target.checked })} />
-              </label>
-              <Field label="Abertas há pelo menos (meses)" span={2}>
-                <input type="number" min="0" max="120" step="1" value={form.lead_min_age_months ?? ""}
-                  onChange={(e) => setForm({ ...form, lead_min_age_months: e.target.value })} />
-                <small className="muted">Mudar um filtro faz a próxima importação buscar as lojas de novo.</small>
-              </Field>
-              <Field label="Sugestão de lojas por vendedor, por semana" span={2}>
-                <input type="number" min="0" max="500" step="1" value={form.lead_weekly_release ?? ""}
-                  onChange={(e) => setForm({ ...form, lead_weekly_release: e.target.value })} />
-                <small className="muted">
-                  Em Prospecção → Aguardando, escolha um vendedor: o sistema mostra quantas lojas ele já recebeu na
-                  semana e sugere as melhores da região dele até completar esse número (celular, sem dívida ativa, maior
-                  capital social, aberta há até 5 anos, cidade onde já vendemos). Nada é liberado sem o administrador.
-                </small>
-              </Field>
+            </div>
+
+            <div className="settings-group">
+              <div className="settings-group-head"><h4>Quais lojas entram</h4></div>
+              <div className="form-grid">
+                <div className="field">
+                  <span>Porte da empresa</span>
+                  <div className="chip-row">{LEAD_SIZES.map(([code, label]) => chip(code, label, "lead_sizes"))}</div>
+                </div>
+                <Field label="Abertas há pelo menos (meses)">
+                  <input type="number" min="0" max="120" step="1" value={form.lead_min_age_months ?? ""}
+                    onChange={(e) => setForm({ ...form, lead_min_age_months: e.target.value })} />
+                </Field>
+                <div className="span-2 settings-checks">
+                  <label className="check"><input type="checkbox" checked={form.lead_exclude_mei}
+                    onChange={(e) => setForm({ ...form, lead_exclude_mei: e.target.checked })} /> Excluir MEI</label>
+                  <label className="check"><input type="checkbox" checked={form.lead_head_office_only}
+                    onChange={(e) => setForm({ ...form, lead_head_office_only: e.target.checked })} /> Só a matriz (sem filiais)</label>
+                  <label className="check"><input type="checkbox" checked={form.lead_require_contact}
+                    onChange={(e) => setForm({ ...form, lead_require_contact: e.target.checked })} /> Só com telefone na Receita</label>
+                </div>
+              </div>
+            </div>
+
+            <div className="settings-group">
+              <div className="settings-group-head"><h4>Distribuição</h4></div>
+              <div className="form-grid">
+                <Field label="Lojas sugeridas por vendedor, por semana">
+                  <input type="number" min="0" max="500" step="1" value={form.lead_weekly_release ?? ""}
+                    onChange={(e) => setForm({ ...form, lead_weekly_release: e.target.value })} />
+                  <small className="muted">Só uma sugestão: nada é liberado sem o administrador.</small>
+                </Field>
+              </div>
             </div>
           </section>
 

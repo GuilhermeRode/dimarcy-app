@@ -1464,3 +1464,9 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
   .qty-input { width: 28px; }
   .color-label { max-width: 52px; }
 }
+.settings-group { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.settings-group-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.settings-group-head h4 { margin: 0; font-size: 14px; }
+.settings-checks { display: flex; gap: 8px 24px; flex-wrap: wrap; }
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.ddd-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; align-items: center; }
