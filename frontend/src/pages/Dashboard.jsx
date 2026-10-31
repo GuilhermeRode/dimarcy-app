@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { compactMoney, CUSTOMER_STATUS, hideable, initials, localDate, money, plural, STATUS } from "../format";
 import { ErrorBox, Swatch } from "../components/ui";
-import { ColorStrip, ProductThumb } from "../components/ColorStrip";
+import { ColorStrip, pooledColors, ProductThumb } from "../components/ColorStrip";
 import AlertStrip from "../components/AlertStrip";
 import Delta from "../components/Delta";
 import PeriodPicker, { defaultPeriod } from "../components/PeriodPicker";
@@ -214,18 +214,20 @@ function Ranking({ rows }) {
   );
 }
 
-// The mix of the period as one strip in the real fabric colors (all of them), then the top ones ranked.
+// The mix of the period as one strip in the real fabric colors, then the ranking. With dozens of
+// colors the strip turns into slivers, so the top ones are ranked and the rest pooled.
 const TOP_COLORS = 8;
 function ColorRanking({ colors, totalPieces }) {
   if (!colors.length || !totalPieces) return <Empty />;
+  const rows = pooledColors(colors, totalPieces, TOP_COLORS); // the API sends every color, already ranked by pieces
   const pct = (c) => Math.round((c.pieces / totalPieces) * 100);
   return (
     <div className="color-mix">
-      <ColorStrip colors={colors} total={totalPieces} />
+      <ColorStrip colors={rows} total={totalPieces} />
       <ol className="color-ranking">
-        {colors.slice(0, TOP_COLORS).map((c) => (
-          <li key={c.name}>
-            <Swatch hex={c.hex} hex2={c.hex2} size={16} />
+        {rows.map((c) => (
+          <li key={c.name} className={c.hex ? "" : "others"}>
+            {c.hex ? <Swatch hex={c.hex} hex2={c.hex2} size={16} /> : <span className="swatch swatch-others" />}
             <span className="color-name">{c.name}</span>
             <span className="color-qty">{plural(c.pieces, "peça", "peças")}</span>
             <strong>{pct(c)}%</strong>
@@ -322,7 +324,7 @@ export default function Dashboard() {
                   <button type="button" className="link-btn" onClick={() => nav("/top-products", { state: { period } })}>Ver todas →</button>
                 )}
               </div>
-              <Ranking rows={d.top_products.slice(0, 5).map((p) => ({
+              <Ranking rows={d.top_products.slice(0, 3).map((p) => ({
                 key: p.reference, lead: <ProductThumb url={p.thumb_url} />, measure: p.pieces,
                 title: <span className="ref">{p.reference}</span>, value: `${p.pieces.toLocaleString("pt-BR")} pç`,
                 sub: p.description, detail: hideable(hide, compactMoney)(p.value),

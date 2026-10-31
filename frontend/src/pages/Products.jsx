@@ -164,7 +164,7 @@ export default function Products() {
       {isAdmin && list.length > 0 && <p className="muted drop-hint">Dica: arraste uma foto do computador para cima de um produto para adicioná-la.</p>}
       <ErrorBox msg={listError} />
       {!list.length ? <EmptyState text="Nenhum produto cadastrado." /> : (
-        <table className="table">
+        <table className="table table-products">
           <thead>
             <tr>
               <th></th>

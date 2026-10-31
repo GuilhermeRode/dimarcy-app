@@ -43,7 +43,7 @@ export default function Users() {
         <h1>Usuários</h1>
         <button className="btn btn-primary" onClick={() => openForm({ name: "", email: "", password: "", role: "seller", active: true, annual_goal: "", price_table: "wholesale" })}>Cadastrar usuário</button>
       </header>
-      <table className="table">
+      <table className="table table-users">
         <thead>
           <tr>
             {sortHeader("name", "Nome")}

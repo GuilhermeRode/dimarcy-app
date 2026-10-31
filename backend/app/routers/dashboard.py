@@ -155,13 +155,13 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         "goal_value": round(sum(year_sales.values()), 2),
         "monthly_sales": [{"month": f"{m:02d}/{str(y)[2:]}", **series[(y, m)]} for y, m in months],
         "by_status": [{"status": s, **v} for s, v in by_status.items()],
-        # every product sold, ranked by pieces: the Painel shows the top 5, "Referências mais vendidas" all of them
+        # every product sold, ranked by pieces: the Painel shows the top 3, "Referências mais vendidas" all of them
         "top_products": [{**p, "colors": _top(p["colors"], len(p["colors"]), by="pieces")}
                          for p in _top(products, len(products), by="pieces")],
         "top_customers": _top(customers),
         "by_seller": _top(sellers, 50),
         "by_city": _top(cities, len(cities)),  # all of them: Faturamento sums the tail into "Outras"
-        "by_color": _top(colors, len(colors), by="pieces"),  # all colors: the Painel's strip shows them all, its list the top ones
+        "by_color": _top(colors, len(colors), by="pieces"),  # all colors: the Painel pools the tail into "Outras cores"
         "by_size": sorted(
             [{"size": t, "pieces": q} for t, q in sizes.items()],
             key=lambda x: size_key(x["size"]),
