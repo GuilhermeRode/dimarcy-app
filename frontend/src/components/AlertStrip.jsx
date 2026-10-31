@@ -9,11 +9,6 @@ export default function AlertStrip({ alerts }) {
       title: plural(alerts.follow_ups_due, "retorno para hoje", "retornos para hoje"),
       text: "Contatos que você combinou de retomar até hoje.",
     },
-    alerts.customers_at_risk > 0 && {
-      tone: "warn", to: "/customers?status=at_risk", cta: "Ver lista",
-      title: `${plural(alerts.customers_at_risk, "cliente", "clientes")} em risco`,
-      text: "Compravam e estão entre 61 e 150 dias sem comprar.",
-    },
     alerts.late_orders > 0 && {
       tone: "danger", to: "/orders?late=1", cta: "Ver pedidos",
       title: plural(alerts.late_orders, "pedido atrasado", "pedidos atrasados"),

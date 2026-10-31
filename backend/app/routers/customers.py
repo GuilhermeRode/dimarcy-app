@@ -59,7 +59,7 @@ def list_all(search: str = "", db: Session = Depends(get_db), user: User = Depen
 @router.get("/overview")
 def overview(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Every visible customer with sales aggregates and status, for the Clientes screen."""
-    return customer_overview(db, user, clock.today_br())
+    return customer_overview(db, user)
 
 
 @router.get("/by-city", dependencies=[Depends(require_admin)])

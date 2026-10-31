@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, aliased, contains_eager, joinedload
 
 from . import clock
 from .br_format import format_phone
-from .models import NO_ANSWER, SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User, customer_status
+from .models import ACTIVE_DAYS, NO_ANSWER, SALE_STATUSES, Contact, Customer, Lead, Order, SellerCity, User
 from .sales import _city_key
 from .settings_store import get_app_settings
 
@@ -75,12 +75,12 @@ def visible_lead(db: Session, user: User, lead_id: int) -> Lead:
 
 
 def active_customers_by_city(db: Session, today: date) -> Counter:
-    """Company-wide count of 'active' customers per (city_key, state) — not scoped to a seller."""
+    """Company-wide count of customers who bought in the last ACTIVE_DAYS per (city_key, state) — not scoped to a seller."""
     last = dict(db.query(Order.customer_id, func.max(Order.date))
                 .filter(Order.status.in_(SALE_STATUSES)).group_by(Order.customer_id).all())
     counts: Counter = Counter()
     for cid, city, state in db.query(Customer.id, Customer.city, Customer.state).filter(Customer.city.isnot(None)):
-        if customer_status(last.get(cid), today) == "active":
+        if cid in last and (today - last[cid]).days <= ACTIVE_DAYS:
             counts[(_city_key(city), (state or "").strip().upper())] += 1
     return counts
 

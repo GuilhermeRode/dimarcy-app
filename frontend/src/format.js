@@ -146,7 +146,6 @@ export const LEAD_SIZES = { mei: "MEI", me: "ME", epp: "EPP", large: "Grande" };
 // Keys match the backend's customer_status(); tone picks the CSS color (.cstatus-<tone>).
 export const CUSTOMER_STATUS = {
   active: { label: "Ativo", tone: "active" },
-  at_risk: { label: "Em risco", tone: "risk" },
   inactive: { label: "Inativo", tone: "inactive" },
 };
 

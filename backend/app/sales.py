@@ -78,7 +78,7 @@ def customers_by_city(db: Session, today: date, days: int, owner_id: int | None 
     return list(cities.values())
 
 
-def customer_overview(db: Session, user: User, today: date) -> list[dict]:
+def customer_overview(db: Session, user: User) -> list[dict]:
     # ponytail: loads every visible sale order (items come in one selectin query); fine for a few
     # thousand orders — switch to GROUP BY aggregates if this endpoint gets slow.
     sales = (visible_orders(db, user).filter(Order.status.in_(SALE_STATUSES))
@@ -107,7 +107,7 @@ def customer_overview(db: Session, user: User, today: date) -> list[dict]:
             "document": c.document, "state_registration": c.state_registration, "owner_id": c.owner_id, "owner_name": c.owner_name,
             "created_at": c.created_at,
             "total": round(sum(o.total for o in orders), 2), "orders": len(orders),
-            "last_order_date": last, "status": customer_status(last, today),
+            "last_order_date": last, "status": customer_status(last),
             "colors": [name for name, _ in colors.most_common()],
             "recent_orders": [{"id": o.id, "date": o.date, "pieces": o.pieces, "total": o.total}
                               for o in orders[:3]],
