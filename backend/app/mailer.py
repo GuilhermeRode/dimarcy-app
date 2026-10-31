@@ -206,6 +206,8 @@ def _with_seller(recipients: list[str], order) -> list[str]:
 
 def _notify(order, kind: str, to: list[str], subject: str, heading: str, intro: str, badge: str, color: str,
             title: str, button: bool = True) -> None:
+    if order.price_table == "retail":  # a retail sale sends no e-mail at all
+        return
     try:
         if _send(subject, _order_body(order, heading, button), _order_html(order, badge, color, title, intro, button),
                  to, _pdf_attachment(order)):

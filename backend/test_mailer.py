@@ -46,5 +46,13 @@ for flag, expected in ((True, [["cli@x.com"]]), (False, [])):
     mailer._notify_customer(NS(**{**vars(order), "customer": NS(name="Loja", email="cli@x.com"), "notify_customer": flag}),
                             "Test", "Assunto", "Mensagem.", "Badge", mailer.NAVY, "Título")
     assert sent == expected, (flag, sent)
+# a retail order sends nothing, to anyone
+sent.clear()
+retail = NS(**{**vars(order), "price_table": "retail", "notify_customer": True, "customer": NS(name="Maria", email="cli@x.com"),
+               "seller": NS(name="V", email="v@x.com")})
+mailer.send_order_created_emails(retail)
+mailer.send_order_updated_emails(retail)
+mailer.send_order_delivered_email(retail)
+assert sent == [], sent
 mailer._send = real_send
 print("mailer OK")

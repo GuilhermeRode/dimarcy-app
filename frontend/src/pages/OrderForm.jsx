@@ -533,6 +533,7 @@ export default function OrderForm() {
             <textarea rows={3} value={header.notes} onChange={(e) => setHeader({ ...header, notes: e.target.value })}
               placeholder="Detalhes de envio, combinações extras..." />
           </Field>
+          {header.price_table !== "retail" && (
           <label className="switch-row">
             <span>
               Enviar e-mail ao cliente
@@ -546,6 +547,7 @@ export default function OrderForm() {
               disabled={Boolean(selectedCustomer && !selectedCustomer.email)}
               onChange={(e) => setHeader({ ...header, notify_customer: e.target.checked })} />
           </label>
+          )}
         </div>
         <div className="totals">
           <div><span>Peças</span><strong>{pieces}</strong></div>
