@@ -100,17 +100,19 @@ def customer_overview(db: Session, user: User, today: date) -> list[dict]:
         for o in orders:
             for i in o.items:
                 colors[i.color.name] += i.quantity
-        last = orders[0].date if orders else None
+        pasts = past.get(c.id, [])  # newest first
+        last = max([o.date for o in orders[:1]] + [p.date for p in pasts[:1]], default=None)
         rows.append({
             "id": c.id, "name": c.name, "city": c.city, "state": c.state, "phone": c.phone,
             "document": c.document, "state_registration": c.state_registration, "owner_id": c.owner_id, "owner_name": c.owner_name,
             "created_at": c.created_at,
             "total": round(sum(o.total for o in orders), 2), "orders": len(orders),
-            "last_order_date": last, "status": customer_status(last, today),
+            # past purchases show as the last order, but the status counts app orders only (same as the map)
+            "last_order_date": last, "status": customer_status(orders[0].date if orders else None, today),
             "colors": [name for name, _ in colors.most_common()],
             "recent_orders": [{"id": o.id, "date": o.date, "pieces": o.pieces, "total": o.total}
                               for o in orders[:3]],
-            "past_orders": [{"date": p.date, "amount": float(p.amount)} for p in past.get(c.id, [])],
+            "past_orders": [{"date": p.date, "amount": float(p.amount)} for p in pasts],
             "last_contact_at": contacts[c.id].created_at if c.id in contacts else None,
             "next_action_date": contacts[c.id].next_action_date if c.id in contacts else None,
             "no_answer": c.id in contacts and contacts[c.id].notes == NO_ANSWER,

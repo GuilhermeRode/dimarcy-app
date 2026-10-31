@@ -14,6 +14,7 @@ os.environ.update(DATABASE_URL=f"sqlite:///{db}", ADMIN_EMAIL="admin@test.com",
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app import clock  # noqa: E402
 from app.main import app  # noqa: E402
 
 con = sqlite3.connect(db)
@@ -76,6 +77,14 @@ with TestClient(app) as c:
     assert telma["past_orders"] == [{"date": "2026-06-01", "amount": 100.0}, {"date": "2026-05-12", "amount": 2378.8}]
     assert telma["total"] == 0 and telma["orders"] == 0  # kept out of the app's own numbers
     assert rows[("Telma", "Irati")]["past_orders"] == []
+    assert telma["last_order_date"] == "2026-06-01"  # no app order: the last past purchase counts
+    assert rows[("Telma", "Irati")]["last_order_date"] is None
+    # a recent past purchase shows as the last order, but only app orders make a customer active (same as the map)
+    recent = clock.today_br().isoformat()
+    con.execute("INSERT INTO past_orders (customer_id, date, amount) VALUES (?, ?, 10)", (telma["id"], recent))
+    con.commit()
+    telma = {x["id"]: x for x in c.get("/api/customers/overview", headers=h).json()}[telma["id"]]
+    assert telma["last_order_date"] == recent and telma["status"] != "active"
     dudi = rows[("Loja Dudi", "Rodeio")]
     assert c.delete(f"/api/customers/{dudi['id']}", headers=h).status_code == 400  # history blocks delete
 
