@@ -93,6 +93,7 @@ class CustomerIn(ORM):
     address: str = Field(min_length=1)
     state_registration: str = Field(min_length=1)  # IE number, or "ISENTO"
     notes: str | None = None
+    price_table: Literal["wholesale", "retail"] = "wholesale"
     owner_id: int | None = None  # seller this customer belongs to; only admins can set/change it
 
     # stored already formatted, whatever the client sent (imports, old app versions)
@@ -139,6 +140,7 @@ class CustomerDraft(ORM):
     address: str | None = None
     state_registration: str | None = None
     notes: str | None = None
+    price_table: Literal["wholesale", "retail"] = "wholesale"
     owner_id: int | None = None
 
     @field_validator("document", "phone", "email", "city", "state", "address", "state_registration", mode="before")
@@ -160,6 +162,12 @@ class CustomerDraft(ORM):
     @classmethod
     def _state_registration(cls, v, info):
         return format_state_registration(v, info.data.get("state"))
+
+
+class RetailCustomerIn(CustomerDraft):
+    """A retail customer: name and phone; everything else is optional, for anyone saving it."""
+    phone: str = Field(min_length=1)
+    price_table: Literal["retail"] = "retail"
 
 
 class CustomerOut(CustomerIn):

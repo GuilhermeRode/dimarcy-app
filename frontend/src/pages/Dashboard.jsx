@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { compactMoney, CUSTOMER_STATUS, hideable, initials, localDate, money, plural, STATUS } from "../format";
-import { ErrorBox, Swatch } from "../components/ui";
-import { ColorStrip, pooledColors, ProductThumb } from "../components/ColorStrip";
+import { ErrorBox } from "../components/ui";
+import { ColorList, ColorStrip, pooledColors, ProductThumb, RefColors } from "../components/ColorStrip";
 import AlertStrip from "../components/AlertStrip";
 import Delta from "../components/Delta";
 import PeriodPicker, { defaultPeriod } from "../components/PeriodPicker";
@@ -193,7 +193,7 @@ function ContactsCard({ leads, firstContact, nav }) {
 }
 
 // One ranked row per item: position, an optional picture, a title with its measure, a sub-line with
-// a detail, and a bar for the measure. `measure` drives the bar, the rest is text.
+// a detail, and a bar for the measure in the colors sold. `measure` drives the bar, the rest is text.
 function Ranking({ rows }) {
   if (!rows.length) return <Empty />;
   const max = Math.max(...rows.map((r) => r.measure), 1);
@@ -206,7 +206,7 @@ function Ranking({ rows }) {
           <span className="grow">
             <span className="rank-line"><span className="rank-title">{r.title}</span><strong>{r.value}</strong></span>
             <span className="rank-line"><small className="rank-sub">{r.sub}</small><small>{r.detail}</small></span>
-            <span className="rank-bar"><span style={{ width: `${(r.measure / max) * 100}%` }} /></span>
+            <RefColors colors={r.colors} total={r.measure} style={{ width: `${(r.measure / max) * 100}%` }} />
           </span>
         </li>
       ))}
@@ -220,20 +220,10 @@ const TOP_COLORS = 8;
 function ColorRanking({ colors, totalPieces }) {
   if (!colors.length || !totalPieces) return <Empty />;
   const rows = pooledColors(colors, totalPieces, TOP_COLORS); // the API sends every color, already ranked by pieces
-  const pct = (c) => Math.round((c.pieces / totalPieces) * 100);
   return (
     <div className="color-mix">
       <ColorStrip colors={rows} total={totalPieces} />
-      <ol className="color-ranking">
-        {rows.map((c) => (
-          <li key={c.name} className={c.hex ? "" : "others"}>
-            {c.hex ? <Swatch hex={c.hex} hex2={c.hex2} size={16} /> : <span className="swatch swatch-others" />}
-            <span className="color-name">{c.name}</span>
-            <span className="color-qty">{plural(c.pieces, "peça", "peças")}</span>
-            <strong>{pct(c)}%</strong>
-          </li>
-        ))}
-      </ol>
+      <ColorList colors={rows} total={totalPieces} />
     </div>
   );
 }
@@ -325,7 +315,7 @@ export default function Dashboard() {
                 )}
               </div>
               <Ranking rows={d.top_products.slice(0, 3).map((p) => ({
-                key: p.reference, lead: <ProductThumb url={p.thumb_url} />, measure: p.pieces,
+                key: p.reference, lead: <ProductThumb url={p.thumb_url} />, measure: p.pieces, colors: p.colors,
                 title: <span className="ref">{p.reference}</span>, value: `${p.pieces.toLocaleString("pt-BR")} pç`,
                 sub: p.description, detail: hideable(hide, compactMoney)(p.value),
               }))} />

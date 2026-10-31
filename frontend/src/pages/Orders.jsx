@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, errorMessage, screenCache } from "../api";
 import { useAuth } from "../auth";
 import { dateBR, money, orderNumber, STATUS } from "../format";
-import { ErrorBox, Status, EmptyState } from "../components/ui";
+import { ErrorBox, PriceTableTabs, Status, EmptyState } from "../components/ui";
 import { useSort } from "../components/useSort";
 
 const OPEN_STATUSES = ["quote", "confirmed", "in_production", "shipped"];
@@ -24,7 +24,10 @@ export default function Orders() {
   const [params, setParams] = useSearchParams();
   const late = params.get("late") === "1";
   const cacheKey = late ? "orders-late" : "orders";
-  const [orders, setOrders] = useState(() => screenCache.get(cacheKey) || []);
+  const tab = params.get("tab") === "retail" ? "retail" : "wholesale";
+  const [allOrders, setOrders] = useState(() => screenCache.get(cacheKey) || []);
+  // Everything on the screen (KPIs, status counts, list) is the open tab's, by the table the order was priced on
+  const orders = useMemo(() => allOrders.filter((o) => o.price_table === tab), [allOrders, tab]);
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -51,7 +54,14 @@ export default function Orders() {
       .filter((o) => !t || o.customer_name.toLowerCase().includes(t) || orderNumber(o.id).includes(t));
   }, [orders, search, status]);
 
-  useEffect(() => { setPage(1); }, [search, status]);
+  useEffect(() => { setPage(1); }, [search, status, tab]);
+
+  // the other URL param stays: tab and "late" are independent
+  function setParam(key, value) {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value); else next.delete(key);
+    setParams(next, { replace: true });
+  }
 
   // Sorting applies to the whole filtered list, before it's split into pages
   const { sorted, sortHeader } = useSort(filtered, {
@@ -83,10 +93,11 @@ export default function Orders() {
         <h1>Pedidos</h1>
         <button className="btn btn-primary" onClick={() => nav("/orders/new")}>Novo pedido</button>
       </header>
+      <PriceTableTabs value={tab} rows={allOrders} onChange={(t) => setParam("tab", t === "retail" ? t : "")} />
       {late && (
         <div className="filters-chips">
           <span className="muted">Mostrando só pedidos atrasados</span>
-          <button type="button" className="filter-chip" onClick={() => setParams({}, { replace: true })}>Atrasados ×</button>
+          <button type="button" className="filter-chip" onClick={() => setParam("late", "")}>Atrasados ×</button>
         </div>
       )}
 

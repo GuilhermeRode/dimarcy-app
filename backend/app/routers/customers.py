@@ -11,7 +11,7 @@ from ..database import get_db
 from ..geocoding import geocode_and_cache_background, lookup_cached_city
 from ..leads import city_owners, lead_owner
 from ..models import Contact, Customer, Lead, Order, PastOrder, User
-from ..schemas import AdminCustomerIn, CustomerDraft, CustomerIn, CustomerOut
+from ..schemas import AdminCustomerIn, CustomerDraft, CustomerIn, CustomerOut, RetailCustomerIn
 from ..sales import customer_overview, customers_by_city
 from ..security import get_current_user, require_admin
 
@@ -114,7 +114,10 @@ def validate_customer(model, body: dict):
 
 
 def new_customer_in(body: dict, user: User) -> CustomerIn:
-    """Admins may register without e-mail and IE (AdminCustomerIn); sellers fill in everything."""
+    """Admins may register without e-mail and IE (AdminCustomerIn); sellers fill in everything.
+    A retail customer only needs a name and a phone, whoever registers it."""
+    if body.get("price_table") == "retail":
+        return validate_customer(RetailCustomerIn, body)
     return validate_customer(AdminCustomerIn if user.role == "admin" else CustomerIn, body)
 
 
@@ -123,7 +126,9 @@ def create(background_tasks: BackgroundTasks, body: dict = Body(...),
            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     data = new_customer_in(body, user)
     # Sellers can only ever own the customers they register; only admins may assign a seller.
-    c = add_customer(db, data, data.owner_id if user.role == "admin" else user.id)
+    # the retail form has no seller field: an admin registering one keeps it
+    owner_id = (data.owner_id or (user.id if data.price_table == "retail" else None)) if user.role == "admin" else user.id
+    c = add_customer(db, data, owner_id)
     db.commit()
     db.refresh(c)
     geocode_later(c, background_tasks)
@@ -135,9 +140,12 @@ def update(cid: int, background_tasks: BackgroundTasks, body: dict = Body(...),
            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     c = _visible(cid, db, user)
     # Admins may save with blanks (CustomerDraft); sellers keep every field required (CustomerIn).
-    data = validate_customer(CustomerDraft if user.role == "admin" else CustomerIn, body)
+    retail = body.get("price_table", c.price_table) == "retail"
+    data = validate_customer(RetailCustomerIn if retail else CustomerDraft if user.role == "admin" else CustomerIn, body)
     city_changed = data.city != c.city or data.state != c.state
     payload = data.model_dump(exclude={"owner_id"})
+    if "price_table" not in body:  # an older app version doesn't send it: keep the customer's type
+        del payload["price_table"]
     # the DNS lookup only when the address changed: an untouched (old) one never blocks saving other fields
     if data.email:
         payload["email"] = _check_email(data.email, check_dns=data.email != c.email)

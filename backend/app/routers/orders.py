@@ -28,7 +28,7 @@ def summary(o: Order) -> dict:
         "customer_id": o.customer_id, "customer_name": o.customer.name,
         "customer_city": o.customer.city, "customer_state": o.customer.state,
         "seller_name": o.seller.name, "seller_avatar_url": o.seller.avatar_url, "pieces": o.pieces,
-        "gross": o.gross, "discount": float(o.discount or 0), "total": o.total,
+        "gross": o.gross, "discount": float(o.discount or 0), "total": o.total, "price_table": o.price_table,
     }
 
 
@@ -36,7 +36,6 @@ def full(o: Order) -> dict:
     d = summary(o)
     d["payment_method"] = o.payment_method
     d["payment_terms"] = o.payment_terms
-    d["price_table"] = o.price_table
     d["notes"] = o.notes
     d["notify_customer"] = o.notify_customer
     d["items"] = [{
@@ -86,6 +85,7 @@ def _check_customer(db: Session, customer_id: int, user: User, complete: bool = 
     customer = db.get(Customer, customer_id)
     if not customer or (user.role != "admin" and customer.owner_id != user.id):
         raise HTTPException(400, "Customer not found.")
+    complete = complete and customer.price_table != "retail"  # a retail customer buys with just a name and a phone
     if complete and not (customer.email or "").strip():
         raise HTTPException(400, "Este cliente não tem e-mail cadastrado. Cadastre o e-mail do cliente antes de lançar o pedido.")
     if complete and not (customer.document or "").strip():
