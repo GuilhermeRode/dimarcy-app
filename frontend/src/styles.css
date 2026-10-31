@@ -970,10 +970,11 @@ div.customer-panel-order { cursor: default; } /* past orders: no detail screen t
 .dash-row > .dash-wide { flex: 1.7 1 460px; }
 .dash-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 .dash-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 16px; }
-/* Cards in a row share the tallest one's height; lists of 4+ spread out instead of leaving a gap
-   (with 2-3 items spreading pushes them to the card's edges, so those stay together at the top). */
+/* Cards in a row share the tallest one's height; ranking rows split the spare height evenly
+   (each stays centered in its row, so a short list fills the card without hugging its edges). */
 .dash-grid-3 > .panel, .dash-grid-2 > .panel { display: flex; flex-direction: column; }
-.dash-grid-3 > .panel > .ranking:has(> :nth-child(4)),
+.dash-grid-3 > .panel > .ranking { flex: 1; }
+.dash-grid-3 > .panel > .ranking > li { flex: 1 0 auto; }
 .dash-grid-2 > .panel > .top-customers { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 14px; }
 .team { background: #0c2140; color: #fff; border-radius: 16px; padding: 24px 26px; display: flex; flex-direction: column; gap: 20px; }
 .team-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
