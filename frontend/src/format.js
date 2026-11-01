@@ -165,11 +165,13 @@ export const CONTACT_STATE = {
 const daysFrom = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000); // ISO dates, b - a
 
 // Where the conversation with a customer stands: no order and never talked to, bought after the last
-// contact, a call-back due, the customer not replying, or the customer asking to wait
+// contact, a call-back due, the customer not replying, or the customer asking to wait.
+// Only orders placed in the app count: imported past purchases (past_orders) don't mean the customer was contacted.
 export function contactState(c, today = localDate()) {
   const last = c.last_contact_at && localDate(new Date(`${c.last_contact_at}Z`)); // naive UTC from the API
-  if (!last) return { key: c.last_order_date ? "ordered" : "missing", detail: "" };
-  if (c.last_order_date && c.last_order_date >= last) return { key: "ordered", detail: "após o contato" };
+  const lastOrder = c.recent_orders[0]?.date; // newest first
+  if (!last) return { key: lastOrder ? "ordered" : "missing", detail: "" };
+  if (lastOrder && lastOrder >= last) return { key: "ordered", detail: "após o contato" };
   const next = c.next_action_date;
   if (next && next < today) return { key: "late", detail: `há ${daysFrom(next, today)} d` };
   if (next === today) return { key: "today", detail: "" };
