@@ -36,7 +36,7 @@ ACTIVE_DAYS = 60  # lead scoring: a customer who bought this recently makes the 
 
 
 def customer_status(last_purchase: date | None) -> str:
-    """Active: any order placed in the app, same as the map. Inactive: none."""
+    """Active: any purchase, in the app or in the history. Inactive: none."""
     return "active" if last_purchase else "inactive"
 
 product_color = Table(
@@ -183,7 +183,7 @@ class OrderItem(Base):
 
 class PastOrder(Base):
     """Purchase history from before the app (spreadsheet import): date and amount only, no items.
-    Shown on the customer panel and counts for the last order date; kept out of revenue, customer status
+    Shown on the customer panel and counts for the last order date and status; kept out of revenue
     and contact state on purpose."""
     __tablename__ = "past_orders"
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -40,7 +40,8 @@ def _city_key(city: str) -> str:
 
 def customers_by_city(db: Session, today: date, days: int, owner_id: int | None = None) -> list[dict]:
     """Per-city portfolio for the map (admin): registered customers, customers active in the last
-    `days` days (at least one sale), revenue/orders/average ticket in that window, last sale ever.
+    `days` days (at least one sale or past purchase), revenue/orders/average ticket in that window
+    (app orders only), last purchase ever.
     `owner_id` narrows to one seller's portfolio. Customers without a city are left out."""
     since = today - timedelta(days=days - 1)
     q = db.query(Customer).filter(Customer.city.isnot(None), Customer.city != "")
@@ -53,6 +54,9 @@ def customers_by_city(db: Session, today: date, days: int, owner_id: int | None 
     by_customer: dict[int, list[Order]] = defaultdict(list)
     for o in sales:
         by_customer[o.customer_id].append(o)
+    past: dict[int, list[date]] = defaultdict(list)
+    for customer_id, day in db.query(PastOrder.customer_id, PastOrder.date):
+        past[customer_id].append(day)
 
     cities: dict[tuple[str, str], dict] = {}
     for c in customers:
@@ -65,11 +69,12 @@ def customers_by_city(db: Session, today: date, days: int, owner_id: int | None 
             g["lat"], g["lng"] = c.lat, c.lng
         orders = by_customer.get(c.id, [])
         recent = [o for o in orders if o.date >= since]
-        if recent:
+        pasts = past.get(c.id, [])
+        if recent or any(d >= since for d in pasts):
             g["active"] += 1
         g["orders"] += len(recent)
         g["revenue"] += sum(o.total for o in recent)
-        last = max((o.date for o in orders), default=None)
+        last = max([o.date for o in orders] + pasts, default=None)
         if last and (g["last_order_date"] is None or last > g["last_order_date"]):
             g["last_order_date"] = last
     for g in cities.values():
@@ -107,8 +112,7 @@ def customer_overview(db: Session, user: User) -> list[dict]:
             "document": c.document, "state_registration": c.state_registration, "owner_id": c.owner_id, "owner_name": c.owner_name,
             "created_at": c.created_at, "price_table": c.price_table,
             "total": round(sum(o.total for o in orders), 2), "orders": len(orders),
-            # past purchases show as the last order, but the status counts app orders only (same as the map)
-            "last_order_date": last, "status": customer_status(orders[0].date if orders else None),
+            "last_order_date": last, "status": customer_status(last),
             "colors": [name for name, _ in colors.most_common()],
             "recent_orders": [{"id": o.id, "date": o.date, "pieces": o.pieces, "total": o.total}
                               for o in orders[:3]],
