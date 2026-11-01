@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app import clock  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Customer  # noqa: E402
+from app.models import Customer, PastOrder  # noqa: E402
 
 TODAY = date(2026, 10, 7)
 clock.today_br = lambda: TODAY
@@ -84,6 +84,15 @@ with TestClient(app) as c:
     # seller filter = the seller's portfolio (customer owner)
     mana = cities(days=365, owner_id=ana["id"])
     assert mana["Rio do Sul/SC"]["registered"] == 2 and "Curitiba/PR" not in mana
+
+    # a past purchase in the period makes the customer active, like the Clientes table; money stays app-only
+    with SessionLocal() as db:
+        db.add(PastOrder(customer_id=cid["Loja 5"], date=TODAY - timedelta(days=40), amount=500))
+        db.commit()
+    assert cities(days=30)["Blumenau/SC"]["active"] == 0
+    bl = cities(days=90)["Blumenau/SC"]
+    assert (bl["active"], bl["orders"], bl["revenue"]) == (1, 0, 0.0), bl
+    assert bl["last_order_date"] == (TODAY - timedelta(days=40)).isoformat()
 
     # admin-only, bounded period
     assert c.get("/api/customers/by-city", headers=A).status_code == 403

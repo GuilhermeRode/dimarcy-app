@@ -183,7 +183,8 @@ class OrderItem(Base):
 
 class PastOrder(Base):
     """Purchase history from before the app (spreadsheet import): date and amount only, no items.
-    Shown on the customer panel and counts for the last order date and status; kept out of revenue on purpose."""
+    Shown on the customer panel and counts for the last order date and status; kept out of revenue
+    and contact state on purpose."""
     __tablename__ = "past_orders"
     id: Mapped[int] = mapped_column(primary_key=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
