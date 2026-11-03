@@ -319,11 +319,13 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2
 .city-rank { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; height: 640px; overflow: hidden; }
 .city-rank > header { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--line); }
 .city-rank > header strong { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
-.city-rank ol { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.city-rank ol { list-style: none; margin: 0; padding: 0; overflow-y: auto; position: relative; }
 .city-rank li { border-bottom: 1px solid var(--line); }
 .city-rank li button { width: 100%; display: flex; flex-direction: column; gap: 6px; padding: 12px 18px; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .city-rank li:hover, .city-rank li.on { background: var(--surface-2); }
 .city-rank li.on { box-shadow: inset 3px 0 0 var(--accent); }
+.city-rank-link { display: block; padding: 0 18px 12px; font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; }
+.city-rank-link:hover { text-decoration: underline; }
 .city-rank-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 .city-rank-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .city-rank-name i { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }

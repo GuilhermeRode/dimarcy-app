@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { MapContainer, TileLayer, CircleMarker, Tooltip, ZoomControl, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, CircleMarker, Tooltip, ZoomControl, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { api, errorMessage } from "../api";
@@ -25,10 +25,10 @@ function daysAgo(iso) {
   return Math.round((new Date(`${localDate()}T00:00:00`) - new Date(`${iso}T00:00:00`)) / 86400000);
 }
 
-function FitTo({ points, focus }) {
+// Fits every bubble when the data changes (filters). Selecting a city never refits: that made the map jump.
+function FitTo({ points }) {
   const map = useMap();
   useEffect(() => {
-    if (focus) { map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), 9)); return; }
     const pts = points.filter((p) => p.lat != null);
     if (!pts.length) return; // the map already opens on Brazil
     // Not animated: Leaflet drops a new view requested while a zoom animation is still running.
@@ -36,7 +36,24 @@ function FitTo({ points, focus }) {
     const legendOverMap = map.getSize().y > 500; // on narrow screens the legend sits below the map
     map.fitBounds(L.latLngBounds(pts.map((p) => [p.lat, p.lng])),
       { paddingTopLeft: [40, 40], paddingBottomRight: [40, legendOverMap ? 270 : 40], maxZoom: 9, animate: false });
-  }, [points, focus, map]);
+  }, [points, map]);
+  return null;
+}
+
+// A city picked in the ranking: pan to it only when it's off screen (or nearly), zooming in only from a far-out view.
+function PanTo({ target }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    const at = L.latLng(target.lat, target.lng);
+    if (map.getBounds().pad(-0.15).contains(at)) return; // already in view: leave the map where it is
+    map.flyTo(at, Math.max(map.getZoom(), 7), { duration: 0.6 });
+  }, [target, map]);
+  return null;
+}
+
+function ClearOnMapClick({ onClear }) {
+  useMapEvents({ click: onClear }); // a click on the map itself (not on a bubble) drops the selection
   return null;
 }
 
@@ -46,6 +63,8 @@ export default function CustomersByCity() {
   const [days, setDays] = useState(365);
   const [ownerId, setOwnerId] = useState("");
   const [selected, setSelected] = useState(null); // "city/UF"
+  const [panTarget, setPanTarget] = useState(null); // set by the ranking only
+  const rankItems = useRef({});
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -67,7 +86,22 @@ export default function CustomersByCity() {
   const totals = cities.reduce((t, c) => ({ active: t.active + c.active, registered: t.registered + c.registered }), { active: 0, registered: 0 });
   const radius = (c) => (c.active ? 7 + (Math.sqrt(c.active) / Math.sqrt(maxActive)) * 17 : 6);
   const color = (c) => (c.active ? TICKET_COLORS[ticketClass(c.average_ticket)] : "#ffffff");
-  const focus = cities.find((c) => c.key === selected && c.lat != null) || null;
+  // from the map: highlight the bubble and bring its ranking row into view, without moving the map
+  const pickOnMap = (c) => {
+    const next = c.key === selected ? null : c.key;
+    setSelected(next);
+    // scrolls only the ranking list, never the page (on a phone the list sits below the map)
+    const li = rankItems.current[c.key], list = li?.parentElement;
+    if (next && list && (li.offsetTop < list.scrollTop || li.offsetTop + li.offsetHeight > list.scrollTop + list.clientHeight)) {
+      list.scrollTo({ top: li.offsetTop - list.clientHeight / 3, behavior: "smooth" });
+    }
+  };
+  // from the ranking: highlight and pan the map to the city when it's off screen
+  const pickInRank = (c) => {
+    const next = c.key === selected ? null : c.key;
+    setSelected(next);
+    if (next && c.lat != null) setPanTarget({ lat: c.lat, lng: c.lng, key: c.key, at: Date.now() });
+  };
 
   return (
     <div className="page page-wide">
@@ -104,13 +138,15 @@ export default function CustomersByCity() {
           <MapContainer bounds={brazilBounds} zoomControl={false} scrollWheelZoom>
             <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} />
             <ZoomControl position="topleft" />
-            <FitTo points={cities} focus={focus} />
+            <FitTo points={cities} />
+            <PanTo target={panTarget} />
+            <ClearOnMapClick onClear={() => setSelected(null)} />
             {cities.filter((c) => c.lat != null).map((c) => (
               <CircleMarker key={c.key} center={[c.lat, c.lng]} radius={radius(c)}
                 fillColor={color(c)} fillOpacity={c.active ? 0.9 : 0.6}
                 color={c.key === selected ? "#2563eb" : c.active ? "#ffffff" : "#b6c0d1"}
                 weight={c.key === selected ? 3 : 1.5}
-                eventHandlers={{ click: () => setSelected(c.key === selected ? null : c.key) }}>
+                bubblingMouseEvents={false} eventHandlers={{ click: () => pickOnMap(c) }}>
                 <Tooltip direction="top" offset={[0, -radius(c)]}>
                   <strong>{c.city}/{c.state}</strong><br />
                   Ticket médio: {c.average_ticket != null ? money(c.average_ticket) : "—"}<br />
@@ -140,8 +176,8 @@ export default function CustomersByCity() {
             {cities.map((c) => {
               const ago = daysAgo(c.last_order_date);
               return (
-                <li key={c.key} className={c.key === selected ? "on" : ""}>
-                  <button type="button" onClick={() => setSelected(c.key === selected ? null : c.key)}>
+                <li key={c.key} className={c.key === selected ? "on" : ""} ref={(el) => { rankItems.current[c.key] = el; }}>
+                  <button type="button" onClick={() => pickInRank(c)} aria-pressed={c.key === selected}>
                     <div className="city-rank-top">
                       <span className="city-rank-name">
                         <i style={{ background: c.active ? color(c) : "#dfe6f1" }} />
@@ -156,6 +192,11 @@ export default function CustomersByCity() {
                     </div>
                     {c.lat == null && <small className="muted">Fora do mapa (endereço não localizado)</small>}
                   </button>
+                  {c.key === selected && (
+                    <Link className="city-rank-link" to={`/customers?city=${encodeURIComponent(c.city)}&state=${encodeURIComponent(c.state)}`}>
+                      Ver {plural(c.registered, "cliente", "clientes")} de {c.city} ›
+                    </Link>
+                  )}
                 </li>
               );
             })}
