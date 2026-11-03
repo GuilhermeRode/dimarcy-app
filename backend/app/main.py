@@ -14,7 +14,7 @@ from . import clock
 from .lead_import import clear_interrupted
 from .leads import NO_ANSWER, refresh_scores
 from .models import Contact, Customer, Lead, Product, User, size_key
-from .routers import auth, colors, contacts, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
+from .routers import auth, batches, colors, contacts, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
 from .uploads import backfill_thumbs
@@ -152,7 +152,8 @@ async def lifespan(app: FastAPI):
     _tidy_customers()
     _sort_product_sizes()
     _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'",
-                               "notify_customer": "BOOLEAN DEFAULT TRUE"})
+                               "notify_customer": "BOOLEAN DEFAULT TRUE",
+                               "batch_id": "INTEGER REFERENCES batches(id)"})
     _ensure_columns("app_settings", {"annual_goal": "NUMERIC(12,2) DEFAULT 0",
                                      "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50",
                                      "lead_cnaes": "VARCHAR(200) DEFAULT '4781400'",
@@ -254,7 +255,7 @@ app.add_middleware(
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-for r in (auth, users, customers, colors, products, orders, dashboard, finance, leads, contacts, settings_router):
+for r in (auth, users, customers, colors, products, orders, batches, dashboard, finance, leads, contacts, settings_router):
     app.include_router(r.router, prefix="/api")
 
 

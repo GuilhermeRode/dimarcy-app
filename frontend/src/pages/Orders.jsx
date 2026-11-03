@@ -33,6 +33,31 @@ export default function Orders() {
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(() => screenCache.has(cacheKey));
+  const [picked, setPicked] = useState(() => new Set()); // ids ticked for a grouped production print
+  const [moving, setMoving] = useState(false);
+  // Only orders that haven't started production move forward; pulling a delivered one back would drop its receivables
+  const toProduce = orders.filter((o) => picked.has(o.id) && ["quote", "confirmed"].includes(o.status));
+
+  async function moveToProduction() {
+    setMoving(true);
+    setError("");
+    const results = await Promise.allSettled(toProduce.map((o) => api.patch(`/orders/${o.id}/status`, { status: "in_production" })));
+    const moved = new Set(toProduce.filter((_, i) => results[i].status === "fulfilled").map((o) => o.id));
+    const failed = results.find((r) => r.status === "rejected");
+    if (failed) setError(errorMessage(failed.reason));
+    setOrders((list) => {
+      const next = list.map((o) => (moved.has(o.id) ? { ...o, status: "in_production" } : o));
+      screenCache.set(cacheKey, next);
+      return next;
+    });
+    setMoving(false);
+  }
+
+  const toggle = (id) => setPicked((cur) => {
+    const next = new Set(cur);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   useEffect(() => {
     api.get("/orders", { params: late ? { late: 1 } : {} })
@@ -55,6 +80,7 @@ export default function Orders() {
   }, [orders, search, status]);
 
   useEffect(() => { setPage(1); }, [search, status, tab]);
+  useEffect(() => { setPicked(new Set()); }, [tab]); // a selection hidden on the other tab would still print
 
   // the other URL param stays: tab and "late" are independent
   function setParam(key, value) {
@@ -147,6 +173,7 @@ export default function Orders() {
           <table className="table table-orders">
             <thead>
               <tr>
+                {isAdmin && <th className="cell-check"></th>}
                 {sortHeader("number", isAdmin ? "Nº" : "Data")}
                 {sortHeader("customer", "Cliente")}
                 {sortHeader("delivery", "Entrega")}
@@ -158,7 +185,13 @@ export default function Orders() {
             </thead>
             <tbody>
               {pageItems.map((o) => (
-                <tr key={o.id} className="clickable" onClick={() => nav(`/orders/${o.id}`)}>
+                <tr key={o.id} className={`clickable ${picked.has(o.id) ? "row-selected" : ""}`} onClick={() => nav(`/orders/${o.id}`)}>
+                  {isAdmin && (
+                    <td className="cell-check" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={picked.has(o.id)} onChange={() => toggle(o.id)}
+                        aria-label={`Selecionar pedido ${orderNumber(o.id)}`} />
+                    </td>
+                  )}
                   <td>
                     {isAdmin ? (
                       <span className="cell-stack">
@@ -199,6 +232,22 @@ export default function Orders() {
             )}
           </div>
         </>
+      )}
+
+      {picked.size > 0 && <div className="bulk-spacer" />}{/* keeps the last rows reachable above the bar */}
+      {picked.size > 0 && (
+        <div className="bulk-bar leads-bulk" role="region" aria-label="Seleção">
+          <strong>{picked.size} {picked.size === 1 ? "selecionado" : "selecionados"}</strong>
+          {(toProduce.length > 0 || moving) && (
+            <button className="btn" disabled={moving} onClick={moveToProduction}>
+              {moving ? "Movendo..." : `Mover para produção (${toProduce.length})`}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => nav(`/orders/production-print?ids=${[...picked].join(",")}`)}>
+            Imprimir produção
+          </button>
+          <button type="button" className="link-btn" onClick={() => setPicked(new Set())}>Limpar</button>
+        </div>
       )}
     </div>
   );

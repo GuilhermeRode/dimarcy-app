@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from .. import clock, finance
 from ..database import get_db
 from ..mailer import send_order_created_emails, send_order_delivered_email, send_order_updated_emails
-from ..models import ORDER_STATUSES, AppSettings, Customer, FinancialEntry, Order, OrderItem, Product, User
-from ..schemas import OrderIn, StatusIn
+from ..models import ORDER_STATUSES, AppSettings, Batch, Customer, FinancialEntry, Order, OrderItem, Product, User
+from ..schemas import OrderBatchIn, OrderIn, StatusIn
 from ..sales import late_filter, visible_orders
 from ..security import get_current_user, require_admin
 from ..settings_store import allowed_price_tables, get_app_settings, retail_price
@@ -29,6 +29,7 @@ def summary(o: Order) -> dict:
         "customer_city": o.customer.city, "customer_state": o.customer.state,
         "seller_name": o.seller.name, "seller_avatar_url": o.seller.avatar_url, "pieces": o.pieces,
         "gross": o.gross, "discount": float(o.discount or 0), "total": o.total, "price_table": o.price_table,
+        "batch_id": o.batch_id, "batch_name": o.batch.name if o.batch else None,
     }
 
 
@@ -226,18 +227,45 @@ def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = 
     return full(o)
 
 
-@router.patch("/{oid}/status", dependencies=[Depends(require_admin)])
-def change_status(oid: int, data: StatusIn, db: Session = Depends(get_db)):
-    if data.status not in ORDER_STATUSES:
+def set_status(db: Session, o: Order, status: str) -> bool:
+    """Moves an order to `status` with its receivables; no commit. True when it just became delivered:
+    the caller sends send_order_delivered_email after committing."""
+    if status not in ORDER_STATUSES:
         raise HTTPException(400, "Invalid status.")
-    o = _find(oid, db)
     old_status = o.status
-    o.status = data.status
+    o.status = status
     db.flush()
     _sync_installments(db, o, old_status)
+    return status == "delivered" and old_status != "delivered"
+
+
+@router.patch("/{oid}/status", dependencies=[Depends(require_admin)])
+def change_status(oid: int, data: StatusIn, db: Session = Depends(get_db)):
+    o = _find(oid, db)
+    delivered = set_status(db, o, data.status)
+    if o.batch and o.batch.status != o.status:  # moved on its own: it leaves the batch's column, so the batch too
+        o.batch_id = None
     db.commit()
     db.refresh(o)
-    if o.status == "delivered" and old_status != "delivered":
+    if delivered:
+        send_order_delivered_email(o)
+    return full(o)
+
+
+@router.put("/{oid}/batch", dependencies=[Depends(require_admin)])
+def change_batch(oid: int, data: OrderBatchIn, db: Session = Depends(get_db)):
+    """Puts the order in a batch (it follows the batch's column) or takes it out (it stays where it is)."""
+    o = _find(oid, db)
+    delivered = False
+    if data.batch_id is not None:
+        batch = db.get(Batch, data.batch_id)
+        if not batch:
+            raise HTTPException(404, "Lote não encontrado.")
+        delivered = set_status(db, o, batch.status)
+    o.batch_id = data.batch_id
+    db.commit()
+    db.refresh(o)
+    if delivered:
         send_order_delivered_email(o)
     return full(o)
 

@@ -306,6 +306,20 @@ class StatusIn(BaseModel):
     status: str
 
 
+class BatchIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    status: str = "in_production"
+
+
+class BatchPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    status: str | None = None
+
+
+class OrderBatchIn(BaseModel):
+    batch_id: int | None  # None takes the order out of its batch
+
+
 # ---------- App settings ----------
 class AppSettingsIn(BaseModel):
     allow_price_override: bool
