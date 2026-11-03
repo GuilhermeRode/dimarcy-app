@@ -142,12 +142,13 @@ export default function Leads() {
     setChecked(new Set());
     setSelectedId(null);
     // skipped rows stay in Primeiro contato on the server, so reload instead of dropping them locally
-    if (r.skipped_no_seller > 0 || others.length) load(0);
+    if (r.skipped_no_seller > 0 || r.skipped_choose > 0 || others.length) load(0);
     else setData((d) => ({ ...d, items: d.items.filter((l) => !gone.has(l.id)), total: d.total - ids.length }));
     setNotice([
       `${r.released} ${r.released === 1 ? "loja liberada" : "lojas liberadas"}.`,
       r.cities_added?.length && `Cidade${r.cities_added.length > 1 ? "s" : ""} adicionada${r.cities_added.length > 1 ? "s" : ""} ao vendedor: ${r.cities_added.join(", ")}.`,
       others.length && `Não liberadas por serem de outro vendedor: ${others.map(([n, k]) => `${k} de ${n}`).join(", ")}.`,
+      r.skipped_choose > 0 && `${r.skipped_choose} de cidade com mais de um vendedor — escolha em "Liberar para" quem recebe.`,
       r.skipped_no_seller > 0 && `${r.skipped_no_seller} sem vendedor — escolha para quem liberar ou cadastre a cidade em Usuários.`,
     ].filter(Boolean).join(" "));
   }

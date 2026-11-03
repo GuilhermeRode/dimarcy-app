@@ -177,7 +177,7 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE app_settings ALTER COLUMN last_lead_import_scope TYPE VARCHAR(500)"))
     _ensure_columns("leads", {"size": "VARCHAR(5) DEFAULT ''", "capital": "NUMERIC(14,2)", "in_debt": "BOOLEAN",
                               "released_at": "TIMESTAMP", "score": "INTEGER", "city_active": "INTEGER",
-                              "edited": "BOOLEAN DEFAULT FALSE", "notes": "TEXT"})
+                              "edited": "BOOLEAN DEFAULT FALSE", "notes": "TEXT", "seller_id": "INTEGER"})
     _nullable_lead_cnpj()
     _shared_seller_cities()
     _drop_lead_phones()
