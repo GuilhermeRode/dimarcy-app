@@ -125,6 +125,16 @@ class Product(Base):
         return [u.id for u in self.sellers]
 
 
+class Batch(Base):
+    """A named group of orders on the Produção board (lote). It sits in one column (status) and moving it
+    moves every order in it; the name prints on the grouped production sheet."""
+    __tablename__ = "batches"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(20), default="in_production")  # one of ORDER_STATUSES
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (Index("ix_orders_date_status", "date", "status"),)
@@ -141,10 +151,12 @@ class Order(Base):
     discount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     notes: Mapped[str | None] = mapped_column(Text)
     notify_customer: Mapped[bool] = mapped_column(Boolean, default=True)  # off = no e-mails to the customer
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("batches.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     customer: Mapped[Customer] = relationship(back_populates="orders")
     seller: Mapped[User] = relationship()
+    batch: Mapped[Batch | None] = relationship(lazy="joined")
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", lazy="selectin"
     )

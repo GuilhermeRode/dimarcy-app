@@ -40,6 +40,7 @@ function mergeOrders(orders) {
     seller: unique(orders.map((o) => o.seller_name)).join("  •  "),
     ordered: unique(orders.map((o) => dateBR(o.date))).join("  •  "),
     delivery: deliveries.length ? dateBR(deliveries[0]) : "A definir",
+    batch: unique(orders.map((o) => o.batch_name)).join("  •  "),
     items: Object.values(items),
     notes: orders.filter((o) => o.notes).map((o) => (several ? `${orderNumber(o.id)}: ${o.notes}` : o.notes)).join("\n"),
     several,
@@ -81,6 +82,7 @@ export default function ProductionPrint() {
       </div>
       <ErrorBox msg={error} />
 
+      {s.batch && <div className="pp-batch"><span className="pp-field-label">Lote</span> {s.batch}</div>}
       <div className="pp-header">
         <div className="pp-header-logo">
           <img src={logoFull} alt="Di Marcy" className="pp-logo" />

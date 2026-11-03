@@ -80,6 +80,7 @@ export default function Orders() {
   }, [orders, search, status]);
 
   useEffect(() => { setPage(1); }, [search, status, tab]);
+  useEffect(() => { setPicked(new Set()); }, [tab]); // a selection hidden on the other tab would still print
 
   // the other URL param stays: tab and "late" are independent
   function setParam(key, value) {
