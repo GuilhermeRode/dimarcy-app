@@ -9,7 +9,11 @@ export const isNewStore = (openedAt) =>
 
 export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onClose, onOrder, onDiscard, onEdit, onReleased, onContacted, onNoAnswer }) {
   const [releasing, setReleasing] = useState(false);
-  const [releaseTo, setReleaseTo] = useState("");  // only for a lead whose city has no seller
+  // the sellers whose region has this city; none = any seller (the city joins their region)
+  const citySellers = lead.sellers || [];
+  const releaseChoices = citySellers.length ? citySellers : sellers;
+  const [releaseTo, setReleaseTo] = useState(citySellers.length === 1 ? String(citySellers[0].id) : "");
+  const releaseName = releaseChoices.find((s) => String(s.id) === releaseTo)?.name.split(" ")[0];
   const [releaseError, setReleaseError] = useState("");
   const [waOpened, setWaOpened] = useState(false);
   const [history, setHistory] = useState(0);  // bumped to reload the contact list
@@ -82,21 +86,25 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
       </section>}
       <section className="lead-section">
         <h3>Próximo passo</h3>
-        {releasable && !lead.seller_id && (
-          // no seller has this city: pick one, and the city joins their region
+        {releasable && citySellers.length !== 1 && (
+          // a shared city: pick one of its sellers; a city of nobody: pick anyone, and the city joins their region
           <label className="lead-release-to">
             <span>Liberar para</span>
             <select value={releaseTo} onChange={(e) => setReleaseTo(e.target.value)}>
               <option value="">Escolha o vendedor…</option>
-              {sellers.map((s) => <option key={s.id} value={s.id}>{s.role === "admin" ? `${s.name} (admin)` : s.name}</option>)}
+              {releaseChoices.map((s) => <option key={s.id} value={s.id}>{s.role === "admin" ? `${s.name} (admin)` : s.name}</option>)}
             </select>
-            <small className="muted">{lead.city}/{lead.state} ainda não é de nenhum vendedor: ela entra na região de quem você escolher.</small>
+            <small className="muted">
+              {citySellers.length
+                ? `${lead.city}/${lead.state} está na região de mais de um vendedor: só quem você escolher recebe esta loja.`
+                : `${lead.city}/${lead.state} ainda não é de nenhum vendedor: ela entra na região de quem você escolher.`}
+            </small>
           </label>
         )}
         <div className="customer-panel-actions lead-actions">
           {releasable && (
-            <button type="button" className="btn btn-primary lead-action-wide" disabled={releasing || (!lead.seller_id && !releaseTo)} onClick={release}>
-              {lead.seller_id ? `Liberar para ${lead.seller_name.split(" ")[0]}` : "Liberar"}
+            <button type="button" className="btn btn-primary lead-action-wide" disabled={releasing || !releaseTo} onClick={release}>
+              {releaseName ? `Liberar para ${releaseName}` : "Liberar"}
             </button>
           )}
           {pending && <button type="button" className="btn btn-primary lead-action-wide" onClick={moveToFirstContact}>Mover para Primeiro contato</button>}

@@ -547,7 +547,8 @@ def check_pending_release(ctx):
     week = lambda uid: c.get("/api/leads", headers=admin, params={"status": "contacted", "seller_id": uid}).json()["week"]  # noqa: E731
     assert week(ctx["a_id"]) == {"released": 0, "quota": 20}
     r = c.post("/api/leads/release", headers=admin, json={"ids": [pa, pb, pn]})
-    assert r.json() == {"released": 2, "skipped_no_seller": 1, "skipped_other_seller": {}, "cities_added": []}, r.text
+    assert r.json() == {"released": 2, "skipped_no_seller": 1, "skipped_other_seller": {}, "skipped_choose": 0,
+                        "cities_added": []}, r.text
     assert week(ctx["a_id"]) == {"released": 1, "quota": 20}  # nothing is released automatically: only counted
     assert "week" not in c.get("/api/leads", headers=admin, params={"status": "pending"}).json()
     assert c.get(f"/api/leads/{pa}", headers=a).status_code == 200
@@ -566,6 +567,23 @@ def check_pending_release(ctx):
     assert c.get(f"/api/leads/{pz}", headers=a).status_code == 200
     assert "Cidade Livre" in [x["city"] for x in c.get(f"/api/users/{ctx['a_id']}/cities", headers=admin).json()]
     assert c.post("/api/leads/release", headers=admin, json={"ids": [pg]}).json()["released"] == 1  # to its city's seller
+    # a city shared by two sellers: the admin picks one, and only that one gets the lead
+    keep_a = c.get(f"/api/users/{ctx['a_id']}/cities", headers=admin).json()
+    assert c.put(f"/api/users/{ctx['a_id']}/cities", headers=admin, json=keep_a + [{"city": "Guaramirim", "state": "SC"}]).status_code == 200
+    ps = add_lead("80000000000195", "Pend Dois Vendedores", city="Guaramirim", status="contacted")
+    got = c.get(f"/api/leads/{ps}", headers=admin).json()
+    assert sorted(s["id"] for s in got["sellers"]) == sorted([ctx["a_id"], ctx["b_id"]]) and "," in got["seller_name"], got
+    r = c.post("/api/leads/release", headers=admin, json={"ids": [ps]}).json()
+    assert r["released"] == 0 and r["skipped_choose"] == 1 and r["skipped_no_seller"] == 0, r
+    r = c.post("/api/leads/release", headers=admin, json={"ids": [ps], "seller_id": ctx["a_id"]}).json()
+    assert r["released"] == 1, r
+    got = c.get(f"/api/leads/{ps}", headers=a).json()
+    assert (got["seller_id"], got["seller_name"]) == (ctx["a_id"], "Ana"), got
+    assert c.get(f"/api/leads/{ps}", headers=b).status_code == 404  # b has Guaramirim too, but it went to a
+    assert "Pend Dois Vendedores" not in [x["name"] for x in c.get("/api/leads", headers=b).json()["items"]]
+    assert "Pend Dois Vendedores" in [x["name"] for x in c.get("/api/leads", headers=a).json()["items"]]
+    assert c.post(f"/api/leads/{ps}/discard", headers=admin, json={"reason": "other"}).status_code == 204
+    assert c.put(f"/api/users/{ctx['a_id']}/cities", headers=admin, json=keep_a).status_code == 200
     # a return the admin scheduled before releasing passes to the seller
     pr = add_lead("80000000000194", "Pend Retorno", status="pending")
     r = c.post("/api/contacts", headers=admin, json={"lead_id": pr, "channel": "whatsapp", "notes": "Pediu para retornar depois",

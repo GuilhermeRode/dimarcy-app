@@ -255,7 +255,7 @@ class FinancialEntry(Base):
 
 
 class SellerCity(Base):
-    """A city in a seller's region. Two sellers may share a city: both work its leads (see leads.py)."""
+    """A city in a seller's region. Two sellers may share a city: the admin picks one when releasing each lead (Lead.seller_id)."""
     __tablename__ = "seller_cities"
     __table_args__ = (UniqueConstraint("user_id", "city_key", "state", name="uq_seller_cities_user_city"),)
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -293,6 +293,8 @@ class Lead(Base):
     score: Mapped[int | None] = mapped_column(Integer)  # leads.lead_score
     city_active: Mapped[int | None] = mapped_column(Integer)  # active Di Marcy customers in the city (tie-break)
     edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")  # admin fixed name/contact: the import keeps them
+    # who the admin released it to: in a city shared by several sellers, only that one works it; NULL = every seller of the city
+    seller_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)  # free text, unlike a contact it isn't an event in the history
 
 

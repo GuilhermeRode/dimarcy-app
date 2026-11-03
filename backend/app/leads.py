@@ -39,9 +39,16 @@ def city_owners(db: Session) -> dict[tuple[str, str], list[User]]:
     return owners
 
 
+def lead_sellers(owners: dict[tuple[str, str], list[User]], lead: Lead) -> list[User]:
+    return owners.get((lead.city_key, lead.state), [])
+
+
 def lead_owner(owners: dict[tuple[str, str], list[User]], lead: Lead, user: User | None = None) -> User | None:
-    """The lead's seller: `user` when they're one of a shared city's sellers, else the first."""
-    sellers = owners.get((lead.city_key, lead.state), [])
+    """The lead's seller: the one the admin released it to (while their region still has the city); before
+    that, `user` when they're one of a shared city's sellers, else the first."""
+    sellers = lead_sellers(owners, lead)
+    if lead.seller_id:
+        return next((s for s in sellers if s.id == lead.seller_id), None)
     return next((s for s in sellers if user and s.id == user.id), sellers[0] if sellers else None)
 
 
@@ -226,12 +233,14 @@ def ranked_leads(db: Session, user: User, city: str = "", search: str = "",
     # a lead's seller: the ACTIVE seller whose region has its city (see city_owners)
     owner = select(SellerCity.id).join(User, SellerCity.user_id == User.id).where(
         SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state, User.active.is_(True), User.role.in_(REGION_ROLES))
+    def worked_by(uid: int):  # their city, unless the lead was released to another of the city's sellers
+        return and_(owner.where(SellerCity.user_id == uid).exists(), or_(Lead.seller_id.is_(None), Lead.seller_id == uid))
     if user.role != "admin":
-        q = q.filter(owner.where(SellerCity.user_id == user.id).exists())
+        q = q.filter(worked_by(user.id))
     elif seller_id == 0:
         q = q.filter(~owner.exists())
     elif seller_id is not None:
-        q = q.filter(owner.where(SellerCity.user_id == seller_id).exists())
+        q = q.filter(worked_by(seller_id))
     if city.strip():  # typed in the Cidade pill: part of the name, accents ignored ("rio" -> Rio do Sul, Rio Negrinho)
         q = q.filter(Lead.city_key.contains(_city_key(city)))
     text = search.strip()
@@ -257,15 +266,19 @@ def released_this_week(db: Session, seller_id: int) -> int:
     the admin release the rest of the weekly quota (Configurações), so nobody gets thousands at once."""
     since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
     return db.query(Lead).join(SellerCity, and_(SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state)) \
-             .filter(SellerCity.user_id == seller_id, Lead.released_at >= since).count()
+             .filter(SellerCity.user_id == seller_id, Lead.released_at >= since,
+                     or_(Lead.seller_id.is_(None), Lead.seller_id == seller_id)).count()
 
 
-def lead_out(lead: Lead, owner: User | None) -> dict:
+def lead_out(lead: Lead, owner: User | None, sellers: list[User] = ()) -> dict:
+    """sellers: every seller whose region has the lead's city — the choices for Liberar para. Until it is
+    released to one of them, a shared city's lead is named after all of them."""
     return {"id": lead.id, "cnpj": lead.cnpj, "name": lead.name, "phone": lead.phone, "email": lead.email,
             "address": lead.address, "notes": lead.notes, "city": lead.city, "state": lead.state, "opened_at": lead.opened_at, "size": lead.size,
             "capital": float(lead.capital) if lead.capital is not None else None, "in_debt": lead.in_debt,
             "score": getattr(lead, "score", None), "status": lead.status, "seller_id": owner.id if owner else None,
-            "seller_name": owner.name if owner else None}
+            "seller_name": owner.name if owner and (lead.seller_id or len(sellers) < 2) else ", ".join(s.name for s in sellers) or None,
+            "sellers": [{"id": s.id, "name": s.name} for s in sellers]}
 
 
 def due_follow_ups(db: Session, user: User, today: date, everyone: bool = False, until: date | None = None) -> list[dict]:
