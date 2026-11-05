@@ -78,7 +78,7 @@ with TestClient(app) as c:
     assert telma["total"] == 0 and telma["orders"] == 0  # kept out of the app's own numbers
     assert rows[("Telma", "Irati")]["past_orders"] == []
     assert telma["last_order_date"] == "2026-06-01"  # no app order: the last past purchase counts
-    assert rows[("Telma", "Irati")]["last_order_date"] is None
+    assert rows[("Telma", "Irati")]["last_order_date"] is None and rows[("Telma", "Irati")]["status"] == "inactive"
     # a recent past purchase shows as the last order, but only app orders make a customer active (same as the map)
     recent = clock.today_br().isoformat()
     con.execute("INSERT INTO past_orders (customer_id, date, amount) VALUES (?, ?, 10)", (telma["id"], recent))

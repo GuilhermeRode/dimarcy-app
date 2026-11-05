@@ -93,6 +93,7 @@ class CustomerIn(ORM):
     address: str = Field(min_length=1)
     state_registration: str = Field(min_length=1)  # IE number, or "ISENTO"
     notes: str | None = None
+    price_table: Literal["wholesale", "retail"] = "wholesale"
     owner_id: int | None = None  # seller this customer belongs to; only admins can set/change it
 
     # stored already formatted, whatever the client sent (imports, old app versions)
@@ -139,6 +140,7 @@ class CustomerDraft(ORM):
     address: str | None = None
     state_registration: str | None = None
     notes: str | None = None
+    price_table: Literal["wholesale", "retail"] = "wholesale"
     owner_id: int | None = None
 
     @field_validator("document", "phone", "email", "city", "state", "address", "state_registration", mode="before")
@@ -160,6 +162,12 @@ class CustomerDraft(ORM):
     @classmethod
     def _state_registration(cls, v, info):
         return format_state_registration(v, info.data.get("state"))
+
+
+class RetailCustomerIn(CustomerDraft):
+    """A retail customer: name and phone; everything else is optional, for anyone saving it."""
+    phone: str = Field(min_length=1)
+    price_table: Literal["retail"] = "retail"
 
 
 class CustomerOut(CustomerIn):
@@ -184,17 +192,19 @@ class LeadEditIn(BaseModel):
     phone: str | None = Field(None, max_length=30)
     email: str | None = Field(None, max_length=160)
     address: str | None = Field(None, max_length=250)
+    notes: str | None = Field(None, max_length=2000)
+    cnpj: str | None = None  # only fills in a lead that has none; the Receita's are never changed
 
 
 class LeadCreateIn(LeadEditIn):
     """A store the admin found outside the Receita import."""
-    cnpj: str
     city: str = Field(min_length=1, max_length=100)
     state: str = Field(min_length=2, max_length=2)
 
 
 class DiscardIn(BaseModel):
     reason: Literal["closed", "not_target", "competitor", "not_recommended", "no_answer", "other"]  # models.DISCARD_REASONS
+    notes: str | None = Field(None, max_length=500)  # required when discarding a released lead
 
 
 class ReleaseIn(BaseModel):
@@ -295,6 +305,20 @@ class OrderIn(BaseModel):
 
 class StatusIn(BaseModel):
     status: str
+
+
+class BatchIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    status: str = "in_production"
+
+
+class BatchPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    status: str | None = None
+
+
+class OrderBatchIn(BaseModel):
+    batch_id: int | None  # None takes the order out of its batch
 
 
 # ---------- App settings ----------

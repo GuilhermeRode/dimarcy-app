@@ -133,8 +133,9 @@ def check_regions(ctx):
         {"city": "Jaraguá do Sul", "state": "sc"}, {"city": " jaragua  do sul ", "state": "SC"}])
     assert r.status_code == 200, r.text
     assert r.json() == [{"city": "Jaraguá do Sul", "state": "SC"}]  # same key twice -> once
+    # a city may be in two regions (the admin picks the seller per lead on release)
     r = c.put(f"/api/users/{b_id}/cities", headers=admin, json=[{"city": "JARAGUA DO SUL", "state": "SC"}])
-    assert r.status_code == 409 and r.json()["detail"] == "JARAGUA DO SUL já é da região de Ana.", r.text
+    assert r.status_code == 200, r.text
     assert c.put(f"/api/users/{b_id}/cities", headers=admin, json=[{"city": "Corupá", "state": "SC"}]).status_code == 200
     assert c.get(f"/api/users/{b_id}/cities", headers=admin).json() == [{"city": "Corupá", "state": "SC"}]
     assert c.put("/api/users/9999/cities", headers=admin, json=[]).status_code == 404
@@ -279,8 +280,10 @@ def check_convert(ctx):
     # discard
     assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["b"], json={"reason": "closed"}).status_code == 404
     assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["a"], json={"reason": "x"}).status_code == 422
-    assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["a"], json={"reason": "competitor"}).status_code == 204
-    assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["a"], json={"reason": "closed"}).status_code == 409
+    assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["a"], json={"reason": "competitor", "notes": "  "}).status_code == 422  # a released lead needs the seller's words
+    assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["a"],
+                  json={"reason": "competitor", "notes": "Compra da Malwee"}).status_code == 204
+    assert c.post(f"/api/leads/{ids['j_no_contact']}/discard", headers=ctx["a"], json={"reason": "closed", "notes": "x"}).status_code == 409
     with SessionLocal() as db:
         assert db.get(Lead, ids["j_no_contact"]).discard_reason == "competitor"
     assert [x["name"] for x in c.get("/api/leads", headers=ctx["a"]).json()["items"]] == []
@@ -308,10 +311,28 @@ def check_convert(ctx):
         assert (db.get(Lead, nr).status, db.get(Lead, nr).discard_reason) == ("discarded", "no_answer")
     assert c.post(f"/api/leads/{nr}/no-answer", headers=ctx["a"]).status_code == 409
 
+    # Descartados: only leads that left Liberados; who, when, why; the admin sees everyone's, a seller only their own
+    pq = add_lead("30000000000103", "Fila Tres", status="pending")
+    assert c.post(f"/api/leads/{pq}/discard", headers=admin, json={"reason": "closed"}).status_code == 204  # admin queue: no text needed
+    with SessionLocal() as db:
+        assert db.get(Lead, pq).discarded_from == "pending" and db.get(Lead, p1).discarded_from == "pending"
+    hist = c.get("/api/leads/discarded", headers=admin).json()
+    assert [(x["name"], x["user_name"], x["reason"], x["notes"]) for x in hist] == [
+        ("Sem Resposta", "Ana", "no_answer", None), ("Jaraguá Sem Fone", "Ana", "competitor", "Compra da Malwee")], hist
+    assert all(x["discarded_at"] for x in hist)
+    assert len(c.get("/api/leads/discarded", headers=ctx["a"]).json()) == 2
+    assert c.get("/api/leads/discarded", headers=ctx["b"]).json() == []
+    assert c.get("/api/leads/discarded", headers=ctx["b"], params={"seller_id": ctx["a_id"]}).json() == []  # a seller can't peek
+    assert c.get("/api/leads/discarded", headers=admin, params={"seller_id": ctx["b_id"]}).json() == []
+
 
 def check_contacts(ctx):
     c, admin = ctx["c"], ctx["admin"]
-    jl = add_lead("20000000000101", "Loja Contato", phone="47 99999-0000")
+    new_leads = lambda h: c.get("/api/dashboard/badges", headers=h).json()["new_leads"]
+    before = new_leads(ctx["a"])
+    jl = add_lead("20000000000101", "Loja Contato", phone="47 99999-0000", released_at=datetime(2026, 1, 1))
+    assert new_leads(ctx["a"]) == before + 1  # released to Ana's region, no contact yet
+    assert c.get("/api/dashboard", headers=ctx["a"]).json()["alerts"]["new_leads"] == before + 1
     yesterday, tomorrow = (TODAY - timedelta(days=1)).isoformat(), (TODAY + timedelta(days=1)).isoformat()
 
     def contact(h, **body):
@@ -323,6 +344,9 @@ def check_contacts(ctx):
     assert contact(ctx["b"], lead_id=jl).status_code == 404  # not Bruno's region
     r = contact(ctx["a"], lead_id=jl, notes="Pediu catálogo", next_action_date=yesterday)
     assert r.status_code == 201 and r.json()["user_name"] == "Ana", r.text
+    assert new_leads(ctx["a"]) == before  # first contact logged: no longer "new"
+    b = c.get("/api/dashboard/badges", headers=ctx["a"]).json()
+    assert b["follow_ups_due"] == 1 and b["follow_ups_late"] == 1, b  # due yesterday: late
 
     due = c.get("/api/contacts/due", headers=ctx["a"]).json()
     assert [(d["name"], d["kind"], d["notes"]) for d in due] == [("Loja Contato", "lead", "Pediu catálogo")], due
@@ -378,7 +402,7 @@ def check_contacts(ctx):
 
     # discarded lead leaves the due list
     contact(ctx["a"], lead_id=jl, next_action_date=yesterday)
-    c.post(f"/api/leads/{jl}/discard", headers=ctx["a"], json={"reason": "other"})
+    c.post(f"/api/leads/{jl}/discard", headers=ctx["a"], json={"reason": "other", "notes": "teste"})
     assert contact(ctx["a"], lead_id=jl).status_code == 409  # a handled lead takes no more contacts
     assert c.get("/api/contacts", headers=ctx["a"], params={"lead_id": jl}).status_code == 200  # but its history stays readable
     assert c.get("/api/contacts/due", headers=ctx["a"]).json() == []
@@ -401,6 +425,21 @@ def check_contacts(ctx):
         assert (lead2.status, lead2.customer_id) == ("new", None)
     assert len(c.get("/api/contacts", headers=ctx["a"], params={"lead_id": jl2}).json()) == 1
     assert len(c.get("/api/contacts/due", headers=ctx["a"]).json()) == 1  # its reminder is live again
+
+    # Próximos (all=true) has no date limit: a follow-up 200 days out shows, days=60 doesn't reach it
+    with SessionLocal() as db:
+        far = Contact(user_id=db.query(User.id).filter(User.email == "a@t.com").scalar(), lead_id=jl2, channel="call", next_action_date=TODAY + timedelta(days=200))
+        db.add(far)
+        db.commit()
+        far_id = far.id
+    try:
+        assert c.get("/api/contacts/due", headers=ctx["a"], params={"days": 60}).json() == []
+        due = c.get("/api/contacts/due", headers=ctx["a"], params={"all": True}).json()
+        assert [d["next_action_date"] for d in due] == [(TODAY + timedelta(days=200)).isoformat()], due
+    finally:
+        with SessionLocal() as db:
+            db.query(Contact).filter(Contact.id == far_id).delete()
+            db.commit()
 
 
 def check_edit(ctx):
@@ -443,10 +482,29 @@ def check_edit(ctx):
     made = r.json()
     assert (made["cnpj"], made["state"], made["status"], made["phone"]) == ("70000000000404", "SC", "pending", "(47) 99999-1111")
     assert c.post("/api/leads", headers=admin, json=new).status_code == 409
+    noted = c.post("/api/leads", headers=admin, json={**new, "cnpj": "70000000000606", "notes": "  Achei no Instagram "}).json()
+    assert noted["notes"] == "Achei no Instagram"
+    bare = {"name": "Sem CNPJ", "city": "Joinville", "state": "SC"}  # no CNPJ: several may exist, and they list and import like the rest
+    first, second = (c.post("/api/leads", headers=admin, json={**bare, "cnpj": v}).json() for v in ("", None))
+    assert first["cnpj"] is None and second["cnpj"] is None and first["id"] != second["id"]
+    listed = c.get("/api/leads", headers=admin, params={"status": "pending", "search": "Sem CNPJ"}).json()
+    assert listed["total"] == 2, listed
+    with SessionLocal() as db:
+        lead_import.apply(db, {}, "2026-11", "t", TODAY)
+        assert db.get(Lead, first["id"]) is not None
+    assert c.put(f"/api/leads/{first['id']}", headers=admin, json={"name": "Sem CNPJ", "cnpj": "123"}).status_code == 422
+    assert c.put(f"/api/leads/{first['id']}", headers=admin, json={"name": "Sem CNPJ", "cnpj": new["cnpj"]}).status_code == 409
+    filled = c.put(f"/api/leads/{first['id']}", headers=admin, json={"name": "Sem CNPJ", "cnpj": "70000000000707"}).json()
+    assert filled["cnpj"] == "70000000000707"
+    kept = c.put(f"/api/leads/{first['id']}", headers=admin, json={"name": "Sem CNPJ", "cnpj": "70000000000808"}).json()
+    assert kept["cnpj"] == "70000000000707"  # a lead's CNPJ is only ever filled in, never replaced
+    same = {"name": new["name"]}  # an older cached app's edit doesn't send notes: they stay
+    assert c.put(f"/api/leads/{noted['id']}", headers=admin, json=same).json()["notes"] == "Achei no Instagram"
+    assert c.put(f"/api/leads/{noted['id']}", headers=admin, json={**same, "notes": ""}).json()["notes"] is None
     with SessionLocal() as db:
         lead_import.apply(db, {}, "2026-11", "t", TODAY)
         assert db.get(Lead, made["id"]) is not None and db.get(Lead, old) is None
-    assert c.post("/api/leads/discard", headers=admin, json={"ids": [made["id"]], "reason": "other"}).status_code == 200
+    assert c.post("/api/leads/discard", headers=admin, json={"ids": [made["id"], noted["id"], first["id"], second["id"]], "reason": "other"}).status_code == 200
 
 
 def check_role_change(ctx):
@@ -472,6 +530,12 @@ def check_pending_release(ctx):
     c, admin, a, b = ctx["c"], ctx["admin"], ctx["a"], ctx["b"]
     pa = add_lead("80000000000101", "Pend Jaragua", status="pending", size="me")
     pb = add_lead("80000000000102", "Pend Guaramirim", city="Guaramirim", status="pending")
+    # the Painel's first-contact counts match the Prospecção tabs; sellers don't get them
+    fc = c.get("/api/dashboard", headers=admin).json()["first_contact"]
+    assert fc == {
+        s: c.get("/api/leads", headers=admin, params={"status": s, "limit": 1}).json()["total"]
+        for s in ("contacted", "new")}, fc
+    assert c.get("/api/dashboard", headers=ctx["a"]).json()["first_contact"] is None
     pn = add_lead("80000000000103", "Pend Sem Vendedor", city="Cidade Sem Vendedor", status="pending")
     for h in (a, b):
         r = c.get("/api/leads", headers=h, params={"limit": 200})
@@ -482,13 +546,20 @@ def check_pending_release(ctx):
     assert c.get("/api/contacts", headers=a, params={"lead_id": pa}).status_code == 404
     r = c.post("/api/contacts", headers=a, json={"lead_id": pa, "channel": "call", "notes": "x"})
     assert r.status_code == 404, r.text
-    assert c.post(f"/api/leads/{pa}/discard", headers=a, json={"reason": "other"}).status_code == 404
+    assert c.post(f"/api/leads/{pa}/discard", headers=a, json={"reason": "other", "notes": "teste"}).status_code == 404
     r = c.post(f"/api/leads/{pa}/convert", headers=a, json={**REQ, "name": "Xx", "document": "80000000000101", "city": "Jaraguá do Sul", "state": "SC"})
     assert r.status_code == 404, r.text
     assert c.get("/api/leads", headers=admin, params={"status": "foo"}).status_code == 422
     r = c.get("/api/leads", headers=admin, params={"status": "pending", "limit": 200})
     got = {x["id"]: x for x in r.json()["items"]}
     assert set(got) == {pa, pb, pn} and got[pa]["size"] == "me", got
+    pm = add_lead("80000000000199", "Pend Mover", status="pending")
+    assert c.post(f"/api/leads/{pm}/first-contact", headers=a).status_code == 403
+    assert c.post(f"/api/leads/{pm}/first-contact", headers=admin).status_code == 204
+    assert c.post(f"/api/leads/{pm}/first-contact", headers=admin).status_code == 409
+    assert c.get(f"/api/leads/{pm}", headers=admin).json()["status"] == "contacted"
+    assert c.get("/api/contacts", headers=admin, params={"lead_id": pm}).json() == []  # moved, not contacted
+    assert c.post(f"/api/leads/{pm}/discard", headers=admin, json={"reason": "other", "notes": "teste"}).status_code == 204
     assert c.post("/api/leads/release", headers=a, json={"ids": [pa]}).status_code == 403
     assert c.post("/api/leads/release", headers=admin, json={"ids": []}).status_code == 422
     # release only after the admin's first contact: pending -> contacted ("Primeiro contato") -> new
@@ -502,7 +573,8 @@ def check_pending_release(ctx):
     week = lambda uid: c.get("/api/leads", headers=admin, params={"status": "contacted", "seller_id": uid}).json()["week"]  # noqa: E731
     assert week(ctx["a_id"]) == {"released": 0, "quota": 20}
     r = c.post("/api/leads/release", headers=admin, json={"ids": [pa, pb, pn]})
-    assert r.json() == {"released": 2, "skipped_no_seller": 1, "skipped_other_seller": {}, "cities_added": []}, r.text
+    assert r.json() == {"released": 2, "skipped_no_seller": 1, "skipped_other_seller": {}, "skipped_choose": 0,
+                        "cities_added": []}, r.text
     assert week(ctx["a_id"]) == {"released": 1, "quota": 20}  # nothing is released automatically: only counted
     assert "week" not in c.get("/api/leads", headers=admin, params={"status": "pending"}).json()
     assert c.get(f"/api/leads/{pa}", headers=a).status_code == 200
@@ -521,6 +593,24 @@ def check_pending_release(ctx):
     assert c.get(f"/api/leads/{pz}", headers=a).status_code == 200
     assert "Cidade Livre" in [x["city"] for x in c.get(f"/api/users/{ctx['a_id']}/cities", headers=admin).json()]
     assert c.post("/api/leads/release", headers=admin, json={"ids": [pg]}).json()["released"] == 1  # to its city's seller
+    # a city in two regions: the admin picks the seller, and only that one gets the lead
+    with SessionLocal() as db:
+        db.add(SellerCity(user_id=ctx["a_id"], city="Guaramirim", state="SC", city_key=_city_key("Guaramirim")))
+        db.commit()
+    ps = add_lead("80000000000195", "Pend Dois Vendedores", city="Guaramirim", status="contacted")
+    assert sorted(s["id"] for s in c.get(f"/api/leads/{ps}", headers=admin).json()["sellers"]) == sorted([ctx["a_id"], ctx["b_id"]])
+    r = c.post("/api/leads/release", headers=admin, json={"ids": [ps]}).json()
+    assert r["released"] == 0 and r["skipped_choose"] == 1 and r["skipped_no_seller"] == 0, r
+    r = c.post("/api/leads/release", headers=admin, json={"ids": [ps], "seller_id": ctx["a_id"]}).json()
+    assert r["released"] == 1, r
+    assert c.get(f"/api/leads/{ps}", headers=a).json()["seller_id"] == ctx["a_id"]
+    assert c.get(f"/api/leads/{ps}", headers=b).status_code == 404  # b has Guaramirim too, but it went to a
+    assert "Pend Dois Vendedores" not in [x["name"] for x in c.get("/api/leads", headers=b).json()["items"]]
+    assert "Pend Dois Vendedores" in [x["name"] for x in c.get("/api/leads", headers=a).json()["items"]]
+    assert c.post(f"/api/leads/{ps}/discard", headers=admin, json={"reason": "other", "notes": "teste"}).status_code == 204
+    with SessionLocal() as db:
+        db.query(SellerCity).filter_by(user_id=ctx["a_id"], city_key=_city_key("Guaramirim")).delete()
+        db.commit()
     # a return the admin scheduled before releasing passes to the seller
     pr = add_lead("80000000000194", "Pend Retorno", status="pending")
     r = c.post("/api/contacts", headers=admin, json={"lead_id": pr, "channel": "whatsapp", "notes": "Pediu para retornar depois",
@@ -536,17 +626,17 @@ def check_pending_release(ctx):
     assert "Pend Retorno" in due_names(a)
     row = next(d for d in c.get("/api/contacts/due", headers=admin).json() if d["name"] == "Pend Retorno")
     assert row["user_id"] == ctx["a_id"] and row["set_by"] != row["user_name"], row  # the admin's Retornos counts it for the seller
-    assert c.post(f"/api/leads/{pr}/discard", headers=admin, json={"reason": "other"}).status_code == 204
+    assert c.post(f"/api/leads/{pr}/discard", headers=admin, json={"reason": "other", "notes": "teste"}).status_code == 204
     # the admin can take leads like a seller: the city joins the admin's region
     pq = add_lead("80000000000193", "Pend Para Admin", city="Cidade do Admin", status="contacted")
     r = c.post("/api/leads/release", headers=admin, json={"ids": [pq], "seller_id": ctx["admin_id"]})
     assert r.json()["released"] == 1 and r.json()["cities_added"] == ["Cidade do Admin/SC"], r.text
     mine = c.get("/api/leads", headers=admin, params={"seller_id": ctx["admin_id"]}).json()["items"]
     assert [x["name"] for x in mine] == ["Pend Para Admin"] and mine[0]["seller_id"] == ctx["admin_id"], mine
-    assert c.post(f"/api/leads/{pq}/discard", headers=admin, json={"reason": "other"}).status_code == 204
+    assert c.post(f"/api/leads/{pq}/discard", headers=admin, json={"reason": "other", "notes": "teste"}).status_code == 204
     c.put(f"/api/users/{ctx['admin_id']}/cities", headers=admin, json=[])
     for lid in (pz, pg, pn):
-        assert c.post(f"/api/leads/{lid}/discard", headers=admin, json={"reason": "other"}).status_code == 204
+        assert c.post(f"/api/leads/{lid}/discard", headers=admin, json={"reason": "other", "notes": "teste"}).status_code == 204
     assert c.put(f"/api/users/{ctx['a_id']}/cities", headers=admin, json=[  # back to a's original region
         x for x in c.get(f"/api/users/{ctx['a_id']}/cities", headers=admin).json() if x["city"] != "Cidade Livre"]).status_code == 200
 

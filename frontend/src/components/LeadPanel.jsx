@@ -9,17 +9,29 @@ export const isNewStore = (openedAt) =>
 
 export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onClose, onOrder, onDiscard, onEdit, onReleased, onContacted, onNoAnswer }) {
   const [releasing, setReleasing] = useState(false);
-  const [releaseTo, setReleaseTo] = useState("");  // only for a lead whose city has no seller
+  // the sellers whose region has this city; none = any seller (the city joins their region)
+  const citySellers = lead.sellers || [];
+  const releaseChoices = citySellers.length ? citySellers : sellers;
+  const [releaseTo, setReleaseTo] = useState(citySellers.length === 1 ? String(citySellers[0].id) : "");
+  const releaseName = releaseChoices.find((s) => String(s.id) === releaseTo)?.name.split(" ")[0];
   const [releaseError, setReleaseError] = useState("");
   const [waOpened, setWaOpened] = useState(false);
   const [history, setHistory] = useState(0);  // bumped to reload the contact list
   const [waiting, setWaiting] = useState(false);  // "Aguardar": the store asked to be called back later
+  const [adding, setAdding] = useState(false);  // "Registrar contato", next to WhatsApp (released leads)
   async function contactDone() {
     setReleaseError("");
     try {
       await api.post("/contacts", { lead_id: lead.id, channel: "whatsapp" });
       setWaOpened(false);
       setHistory((n) => n + 1);
+      onContacted?.();
+    } catch (e) { setReleaseError(errorMessage(e)); }
+  }
+  async function moveToFirstContact() {
+    setReleaseError("");
+    try {
+      await api.post(`/leads/${lead.id}/first-contact`);
       onContacted?.();
     } catch (e) { setReleaseError(errorMessage(e)); }
   }
@@ -40,7 +52,9 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
     } catch (e) { setReleaseError(errorMessage(e)); }
     setReleasing(false);
   }
+  const pending = lead.status === "pending";  // the admin only sorts these: on to Primeiro contato, or out
   const releasable = isAdmin && lead.status === "contacted";  // only after the admin's first contact
+  const released = lead.status === "new";  // the seller's: only "Registrar contato", by WhatsApp or a visit
   const { user } = useAuth();
   const firstName = (user?.name || "").split(" ")[0];
   const wa = whatsappUrl(lead.phone, `Olá, tudo bem? Sou ${firstName} da Di Marcy. Gostaria de apresentar nossa `
@@ -59,8 +73,9 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
           {lead.in_debt && <span className="cstatus cstatus-risk">Dívida ativa</span>}
         </div>
       </div>
+      {lead.notes && <section className="lead-section"><h3>Observação</h3><p className="lead-notes">{lead.notes}</p></section>}
       {/* sections, two columns each, so a narrow (notebook) panel never leaves a button squeezed or stranded */}
-      <section className="lead-section">
+      {!pending && <section className="lead-section">
         <h3>Contato</h3>
         <div className="customer-panel-actions lead-actions lead-contact">
           {wa
@@ -68,42 +83,48 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
             : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
           {waCatalog && <a className="btn" href={waCatalog} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>Enviar catálogo</a>}
           {wa && <button type="button" className="btn" onClick={noAnswer} title="Agenda nova tentativa em 7 dias; na 3ª a loja é descartada">Não respondeu</button>}
-          <button type="button" className="btn" onClick={() => setWaiting(true)} title="A loja pediu para falar depois: escolha quando retornar">Aguardar</button>
+          {!released && <button type="button" className="btn" onClick={() => setWaiting(true)} title="A loja pediu para falar depois: escolha quando retornar">Aguardar</button>}
+          {released && <button type="button" className="btn" onClick={() => setAdding(true)}>Registrar contato</button>}
           {waOpened && <button type="button" className="btn btn-primary" onClick={contactDone}>Contato feito</button>}
         </div>
-      </section>
+      </section>}
       <section className="lead-section">
         <h3>Próximo passo</h3>
-        {releasable && !lead.seller_id && (
-          // no seller has this city: pick one, and the city joins their region
+        {releasable && citySellers.length !== 1 && (
+          // several sellers have this city: pick one of them; none has it: pick anyone, and the city joins their region
           <label className="lead-release-to">
             <span>Liberar para</span>
             <select value={releaseTo} onChange={(e) => setReleaseTo(e.target.value)}>
               <option value="">Escolha o vendedor…</option>
-              {sellers.map((s) => <option key={s.id} value={s.id}>{s.role === "admin" ? `${s.name} (admin)` : s.name}</option>)}
+              {releaseChoices.map((s) => <option key={s.id} value={s.id}>{s.role === "admin" ? `${s.name} (admin)` : s.name}</option>)}
             </select>
-            <small className="muted">{lead.city}/{lead.state} ainda não é de nenhum vendedor: ela entra na região de quem você escolher.</small>
+            <small className="muted">
+              {citySellers.length
+                ? `${lead.city}/${lead.state} está na região de mais de um vendedor: só quem você escolher recebe esta loja.`
+                : `${lead.city}/${lead.state} ainda não é de nenhum vendedor: ela entra na região de quem você escolher.`}
+            </small>
           </label>
         )}
         <div className="customer-panel-actions lead-actions">
           {releasable && (
-            <button type="button" className="btn btn-primary lead-action-wide" disabled={releasing || (!lead.seller_id && !releaseTo)} onClick={release}>
-              {lead.seller_id ? `Liberar para ${lead.seller_name.split(" ")[0]}` : "Liberar"}
+            <button type="button" className="btn btn-primary lead-action-wide" disabled={releasing || !releaseTo} onClick={release}>
+              {releaseName ? `Liberar para ${releaseName}` : "Liberar"}
             </button>
           )}
+          {pending && <button type="button" className="btn btn-primary lead-action-wide" onClick={moveToFirstContact}>Mover para Primeiro contato</button>}
           {/* one blue button at a time: while Liberar is there, it is the main action */}
-          <button type="button" className={`btn ${releasable ? "" : "btn-primary"}`} onClick={onOrder}
-            title="Cadastra a loja como cliente e abre o pedido">Fazer pedido</button>
-          <button type="button" className="btn" onClick={onDiscard}>Descartar</button>
+          {!pending && <button type="button" className={`btn ${releasable ? "" : "btn-primary"}`} onClick={onOrder}
+            title="Cadastra a loja como cliente e abre o pedido">Fazer pedido</button>}
+          <button type="button" className={`btn ${pending ? "lead-action-wide" : ""}`} onClick={onDiscard}>Descartar</button>
         </div>
         {releaseError && <p className="muted" style={{ color: "var(--danger)" }}>{releaseError}</p>}
       </section>
-      {/* in the admin queue (Pendentes, Primeiro contato) the Contato buttons already log it: no "Registrar contato" */}
-      <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} canAdd={!["pending", "contacted"].includes(lead.status)} />
+      {/* in Primeiro contato the Contato buttons already log it: no "Registrar contato" */}
+      {!pending && <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} canAdd={!released && lead.status !== "contacted"} />}
       <section className="lead-section">
         <h3>Dados da loja</h3>
         <dl className="customer-panel-info">
-          <dt>CNPJ</dt><dd>{formatCnpj(lead.cnpj)}</dd>
+          <dt>CNPJ</dt><dd>{formatCnpj(lead.cnpj) || "—"}</dd>
           <dt>Aberta em</dt><dd>{lead.opened_at ? dateBR(lead.opened_at) : "—"}</dd>
           <dt>Porte</dt><dd>{LEAD_SIZES[lead.size] || "—"}</dd>
           <dt>Capital social</dt><dd>{lead.capital != null ? money(lead.capital) : "—"}</dd>
@@ -115,6 +136,8 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
         </dl>
         {isAdmin && <button type="button" className="btn" onClick={onEdit}>Editar dados</button>}
       </section>
+      {adding && <ContactModal target={{ lead_id: lead.id }} channels={["whatsapp", "visit"]} openDate={lead.next_action_date}
+        onClose={() => setAdding(false)} onSaved={() => { setAdding(false); setHistory((n) => n + 1); onContacted?.(); }} />}
       {waiting && <ContactModal target={{ lead_id: lead.id }} title="Aguardar retorno" notes="Pediu para retornar depois" requireDate
         onClose={() => setWaiting(false)} onSaved={() => { setWaiting(false); setHistory((n) => n + 1); onContacted?.(); }} />}
     </aside>

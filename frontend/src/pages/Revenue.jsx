@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { compactMoney, money } from "../format";
+import { compactMoney, hideable, money } from "../format";
 import { ErrorBox } from "../components/ui";
 import Delta from "../components/Delta";
 import PeriodPicker, { defaultPeriod } from "../components/PeriodPicker";
 import TeamRanking, { SELLER_COLORS } from "../components/TeamRanking";
 import usePeriodData from "../components/usePeriodData";
 import { RevenueHeader } from "../components/RevenueTabs";
+import { HideToggle } from "../components/RevenueHero";
 
 function topCities(cities, n = 5) {
   const top = cities.slice(0, n);
@@ -16,6 +17,8 @@ function topCities(cities, n = 5) {
 export default function Revenue() {
   const [period, setPeriod] = useState(defaultPeriod);
   const { data: d, error } = usePeriodData(period);
+  const [hide, setHide] = useState(true);
+  const brl = hideable(hide, money);
   const sellers = d?.by_seller || [];
   const withSales = sellers.map((s, i) => ({ ...s, color: SELLER_COLORS[i % SELLER_COLORS.length] })).filter((s) => s.value > 0);
   const cities = topCities(d?.by_city || []);
@@ -32,8 +35,8 @@ export default function Revenue() {
           <section className="hero revenue-hero">
             <div className="revenue-hero-top">
               <div className="hero-main">
-                <span className="hero-label">Faturamento total</span>
-                <strong className="hero-value">{money(d.kpis.revenue)}</strong>
+                <span className="hero-label">Faturamento total <HideToggle hide={hide} onToggle={() => setHide(!hide)} /></span>
+                <strong className="hero-value">{brl(d.kpis.revenue)}</strong>
                 {d.previous_kpis.revenue > 0 && (
                   <span className="hero-delta"><Delta cur={d.kpis.revenue} prev={d.previous_kpis.revenue} /> vs. período anterior</span>
                 )}
@@ -41,7 +44,7 @@ export default function Revenue() {
               <div className="revenue-hero-kpis">
                 <div><span>Pedidos</span><strong>{d.kpis.orders.toLocaleString("pt-BR")}</strong></div>
                 <div><span>Peças</span><strong>{d.kpis.pieces.toLocaleString("pt-BR")}</strong></div>
-                <div><span>Ticket médio</span><strong>{money(d.kpis.average_ticket)}</strong></div>
+                <div><span>Ticket médio</span><strong>{brl(d.kpis.average_ticket)}</strong></div>
               </div>
             </div>
             {withSales.length > 0 && (
@@ -59,7 +62,7 @@ export default function Revenue() {
             )}
           </section>
 
-          <TeamRanking title="Por vendedor" sellers={sellers} showGoalGap />
+          <TeamRanking title="Por vendedor" sellers={sellers} showGoalGap hide={hide} />
 
           <section className="panel">
             <h3>Por cidade</h3>
@@ -67,7 +70,7 @@ export default function Revenue() {
               <ul className="hbars">
                 {cities.map((c) => (
                   <li key={c.name}>
-                    <div><span>{c.name}</span><strong>{compactMoney(c.value)}</strong></div>
+                    <div><span>{c.name}</span><strong>{hideable(hide, compactMoney)(c.value)}</strong></div>
                     <span className="hbar"><span style={{ width: `${(c.value / cityMax) * 100}%` }} /></span>
                   </li>
                 ))}

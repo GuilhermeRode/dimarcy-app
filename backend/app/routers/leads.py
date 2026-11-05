@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock, lead_import
 from ..database import get_db
-from ..leads import (NO_ANSWER, QUEUE, REGION_ROLES, SHARED_PHONE, active_customers_by_city, check_leads_open, lead_score, city_owners, customer_cnpjs, ensure_scores, lead_out, lead_owner, normalize_cnpj, rank_order,
+from ..leads import (NO_ANSWER, QUEUE, REGION_ROLES, SHARED_PHONE, active_customers_by_city, check_leads_open, lead_score, city_owners, customer_cnpjs, ensure_scores, lead_out, lead_owner, lead_sellers, normalize_cnpj, rank_order,
                      ranked_leads, released_this_week, visible_lead)
 from ..models import Contact, Lead, SellerCity, User
 from ..sales import _city_key
@@ -38,7 +38,7 @@ def list_leads(city: str = "", search: str = "", seller_id: int | None = None,
     latest: dict[int, Contact] = {}  # the list shows where the seller left off
     for ct in db.query(Contact).filter(Contact.lead_id.in_([lead.id for lead, _ in page])).order_by(Contact.id):
         latest[ct.lead_id] = ct
-    items = [{**lead_out(lead, owner), "last_contact_at": getattr(latest.get(lead.id), "created_at", None),
+    items = [{**lead_out(lead, owner, lead_sellers(owners, lead)), "last_contact_at": getattr(latest.get(lead.id), "created_at", None),
               "next_action_date": getattr(latest.get(lead.id), "next_action_date", None)} for lead, owner in page]
     out = {"items": items, "total": q.count(),
            "cities": sorted(c for (c,) in q.with_entities(Lead.city).distinct())}  # for the screen's city filter
@@ -49,9 +49,10 @@ def list_leads(city: str = "", search: str = "", seller_id: int | None = None,
 
 @router.post("/release", dependencies=[Depends(require_admin)])
 def release(data: ReleaseToIn, db: Session = Depends(get_db)):
-    """Contacted -> new (only after the admin's first contact) for leads whose city has an active seller. With `seller_id`, a lead whose city has
-    NO active seller gets that city added to the seller's region (so the city's other leads follow);
-    a city that already belongs to another active seller stays theirs (a city has one seller)."""
+    """Contacted -> new (only after the admin's first contact), stored with the seller it went to.
+    No `seller_id`: each lead goes to its city's seller; a city in several regions is skipped (pick one).
+    With `seller_id`: only leads whose city is in that seller's region (or in nobody's: the city then joins
+    their region, so the city's other leads follow); a city of other sellers only is skipped."""
     seller = None
     if data.seller_id is not None:
         seller = db.get(User, data.seller_id)
@@ -59,40 +60,70 @@ def release(data: ReleaseToIn, db: Session = Depends(get_db)):
             raise HTTPException(400, "Vendedor inválido ou inativo.")
     owners = city_owners(db)
     leads = db.query(Lead).filter(Lead.id.in_(data.ids), Lead.status == "contacted").all()
-    ok, other, added = [], {}, []
+    to: dict[int, list[int]] = {}  # seller id -> lead ids
+    other, added, choose = {}, [], 0
     for lead in leads:
-        owner = lead_owner(owners, lead)
-        if owner is None and seller:
-            # the row may exist for an inactive seller (a city has one row): hand it over
+        sellers = lead_sellers(owners, lead)
+        if not sellers and seller:
+            # the row may exist for an inactive seller: hand it over
             sc = db.query(SellerCity).filter_by(city_key=lead.city_key, state=lead.state).first()
             if sc:
                 sc.user_id = seller.id
             else:
                 db.add(SellerCity(user_id=seller.id, city=lead.city, state=lead.state, city_key=lead.city_key))
-            owners[(lead.city_key, lead.state)] = owner = seller
+            owners[(lead.city_key, lead.state)] = sellers = [seller]
             added.append(f"{lead.city}/{lead.state}")
-        if owner is None:
+        if not sellers:
             continue
-        if seller and owner.id != seller.id:
-            other[owner.name] = other.get(owner.name, 0) + 1
-            continue
-        ok.append(lead.id)
-    if ok:
-        db.query(Lead).filter(Lead.id.in_(ok), Lead.status == "contacted").update(
-            {"status": "new", "released_at": lead_import.utcnow()}, synchronize_session=False)
+        if seller:
+            if all(u.id != seller.id for u in sellers):
+                names = " / ".join(u.name for u in sellers)
+                other[names] = other.get(names, 0) + 1
+                continue
+            to.setdefault(seller.id, []).append(lead.id)
+        elif len(sellers) == 1:
+            to.setdefault(sellers[0].id, []).append(lead.id)
+        else:
+            choose += 1
+    now = lead_import.utcnow()
+    for sid, ids in to.items():
+        db.query(Lead).filter(Lead.id.in_(ids), Lead.status == "contacted").update(
+            {"status": "new", "released_at": now, "seller_id": sid}, synchronize_session=False)
     db.commit()
-    skipped_other = sum(other.values())
-    return {"released": len(ok), "skipped_no_seller": len(leads) - len(ok) - skipped_other,
-            "skipped_other_seller": other, "cities_added": sorted(set(added))}
+    released = sum(len(ids) for ids in to.values())
+    return {"released": released, "skipped_no_seller": len(leads) - released - sum(other.values()) - choose,
+            "skipped_other_seller": other, "skipped_choose": choose, "cities_added": sorted(set(added))}
 
 
-@router.post("/discard", dependencies=[Depends(require_admin)])
-def discard_many(data: BulkDiscardIn, db: Session = Depends(get_db)):
+def _discarded(user: User, reason: str, notes: str | None = None) -> dict:
+    # discarded_from = Lead.status: SQL's SET reads the row before the update, so it's the tab it left
+    return {"status": "discarded", "discard_reason": reason, "discard_notes": (notes or "").strip() or None,
+            "discarded_by_id": user.id, "discarded_at": lead_import.utcnow(), "discarded_from": Lead.status}
+
+
+@router.post("/discard")
+def discard_many(data: BulkDiscardIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     """The admin takes leads out of the queue ("Não recomendar"); the import never brings them back."""
     done = db.query(Lead).filter(Lead.id.in_(data.ids), Lead.status.in_(QUEUE)) \
-             .update({"status": "discarded", "discard_reason": data.reason}, synchronize_session=False)
+             .update(_discarded(user, data.reason, data.notes), synchronize_session=False)
     db.commit()
     return {"discarded": done}
+
+
+@router.get("/discarded")
+def discarded(seller_id: int | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Descartados: released leads (the Liberados tab) someone took out, when and why. The admin sees everyone's
+    (seller_id: one person's), a seller only their own. The admin's queue (Pendentes/Primeiro contato) is left out."""
+    by = seller_id if user.role == "admin" else user.id
+    q = db.query(Lead, User).join(User, User.id == Lead.discarded_by_id) \
+          .filter(Lead.status == "discarded", Lead.discarded_from == "new")
+    if by is not None:
+        q = q.filter(Lead.discarded_by_id == by)
+    # ponytail: newest 300, no paging; add offset when someone needs older ones
+    return [{"id": lead.id, "name": lead.name, "city": lead.city, "state": lead.state, "phone": lead.phone,
+             "reason": lead.discard_reason, "notes": lead.discard_notes, "discarded_at": lead.discarded_at,
+             "user_id": u.id, "user_name": u.name}
+            for lead, u in q.order_by(Lead.discarded_at.desc()).limit(300)]
 
 
 @router.get("/my-cities")
@@ -102,10 +133,15 @@ def my_cities(db: Session = Depends(get_db), user: User = Depends(get_current_us
             for r in db.query(SellerCity).filter(SellerCity.user_id == user.id).order_by(SellerCity.city)]
 
 
+def _out(db: Session, lead: Lead) -> dict:
+    owners = city_owners(db)
+    return lead_out(lead, lead_owner(owners, lead), lead_sellers(owners, lead))
+
+
 @router.get("/{lid}")
 def get_lead(lid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     lead = visible_lead(db, user, lid)
-    return lead_out(lead, lead_owner(city_owners(db), lead))
+    return _out(db, lead)
 
 
 def _typed_fields(data: LeadEditIn) -> dict:
@@ -116,18 +152,25 @@ def _typed_fields(data: LeadEditIn) -> dict:
     return fields
 
 
+def _checked_cnpj(db: Session, value: str | None) -> str | None:
+    cnpj = normalize_cnpj(value)
+    if not cnpj:
+        return None
+    if len(cnpj) != 14:
+        raise HTTPException(422, "CNPJ inválido.")
+    if db.query(Lead.id).filter(Lead.cnpj == cnpj).first():
+        raise HTTPException(409, "Esse CNPJ já está na Prospecção.")
+    if cnpj in customer_cnpjs(db):
+        raise HTTPException(409, "Esse CNPJ já é cliente.")
+    return cnpj
+
+
 @router.post("", status_code=201)
 def create_lead(data: LeadCreateIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """A lead typed in by hand; edited=True: the import neither overwrites nor drops it. The admin's starts
     pending and is released the usual way; a seller's must be in their region and is already theirs (new)."""
     fields = _typed_fields(data)
-    fields["cnpj"] = normalize_cnpj(fields["cnpj"])
-    if len(fields["cnpj"]) != 14:
-        raise HTTPException(422, "CNPJ inválido.")
-    if db.query(Lead.id).filter(Lead.cnpj == fields["cnpj"]).first():
-        raise HTTPException(409, "Esse CNPJ já está na Prospecção.")
-    if fields["cnpj"] in customer_cnpjs(db):
-        raise HTTPException(409, "Esse CNPJ já é cliente.")
+    fields["cnpj"] = _checked_cnpj(db, fields["cnpj"])
     fields["state"] = fields["state"].upper()
     city_key = _city_key(fields["city"])
     status = "pending"
@@ -140,11 +183,12 @@ def create_lead(data: LeadCreateIn, db: Session = Depends(get_db), user: User = 
     n = active_customers_by_city(db, today)[(city_key, fields["state"])]
     shared = bool(fields["phone"]) and db.query(Lead.id).filter(
         Lead.phone == fields["phone"], Lead.status.in_(QUEUE)).count() + 1 >= SHARED_PHONE
-    lead = Lead(**fields, city_key=city_key, status=status, edited=True, seen_at=today, city_active=n)
+    lead = Lead(**fields, city_key=city_key, status=status, edited=True, seen_at=today, city_active=n,
+                seller_id=None if user.role == "admin" else user.id)  # a seller's own lead stays theirs
     lead.score = lead_score(lead, n, today, shared)
     db.add(lead)
     db.commit()
-    return lead_out(lead, lead_owner(city_owners(db), lead))
+    return _out(db, lead)
 
 
 @router.put("/{lid}", dependencies=[Depends(require_admin)])
@@ -152,11 +196,16 @@ def edit_lead(lid: int, data: LeadEditIn, db: Session = Depends(get_db)):
     lead = db.get(Lead, lid)
     if not lead:
         raise HTTPException(404, "Lead não encontrado.")
-    for k, v in _typed_fields(data).items():
-        setattr(lead, k, v)
+    fields = _typed_fields(data)
+    cnpj = fields.pop("cnpj")
+    if not lead.cnpj:
+        lead.cnpj = _checked_cnpj(db, cnpj)
+    for k, v in fields.items():
+        if k != "notes" or "notes" in data.model_fields_set:  # older cached apps don't send it: keep what is there
+            setattr(lead, k, v)
     lead.edited = True
     db.commit()
-    return lead_out(lead, lead_owner(city_owners(db), lead))
+    return _out(db, lead)
 
 
 @router.post("/{lid}/convert", response_model=CustomerOut, status_code=201)
@@ -200,17 +249,26 @@ def no_answer(lid: int, db: Session = Depends(get_db), user: User = Depends(get_
     tries = db.query(Contact).filter(Contact.lead_id == lid, Contact.notes == NO_ANSWER).count()
     discarded = tries >= NO_ANSWER_LIMIT
     if discarded:
-        db.query(Lead).filter(Lead.id == lid).update({"status": "discarded", "discard_reason": "no_answer"},
-                                                     synchronize_session=False)
+        db.query(Lead).filter(Lead.id == lid).update(_discarded(user, "no_answer"), synchronize_session=False)
     db.commit()
     return {"tries": tries, "discarded": discarded, "retry_on": None if discarded else retry}
 
 
+@router.post("/{lid}/first-contact", status_code=204, dependencies=[Depends(require_admin)])
+def move_to_first_contact(lid: int, db: Session = Depends(get_db)):
+    """Pendentes -> Primeiro contato by hand: no contact is logged, the admin only sorts the queue."""
+    if not db.query(Lead).filter(Lead.id == lid, Lead.status == "pending").update({"status": "contacted"}, synchronize_session=False):
+        raise HTTPException(409, ALREADY_HANDLED)
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.post("/{lid}/discard", status_code=204)
 def discard(lid: int, data: DiscardIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    visible_lead(db, user, lid)
+    if visible_lead(db, user, lid).status == "new" and not (data.notes or "").strip():
+        raise HTTPException(422, "Escreva o motivo do descarte.")
     done = db.query(Lead).filter(Lead.id == lid, Lead.status.in_(QUEUE)) \
-             .update({"status": "discarded", "discard_reason": data.reason}, synchronize_session=False)
+             .update(_discarded(user, data.reason, data.notes), synchronize_session=False)
     if not done:
         raise HTTPException(409, ALREADY_HANDLED)
     db.commit()

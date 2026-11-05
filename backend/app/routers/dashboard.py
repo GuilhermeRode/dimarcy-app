@@ -2,12 +2,13 @@ from collections import Counter, defaultdict
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import clock
 from ..database import get_db
-from ..leads import due_follow_ups
-from ..models import SALE_STATUSES, Order, User, size_key
+from ..leads import due_follow_ups, ranked_leads, unworked_leads
+from ..models import SALE_STATUSES, Lead, Order, User, size_key
 from ..sales import customer_overview, late_filter, visible_orders
 from ..security import get_current_user
 from ..settings_store import get_app_settings
@@ -60,6 +61,24 @@ def _sales_series(sales: list[Order], start: date, end: date) -> list[dict]:
 def _seller_row(u: User, year_sales: dict[int, float]) -> dict:
     return {"id": u.id, "name": u.name, "avatar_url": u.avatar_url, "goal": _goal(u.annual_goal),
             "goal_value": round(year_sales.get(u.id, 0.0), 2), "orders": 0, "pieces": 0, "value": 0.0}
+
+
+def _first_contact_counts(db: Session, user: User) -> dict[str, int]:
+    """Prospecção's Primeiro contato / Liberados tab counts, in one grouped query."""
+    statuses = ("contacted", "new")
+    rows = ranked_leads(db, user, status=None).filter(Lead.status.in_(statuses)) \
+        .with_entities(Lead.status, func.count()).group_by(Lead.status).all()
+    return {s: 0 for s in statuses} | dict(rows)
+
+
+@router.get("/badges")
+def badges(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """The menu's Prospecção count and the once-a-day pop-up (Layout): the user's own new leads and
+    follow-ups due today or late (follow_ups_late: the late part of follow_ups_due)."""
+    today = clock.today_br()
+    due = due_follow_ups(db, user, today)
+    return {"new_leads": unworked_leads(db, user), "follow_ups_due": len(due),
+            "follow_ups_late": sum(f["next_action_date"] < today for f in due)}
 
 
 @router.get("")
@@ -162,17 +181,17 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
         "top_customers": _top(customers),
         "by_seller": _top(sellers, 50),
         "by_city": _top(cities, len(cities)),  # all of them: Faturamento sums the tail into "Outras"
-        "by_color": _top(colors, len(colors), by="pieces"),  # all colors: the Painel pools the tail into "Outras cores"
+        "by_color": _top(colors, len(colors), by="pieces"),  # all colors: the Painel's strip shows them all, its list the top ones
         "by_size": sorted(
             [{"size": t, "pieces": q} for t, q in sizes.items()],
             key=lambda x: size_key(x["size"]),
         ),
         "alerts": {
             "customers_at_risk": statuses["at_risk"],
-            "customers_never_ordered": statuses["never_ordered"],
             "late_orders": len(late),
             "oldest_late_days": max(((today - o.delivery_date).days for o in late), default=None),
             "follow_ups_due": sum(f["next_action_date"] <= today for f in follow_ups),  # same as Retornos
+            "new_leads": unworked_leads(db, user),
         },
         # the Painel's "Retornos pendentes" card: leads to call back, late / today / coming week (customers come from the overview)
         "lead_follow_ups": {
@@ -180,4 +199,6 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
             "today": sum(f["kind"] == "lead" and f["next_action_date"] == today for f in follow_ups),
             "week": sum(f["kind"] == "lead" and f["next_action_date"] > today for f in follow_ups),
         },
+        # admin only: same counts as the Prospecção tabs Primeiro contato / Liberados (Pendentes is just the raw import)
+        "first_contact": _first_contact_counts(db, user) if is_admin else None,
     }

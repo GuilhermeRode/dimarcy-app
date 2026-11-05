@@ -74,20 +74,17 @@ def get_cities(uid: int, db: Session = Depends(get_db)):
 
 @router.put("/{uid}/cities", response_model=list[CityOut])
 def set_cities(uid: int, data: list[CityIn], db: Session = Depends(get_db)):
-    """Replaces the user's region (sellers, and admins who also work leads). A city already in another seller's region -> 409."""
+    """Replaces the user's region (sellers, and admins who also work leads). A city may also be in other
+    sellers' regions: the admin then picks the seller when releasing each lead."""
     user = db.get(User, uid)
     if not user:
         raise HTTPException(404, "User not found.")
-    others = {(sc.city_key, sc.state): sc for sc in db.query(SellerCity).filter(SellerCity.user_id != uid)}
     wanted: dict[tuple[str, str], str] = {}
     for item in data:
         city, state = _clean_city(item.city, item.state)
         if not city:
             raise HTTPException(422, "Informe o nome da cidade.")
-        key = (_city_key(city), state)
-        if key in others:
-            raise HTTPException(409, f"{city} já é da região de {others[key].user.name}.")
-        wanted.setdefault(key, city)
+        wanted.setdefault((_city_key(city), state), city)
     db.query(SellerCity).filter(SellerCity.user_id == uid).delete()
     for (key, state), city in wanted.items():
         db.add(SellerCity(user_id=uid, city=city, state=state, city_key=key))
@@ -95,7 +92,7 @@ def set_cities(uid: int, data: list[CityIn], db: Session = Depends(get_db)):
         db.commit()
     except IntegrityError:  # another admin saved the same city at the same moment
         db.rollback()
-        raise HTTPException(409, "Uma das cidades acabou de ser incluída na região de outro vendedor.")
+        raise HTTPException(409, "A região deste vendedor acabou de ser alterada. Tente de novo.")
     return get_cities(uid, db)
 
 

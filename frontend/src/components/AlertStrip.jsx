@@ -4,6 +4,11 @@ import { plural } from "../format";
 export default function AlertStrip({ alerts }) {
   const nav = useNavigate();
   const items = [
+    alerts.new_leads > 0 && {
+      tone: "new", to: "/leads", cta: "Ver oportunidades",
+      title: plural(alerts.new_leads, "nova oportunidade", "novas oportunidades"),
+      text: "Lojas que chegaram para você e ainda não receberam contato.",
+    },
     alerts.follow_ups_due > 0 && {
       tone: "info", to: "/follow-ups", cta: "Ver retornos",
       title: plural(alerts.follow_ups_due, "retorno para hoje", "retornos para hoje"),
@@ -18,11 +23,6 @@ export default function AlertStrip({ alerts }) {
       tone: "danger", to: "/orders?late=1", cta: "Ver pedidos",
       title: plural(alerts.late_orders, "pedido atrasado", "pedidos atrasados"),
       text: `O mais antigo está ${plural(alerts.oldest_late_days, "dia", "dias")} além da data de entrega.`,
-    },
-    alerts.customers_never_ordered > 0 && {
-      tone: "info", to: "/customers?status=never_ordered", cta: "Ver cadastros",
-      title: plural(alerts.customers_never_ordered, "cliente a conquistar", "clientes a conquistar"),
-      text: "Ainda não têm compras registradas no app. Vale um contato.",
     },
   ].filter(Boolean);
   if (!items.length) return null;

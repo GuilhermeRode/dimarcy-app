@@ -32,15 +32,15 @@ DISCARD_REASONS = ["closed", "not_target", "competitor", "not_recommended", "no_
 CONTACT_CHANNELS = ["whatsapp", "call", "visit", "email"]
 NO_ANSWER = "Não respondeu"  # the note of a "Não respondeu" attempt: not a conversation with the store
 
-# Customer status by days since the last sale (see customer_status)
+# Customer status by days since the last purchase, no history = inactive (see customer_status)
 ACTIVE_DAYS = 60
 AT_RISK_DAYS = 150
 
 
 def customer_status(last_sale: date | None, today: date) -> str:
-    if last_sale is None:
-        return "never_ordered"
-    days = (today - last_sale).days
+    days = (today - last_sale).days if last_sale else None
+    if days is None:
+        return "inactive"
     if days <= ACTIVE_DAYS:
         return "active"
     if days <= AT_RISK_DAYS:
@@ -95,6 +95,8 @@ class Customer(Base):
     lat: Mapped[float | None] = mapped_column(nullable=True)  # geocoded from city/state, best-effort
     lng: Mapped[float | None] = mapped_column(nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
+    price_table: Mapped[str] = mapped_column(String(10), default="wholesale",
+                                             server_default="wholesale")  # see PRICE_TABLES; a new order starts on it
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)  # seller this customer belongs to
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     orders: Mapped[list["Order"]] = relationship(back_populates="customer")
@@ -131,6 +133,16 @@ class Product(Base):
         return [u.id for u in self.sellers]
 
 
+class Batch(Base):
+    """A named group of orders on the Produção board (lote). It sits in one column (status) and moving it
+    moves every order in it; the name prints on the grouped production sheet."""
+    __tablename__ = "batches"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(20), default="in_production")  # one of ORDER_STATUSES
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (Index("ix_orders_date_status", "date", "status"),)
@@ -147,10 +159,12 @@ class Order(Base):
     discount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     notes: Mapped[str | None] = mapped_column(Text)
     notify_customer: Mapped[bool] = mapped_column(Boolean, default=True)  # off = no e-mails to the customer
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("batches.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     customer: Mapped[Customer] = relationship(back_populates="orders")
     seller: Mapped[User] = relationship()
+    batch: Mapped[Batch | None] = relationship(lazy="joined")
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", lazy="selectin"
     )
@@ -189,7 +203,8 @@ class OrderItem(Base):
 
 class PastOrder(Base):
     """Purchase history from before the app (spreadsheet import): date and amount only, no items.
-    Shown on the customer panel; kept out of dashboard, revenue and customer status on purpose."""
+    Shown on the customer panel and counts for the last order date; kept out of revenue, customer status
+    and contact state on purpose."""
     __tablename__ = "past_orders"
     id: Mapped[int] = mapped_column(primary_key=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
@@ -260,9 +275,10 @@ class FinancialEntry(Base):
 
 
 class SellerCity(Base):
-    """A city in a seller's region. A city belongs to at most one seller (see leads.py)."""
+    """A city in a seller's region. A city may be in several sellers' regions: the admin picks one when
+    releasing a lead (Lead.seller_id); once per seller."""
     __tablename__ = "seller_cities"
-    __table_args__ = (UniqueConstraint("city_key", "state", name="uq_seller_cities_city"),)
+    __table_args__ = (UniqueConstraint("user_id", "city_key", "state", name="uq_seller_cities_user_city"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     city: Mapped[str] = mapped_column(String(100))
@@ -277,11 +293,12 @@ class Lead(Base):
     __tablename__ = "leads"
     __table_args__ = (Index("ix_leads_area", "state", "city_key", "status"), {"sqlite_autoincrement": True})
     id: Mapped[int] = mapped_column(primary_key=True)
-    cnpj: Mapped[str] = mapped_column(String(14), unique=True)  # leads.normalize_cnpj
+    cnpj: Mapped[str | None] = mapped_column(String(14), unique=True)  # leads.normalize_cnpj; a hand-typed lead may have none
     name: Mapped[str] = mapped_column(String(160))
     phone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str | None] = mapped_column(String(160))
     address: Mapped[str | None] = mapped_column(String(250))
+    notes: Mapped[str | None] = mapped_column(Text)  # typed by hand; the import never touches it
     city: Mapped[str] = mapped_column(String(100))
     state: Mapped[str] = mapped_column(String(2))
     city_key: Mapped[str] = mapped_column(String(100))
@@ -289,6 +306,10 @@ class Lead(Base):
     status: Mapped[str] = mapped_column(String(10), default="new", server_default="new")  # see LEAD_STATUSES
     size: Mapped[str] = mapped_column(String(5), default="", server_default="")  # mei | me | epp | large | ""
     discard_reason: Mapped[str | None] = mapped_column(String(30))  # see DISCARD_REASONS
+    discard_notes: Mapped[str | None] = mapped_column(Text)  # what the seller wrote (required for a released lead)
+    discarded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    discarded_at: Mapped[datetime | None] = mapped_column(DateTime)  # naive UTC; NULL for discards before the history
+    discarded_from: Mapped[str | None] = mapped_column(String(10))  # the status it left (Descartados lists "new" only)
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"))
     seen_at: Mapped[_dt.date] = mapped_column(Date)  # last import that listed this CNPJ
     capital: Mapped[float | None] = mapped_column(Numeric(14, 2))  # capital social (Receita Empresas)
@@ -298,6 +319,8 @@ class Lead(Base):
     score: Mapped[int | None] = mapped_column(Integer)  # leads.lead_score
     city_active: Mapped[int | None] = mapped_column(Integer)  # active Di Marcy customers in the city (tie-break)
     edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")  # admin fixed name/contact: the import keeps them
+    # who the admin released it to, when its city is in more than one region; NULL = the city's seller(s)
+    seller_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
 
 class Contact(Base):

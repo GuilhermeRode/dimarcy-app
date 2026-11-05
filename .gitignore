@@ -20,7 +20,7 @@ backend/app/routers/__pycache__/
 # --- database (local dev data — never commit real customer data) ---
 backend/*.db
 backend/*.db-journal
-backend/*.db.bak
+backend/*.db.bak*
 backend/lead_import.log
 
 # --- frontend (Node) ---

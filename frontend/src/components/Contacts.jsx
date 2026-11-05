@@ -9,9 +9,12 @@ const NO_ANSWER = "Não respondeu"; // backend's models.NO_ANSWER: the customer 
 
 // created_at is UTC without a zone (SQLite CURRENT_TIMESTAMP); "Z" makes the browser convert it to local time
 
-// "Aguardar" (the store asked to be called back later) uses it with a title, a preset note and a required date
-export function ContactModal({ target, onClose, onSaved, title = "Registrar contato", notes = "", requireDate = false }) {
-  const [form, setForm] = useState({ channel: "whatsapp", notes, next_action_date: "", noAnswer: false });
+// "Aguardar" (the store asked to be called back later) uses it with a title, a preset note and a required date.
+// channels: the CHANNELS keys offered (released leads: WhatsApp and Visita). openDate: the follow-up already set —
+// one at a time, like Pipedrive's next activity: this contact closes it, and its date (if any) is the next one.
+export function ContactModal({ target, onClose, onSaved, title = "Registrar contato", notes = "", requireDate = false,
+                               channels = Object.keys(CHANNELS), openDate = null }) {
+  const [form, setForm] = useState({ channel: channels[0], notes, next_action_date: "", noAnswer: false });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const today = localDate();
@@ -30,9 +33,14 @@ export function ContactModal({ target, onClose, onSaved, title = "Registrar cont
   return (
     <Modal title={title} onClose={onClose}>
       <form onSubmit={save} className="form-grid">
+        {openDate && (
+          <p className="contact-open span-2">
+            Retorno marcado para <strong>{dateBR(openDate)}</strong>. Salvar este contato conclui esse retorno.
+          </p>
+        )}
         <Field label="Canal" span={2}>
           <select value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })}>
-            {Object.entries(CHANNELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+            {channels.map((k) => <option key={k} value={k}>{CHANNELS[k]}</option>)}
           </select>
         </Field>
         {target.customer_id && (
@@ -46,7 +54,7 @@ export function ContactModal({ target, onClose, onSaved, title = "Registrar cont
             value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </Field>}
         <div className="field span-2">
-          <span>{requireDate ? "Retornar em" : "Retornar em (opcional)"}</span>
+          <span>{requireDate ? "Retornar em" : openDate ? "Próximo retorno (opcional)" : "Retornar em (opcional)"}</span>
           <div className="contact-next">
             <input type="date" aria-label="Retornar em" required={requireDate} min={today} value={form.next_action_date}
               onChange={(e) => setForm({ ...form, next_action_date: e.target.value })} />
@@ -63,7 +71,7 @@ export function ContactModal({ target, onClose, onSaved, title = "Registrar cont
   );
 }
 
-export function ContactHistory({ target, onSaved, canAdd = true }) {
+export function ContactHistory({ target, onSaved, canAdd = true, channels }) {
   const query = target.lead_id ? `lead_id=${target.lead_id}` : `customer_id=${target.customer_id}`;
   const [list, setList] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -73,6 +81,7 @@ export function ContactHistory({ target, onSaved, canAdd = true }) {
     .then((r) => { setList(r.data); setError(""); })
     .catch((e) => setError(errorMessage(e)));
   useEffect(() => { setList(null); load(); }, [query]);
+  const openDate = list?.[0]?.next_action_date || null;  // the latest contact's date is the one open follow-up
 
   return (
     <div>
@@ -80,6 +89,11 @@ export function ContactHistory({ target, onSaved, canAdd = true }) {
         <h3>Contatos</h3>
         {canAdd && <button type="button" className="btn" onClick={() => setAdding(true)}>Registrar contato</button>}
       </div>
+      {openDate && (
+        <p className={`contact-open ${openDate < localDate() ? "late" : ""}`}>
+          {openDate < localDate() ? "Retorno atrasado desde" : "Retorno marcado para"} <strong>{dateBR(openDate)}</strong>
+        </p>
+      )}
       <ErrorBox msg={error} />
       {list && (list.length ? list.map((ct) => (
         <div key={ct.id} className="contact-item">
@@ -88,7 +102,7 @@ export function ContactHistory({ target, onSaved, canAdd = true }) {
           {ct.next_action_date && <small className="contact-due">Retornar em {dateBR(ct.next_action_date)}</small>}
         </div>
       )) : <p className="customer-panel-empty">Nenhum contato registrado ainda.</p>)}
-      {adding && <ContactModal target={target} onClose={() => setAdding(false)}
+      {adding && <ContactModal target={target} channels={channels} openDate={openDate} onClose={() => setAdding(false)}
         onSaved={() => { setAdding(false); load(); onSaved?.(); }} />}
     </div>
   );

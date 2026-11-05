@@ -4,7 +4,7 @@ A lead's seller is never stored: it's the active seller whose region (seller_cit
 lead's city, so moving a city between sellers moves its leads with no migration.
 Spec: docs/superpowers/specs/2026-10-16-prospeccao-crm-design.md"""
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import HTTPException
@@ -28,15 +28,34 @@ def normalize_cnpj(value: str | None) -> str:
     return re.sub(r"[^0-9A-Za-z]", "", value or "").upper()
 
 
-def city_owners(db: Session) -> dict[tuple[str, str], User]:
-    """(city_key, state) -> the ACTIVE seller whose region has that city."""
+def city_owners(db: Session) -> dict[tuple[str, str], list[User]]:
+    """(city_key, state) -> the ACTIVE sellers whose region has that city (a city may be in several regions)."""
     rows = db.query(SellerCity).join(User, SellerCity.user_id == User.id).options(contains_eager(SellerCity.user)) \
-             .filter(User.active.is_(True), User.role.in_(REGION_ROLES)).all()
-    return {(r.city_key, r.state): r.user for r in rows}
+             .filter(User.active.is_(True), User.role.in_(REGION_ROLES)).order_by(User.name).all()
+    owners: dict[tuple[str, str], list[User]] = defaultdict(list)
+    for r in rows:
+        if r.user not in owners[(r.city_key, r.state)]:
+            owners[(r.city_key, r.state)].append(r.user)
+    return owners
 
 
-def lead_owner(owners: dict[tuple[str, str], User], lead: Lead) -> User | None:
-    return owners.get((lead.city_key, lead.state))
+def lead_sellers(owners: dict[tuple[str, str], list[User]], lead: Lead) -> list[User]:
+    return owners.get((lead.city_key, lead.state), [])
+
+
+def lead_owner(owners: dict[tuple[str, str], list[User]], lead: Lead) -> User | None:
+    """The seller the admin released it to (while their region still has the city); otherwise the city's
+    seller when there is just one. A city in several regions has no single owner until the admin picks one."""
+    sellers = lead_sellers(owners, lead)
+    if lead.seller_id:
+        return next((u for u in sellers if u.id == lead.seller_id), None)
+    return sellers[0] if len(sellers) == 1 else None
+
+
+def can_work(owners: dict[tuple[str, str], list[User]], lead: Lead, user_id: int) -> bool:
+    """A seller works a lead of a city in their region, unless it was released to someone else.
+    Leads released before seller_id existed (NULL) stay with every seller of the city."""
+    return any(u.id == user_id for u in lead_sellers(owners, lead)) and lead.seller_id in (None, user_id)
 
 
 def customer_cnpjs(db: Session) -> set[str]:
@@ -60,8 +79,7 @@ def visible_lead(db: Session, user: User, lead_id: int) -> Lead:
     if lead and user.role != "admin":
         if lead.status in ADMIN_QUEUE:  # awaiting admin release: invisible to sellers
             raise HTTPException(404, "Lead não encontrado.")
-        owner = lead_owner(city_owners(db), lead)
-        if not owner or owner.id != user.id:
+        if not can_work(city_owners(db), lead, user.id):
             lead = None
     if not lead:
         raise HTTPException(404, "Lead não encontrado.")
@@ -170,7 +188,7 @@ def _follow_up_checker(db: Session, user: User, everyone: bool):
                 leads_ok[who.id] = leads_open(db, who)  # Prospecção off for sellers: their lead follow-ups wait too
             if not leads_ok[who.id] or (open_only and lead.status not in (QUEUE if admin else ("new",))):
                 return None
-            return (lead, who) if admin or getattr(lead_owner(owners, lead), "id", None) == who.id else None
+            return (lead, who) if admin or can_work(owners, lead, who.id) else None
         customer = ct.customer
         return (customer, who) if customer is not None and (admin or customer.owner_id == who.id) else None
     return check
@@ -211,20 +229,25 @@ def _normalized_document():
 
 
 def ranked_leads(db: Session, user: User, city: str = "", search: str = "",
-                 seller_id: int | None = None, status: str = "new"):
+                 seller_id: int | None = None, status: str | None = "new"):
     """Query of the leads the user may see, best first: stored score, then more active customers in the
-    city, opened most recently, name. `seller_id` (admin) 0 = no seller. Callers .count() / .offset().limit()."""
-    q = db.query(Lead).filter(Lead.status == status,
-                              ~Lead.cnpj.in_(select(_normalized_document()).where(Customer.document.isnot(None))))
+    city, opened most recently, name. `seller_id` (admin) 0 = no seller; `status` None = every status
+    (to count them grouped). Callers .count() / .offset().limit()."""
+    q = db.query(Lead).filter(or_(  # NULL NOT IN (...) is never true: leads without a CNPJ need their own case
+        Lead.cnpj.is_(None), ~Lead.cnpj.in_(select(_normalized_document()).where(Customer.document.isnot(None)))))
+    if status is not None:
+        q = q.filter(Lead.status == status)
     # a lead's seller: the ACTIVE seller whose region has its city (see city_owners)
     owner = select(SellerCity.id).join(User, SellerCity.user_id == User.id).where(
         SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state, User.active.is_(True), User.role.in_(REGION_ROLES))
+    def worked_by(uid: int):  # same rule as can_work
+        return and_(owner.where(SellerCity.user_id == uid).exists(), or_(Lead.seller_id.is_(None), Lead.seller_id == uid))
     if user.role != "admin":
-        q = q.filter(owner.where(SellerCity.user_id == user.id).exists())
+        q = q.filter(worked_by(user.id))
     elif seller_id == 0:
         q = q.filter(~owner.exists())
     elif seller_id is not None:
-        q = q.filter(owner.where(SellerCity.user_id == seller_id).exists())
+        q = q.filter(worked_by(seller_id))
     if city.strip():  # typed in the Cidade pill: part of the name, accents ignored ("rio" -> Rio do Sul, Rio Negrinho)
         q = q.filter(Lead.city_key.contains(_city_key(city)))
     text = search.strip()
@@ -250,15 +273,28 @@ def released_this_week(db: Session, seller_id: int) -> int:
     the admin release the rest of the weekly quota (Configurações), so nobody gets thousands at once."""
     since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
     return db.query(Lead).join(SellerCity, and_(SellerCity.city_key == Lead.city_key, SellerCity.state == Lead.state)) \
-             .filter(SellerCity.user_id == seller_id, Lead.released_at >= since).count()
+             .filter(SellerCity.user_id == seller_id, Lead.released_at >= since,
+                     or_(Lead.seller_id.is_(None), Lead.seller_id == seller_id)).count()
 
 
-def lead_out(lead: Lead, owner: User | None) -> dict:
+def unworked_leads(db: Session, user: User) -> int:
+    """Leads released to the user's region that they haven't logged a contact on yet: the Painel's
+    "leads novos para visitar" and the Prospecção badge in the menu. Leads the seller added themselves
+    (no released_at) don't count. 0 while Prospecção is off for sellers: nowhere to go work them."""
+    if not leads_open(db, user):
+        return 0
+    touched = select(Contact.lead_id).where(Contact.user_id == user.id, Contact.lead_id.isnot(None))
+    q = ranked_leads(db, user, seller_id=user.id if user.role == "admin" else None)
+    return q.filter(Lead.released_at.isnot(None), ~Lead.id.in_(touched)).count()
+
+
+def lead_out(lead: Lead, owner: User | None, sellers: list[User] = ()) -> dict:
+    """sellers: every seller whose region has the lead's city — the choices for Liberar para."""
     return {"id": lead.id, "cnpj": lead.cnpj, "name": lead.name, "phone": lead.phone, "email": lead.email,
-            "address": lead.address, "city": lead.city, "state": lead.state, "opened_at": lead.opened_at, "size": lead.size,
+            "address": lead.address, "notes": lead.notes, "city": lead.city, "state": lead.state, "opened_at": lead.opened_at, "size": lead.size,
             "capital": float(lead.capital) if lead.capital is not None else None, "in_debt": lead.in_debt,
             "score": getattr(lead, "score", None), "status": lead.status, "seller_id": owner.id if owner else None,
-            "seller_name": owner.name if owner else None}
+            "seller_name": owner.name if owner else None, "sellers": [{"id": u.id, "name": u.name} for u in sellers]}
 
 
 def due_follow_ups(db: Session, user: User, today: date, everyone: bool = False, until: date | None = None) -> list[dict]:

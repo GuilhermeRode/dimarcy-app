@@ -1,18 +1,16 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { dateBR, initials, localDate, utcDateBR, whatsappUrl } from "../format";
 import { ErrorBox, PillSelect } from "../components/ui";
 import { CHANNELS, ContactModal } from "../components/Contacts";
 
-const NEXT_DAYS = 7;   // "Próximos": what's coming up this week
 const DONE_DAYS = 30;  // "Concluídos": handled in the last month
 const TABS = [["late", "Atrasados"], ["today", "Hoje"], ["next", "Próximos"], ["done", "Concluídos"]];
 const KINDS = [["", "Todos"], ["lead", "Leads"], ["customer", "Clientes"]];
 
 export default function FollowUps() {
-  const [due, setDue] = useState(null);    // late + today + next NEXT_DAYS days
+  const [due, setDue] = useState(null);    // late + today + every future one
   const [done, setDone] = useState(null);
   const [error, setError] = useState("");
   const [target, setTarget] = useState(null);
@@ -20,11 +18,10 @@ export default function FollowUps() {
   const [kind, setKind] = useState("");
   const [seller, setSeller] = useState("");
   const today = localDate();
-  const nav = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";  // sees every seller's follow-ups
 
-  const load = () => Promise.all([api.get("/contacts/due", { params: { days: NEXT_DAYS } }),
+  const load = () => Promise.all([api.get("/contacts/due", { params: { all: true } }),
                                   api.get("/contacts/done", { params: { days: DONE_DAYS } })])
     .then(([d, c]) => {
       setDue(d.data); setDone(c.data); setError("");
@@ -61,16 +58,13 @@ export default function FollowUps() {
           <p className="muted">{isAdmin ? "Retornos combinados por toda a equipe, leads e clientes." : "Contatos que você combinou de retomar, leads e clientes."}
             {" "}Registrar o novo contato tira da lista.</p>
         </div>
-        <div className="header-actions">
-          <button className="btn" onClick={() => nav("/leads")}>← Prospecção</button>
-        </div>
       </header>
       <ErrorBox msg={error} />
 
       {isAdmin && summary.length > 0 && (
         <table className="table followup-summary">
           <thead>
-            <tr><th>Vendedor</th><th>Atrasados</th><th>Hoje</th><th>Próximos {NEXT_DAYS} dias</th>
+            <tr><th>Vendedor</th><th>Atrasados</th><th>Hoje</th><th>Próximos</th>
               <th>Concluídos ({DONE_DAYS} dias)</th><th>No prazo</th></tr>
           </thead>
           <tbody>
@@ -118,12 +112,11 @@ export default function FollowUps() {
               <span className="customers-cell-main">
                 <span className="customer-avatar">{initials(r.name)}</span>
                 <span>
-                  <strong>{r.name}</strong>
-                  <small>
-                    {r.kind === "lead" ? "Lead" : "Cliente"}{isAdmin && ` · ${r.user_name}`}
-                    {tab === "done"
-                      ? ` · feito por ${r.done_by}: ${CHANNELS[r.channel] ?? r.channel}${r.notes ? ` — ${r.notes}` : ""}`
-                      : ` · último${r.set_by !== r.user_name ? ` (por ${r.set_by})` : ""}: ${CHANNELS[r.channel] ?? r.channel}${r.notes ? ` — ${r.notes}` : ""}`}
+                  <strong>{r.name} <span className="followup-kind">{r.kind === "lead" ? "Lead" : "Cliente"}</span></strong>
+                  {/* "Ana Souza · WhatsApp: retornar em uma semana" */}
+                  <small className="followup-desc">
+                    {isAdmin && <span className="followup-who">{r.user_name}</span>}
+                    {CHANNELS[r.channel] ?? r.channel}{r.notes && `: ${r.notes}`}
                   </small>
                 </span>
               </span>
@@ -137,10 +130,11 @@ export default function FollowUps() {
                 </span>
               )}
               <span className="followup-actions">
-                {tab !== "done" && wa && <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">WhatsApp</a>}
+                {tab !== "done" && wa && <a className="btn btn-compact" href={wa} target="_blank" rel="noopener noreferrer">WhatsApp</a>}
                 {tab !== "done" && (
-                  <button type="button" className="btn btn-primary"
-                    onClick={() => setTarget(r.lead_id ? { lead_id: r.lead_id } : { customer_id: r.customer_id })}>
+                  // blue only when it's due (Atrasados/Hoje); in Próximos a quiet outline, not a wall of blue
+                  <button type="button" className={`btn btn-compact ${tab === "next" ? "" : "btn-primary"}`}
+                    onClick={() => setTarget({ ...(r.lead_id ? { lead_id: r.lead_id } : { customer_id: r.customer_id }), openDate: r.next_action_date })}>
                     Registrar contato
                   </button>
                 )}
@@ -149,7 +143,8 @@ export default function FollowUps() {
           );
         })}
       </section>
-      {target && <ContactModal target={target} onClose={() => setTarget(null)} onSaved={() => { setTarget(null); load(); }} />}
+      {target && <ContactModal target={target.lead_id ? { lead_id: target.lead_id } : { customer_id: target.customer_id }}
+        openDate={target.openDate} onClose={() => setTarget(null)} onSaved={() => { setTarget(null); load(); }} />}
     </div>
   );
 }

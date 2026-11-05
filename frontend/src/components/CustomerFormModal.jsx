@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../api";
 import { Field, ErrorBox, Modal, useConfirm } from "./ui";
-import { customerFieldError, maskDocument, maskPhone, maskStateRegistration, stateRegistrationHint } from "../format";
+import { customerFieldError, maskDocument, maskPhone, maskStateRegistration, PRICE_TABLES, stateRegistrationHint } from "../format";
 
-export const EMPTY_CUSTOMER = { name: "", document: "", state_registration: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "" };
+export const EMPTY_CUSTOMER = { name: "", document: "", state_registration: "", phone: "", email: "", city: "", state: "", address: "", notes: "", owner_id: "", price_table: "wholesale" };
 
 // Pre-fills the customer form from the CNPJ (Receita Federal) once its 14th digit is typed: only empty fields,
 // never what was already typed. Purely a help: it never blocks typing or saving, and a failure is a quiet note.
@@ -59,6 +59,26 @@ export function StateRegistrationField({ value, uf, onChange, required = true })
   );
 }
 
+export const CustomerTypeField = ({ value, onChange }) => (
+  <Field label="Tipo de cliente" span={2}>
+    <select value={value || "wholesale"} onChange={(e) => onChange(e.target.value)}>
+      {Object.entries(PRICE_TABLES).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+    </select>
+  </Field>
+);
+
+// A retail customer only has these fields; what a former wholesale customer already has stays saved.
+export const RetailCustomerFields = ({ form, set }) => (
+  <>
+    <Field label="Nome" span={2}><input required value={form.name || ""} onChange={(e) => set({ name: e.target.value })} /></Field>
+    <Field label="CPF (opcional)"><input inputMode="numeric" placeholder="000.000.000-00" value={form.document || ""}
+      onChange={(e) => set({ document: maskDocument(e.target.value) })} /></Field>
+    <Field label="Telefone"><input required type="tel" inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" value={form.phone || ""}
+      onChange={(e) => set({ phone: maskPhone(e.target.value) })} /></Field>
+    <Field label="Endereço (opcional)" span={2}><input value={form.address || ""} onChange={(e) => set({ address: e.target.value })} /></Field>
+  </>
+);
+
 export default function CustomerFormModal({ initial, isAdmin, forOrder = false, onClose, onSaved, onConflict, submitUrl = "/customers" }) {
   const [confirmDialog, ask] = useConfirm();
   const [form, setForm] = useState({ ...initial, owner_id: initial.owner_id || "" });
@@ -99,6 +119,8 @@ export default function CustomerFormModal({ initial, isAdmin, forOrder = false, 
     <>
     <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={onClose} wide>
       <form onSubmit={save} className="form-grid">
+        <CustomerTypeField value={form.price_table} onChange={(v) => setForm({ ...form, price_table: v })} />
+        {form.price_table === "retail" ? <RetailCustomerFields form={form} set={(v) => setForm({ ...form, ...v })} /> : <>
         {!required && (
           <p className="field-note span-2">Como administrador, você pode salvar mesmo com campos em branco. Só o nome é obrigatório.</p>
         )}
@@ -126,6 +148,7 @@ export default function CustomerFormModal({ initial, isAdmin, forOrder = false, 
         </Field>
         <Field label="Endereço" span={2}><input required={required} {...f("address")} /></Field>
         <Field label="Observações (opcional)" span={2}><textarea rows={3} {...f("notes")} /></Field>
+        </>}
         <div className="span-2"><ErrorBox msg={error} /></div>
         <div className="actions span-2">
           {form.id && <button type="button" className="btn danger" onClick={remove}>Excluir</button>}

@@ -23,7 +23,7 @@ TODAY = date(2026, 10, 7)
 clock.today_br = lambda: TODAY
 
 # ---- customer_status boundaries ----
-assert customer_status(None, TODAY) == "never_ordered"
+assert customer_status(None, TODAY) == "inactive"
 assert customer_status(TODAY, TODAY) == "active"
 assert customer_status(TODAY - timedelta(days=60), TODAY) == "active"
 assert customer_status(TODAY - timedelta(days=61), TODAY) == "at_risk"
@@ -74,8 +74,8 @@ with TestClient(app) as c:
     # ---- empty database renders ----
     r = c.get("/api/dashboard", headers=admin)
     assert r.status_code == 200, r.text
-    assert r.json()["alerts"] == {"customers_at_risk": 0, "customers_never_ordered": 0,
-                                  "late_orders": 0, "oldest_late_days": None, "follow_ups_due": 0}
+    assert r.json()["alerts"] == {"customers_at_risk": 0,
+                                  "late_orders": 0, "oldest_late_days": None, "follow_ups_due": 0, "new_leads": 0}
     assert c.get("/api/customers/overview", headers=admin).json() == []
 
     # ---- catalog ----
@@ -122,8 +122,8 @@ with TestClient(app) as c:
     ov_a = {r["name"]: r for r in c.get("/api/customers/overview", headers=seller_a).json()}
     assert {n: r["status"] for n, r in ov_a.items()} == {
         "Ácida Modas": "active", "Cliente 60": "active", "Cliente 61": "at_risk", "Cliente 150": "at_risk",
-        "Cliente 151": "inactive", "Só Orçamento": "never_ordered", "Nunca Comprou": "never_ordered",
-        "Atendido Pelo Admin": "never_ordered"}, ov_a
+        "Cliente 151": "inactive", "Só Orçamento": "inactive", "Nunca Comprou": "inactive",
+        "Atendido Pelo Admin": "inactive"}, ov_a
     assert ov_a["Atendido Pelo Admin"]["recent_orders"] == []  # admin's sale is not Ana's
     acida = ov_a["Ácida Modas"]
     assert acida["orders"] == 5 and acida["total"] == 500.0  # delivered + confirmed x2 + in_production + shipped
@@ -151,8 +151,8 @@ with TestClient(app) as c:
 
     # ---- dashboard alerts agree with the overview ----
     d = c.get("/api/dashboard", headers=seller_a).json()
-    assert d["alerts"] == {"customers_at_risk": 2, "customers_never_ordered": 3,
-                           "late_orders": 2, "oldest_late_days": 3, "follow_ups_due": 0}, d["alerts"]
+    assert d["alerts"] == {"customers_at_risk": 2,
+                           "late_orders": 2, "oldest_late_days": 3, "follow_ups_due": 0, "new_leads": 0}, d["alerts"]
     da = c.get("/api/dashboard", headers=admin).json()
     assert da["alerts"]["customers_at_risk"] == sum(r["status"] == "at_risk" for r in ov_admin.values())
 

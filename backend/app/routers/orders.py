@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from .. import clock, finance
 from ..database import get_db
 from ..mailer import send_order_created_emails, send_order_delivered_email, send_order_updated_emails
-from ..models import ORDER_STATUSES, AppSettings, Customer, FinancialEntry, Order, OrderItem, Product, User
-from ..schemas import OrderIn, StatusIn
+from ..models import ORDER_STATUSES, AppSettings, Batch, Customer, FinancialEntry, Order, OrderItem, Product, User
+from ..schemas import OrderBatchIn, OrderIn, StatusIn
 from ..sales import late_filter, visible_orders
 from ..security import get_current_user, require_admin
 from ..settings_store import allowed_price_tables, get_app_settings, retail_price
@@ -28,7 +28,8 @@ def summary(o: Order) -> dict:
         "customer_id": o.customer_id, "customer_name": o.customer.name,
         "customer_city": o.customer.city, "customer_state": o.customer.state,
         "seller_name": o.seller.name, "seller_avatar_url": o.seller.avatar_url, "pieces": o.pieces,
-        "gross": o.gross, "discount": float(o.discount or 0), "total": o.total,
+        "gross": o.gross, "discount": float(o.discount or 0), "total": o.total, "price_table": o.price_table,
+        "batch_id": o.batch_id, "batch_name": o.batch.name if o.batch else None,
     }
 
 
@@ -36,7 +37,6 @@ def full(o: Order) -> dict:
     d = summary(o)
     d["payment_method"] = o.payment_method
     d["payment_terms"] = o.payment_terms
-    d["price_table"] = o.price_table
     d["notes"] = o.notes
     d["notify_customer"] = o.notify_customer
     d["items"] = [{
@@ -86,7 +86,7 @@ def _check_customer(db: Session, customer_id: int, user: User, require_email: bo
     customer = db.get(Customer, customer_id)
     if not customer or (user.role != "admin" and customer.owner_id != user.id):
         raise HTTPException(400, "Customer not found.")
-    if require_email and not (customer.email or "").strip():
+    if require_email and customer.price_table != "retail" and not (customer.email or "").strip():
         raise HTTPException(400, "Este cliente não tem e-mail cadastrado. Cadastre o e-mail do cliente antes de lançar o pedido.")
 
 
@@ -207,14 +207,13 @@ def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = 
     items = _build_items(data, db, user, app_settings, existing_order=o, price_table=o.price_table)
     _check_discount(data.discount, items, app_settings)
     o.items = items
-    o.customer_id, o.status, o.discount, o.notes = data.customer_id, data.status, data.discount, data.notes
+    o.customer_id, o.discount, o.notes = data.customer_id, data.discount, data.notes
     o.payment_method, o.payment_terms = data.payment_method, data.payment_terms
     o.date = data.date or o.date
     o.delivery_date = data.delivery_date
     if data.notify_customer is not None:
         o.notify_customer = data.notify_customer
-    db.flush()
-    _sync_installments(db, o, old_status)
+    set_status(db, o, data.status)  # same rules as the board: receivables, leaving its batch
     db.commit()
     db.refresh(o)
     if o.status == "delivered" and old_status != "delivered":
@@ -224,18 +223,45 @@ def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = 
     return full(o)
 
 
-@router.patch("/{oid}/status", dependencies=[Depends(require_admin)])
-def change_status(oid: int, data: StatusIn, db: Session = Depends(get_db)):
-    if data.status not in ORDER_STATUSES:
+def set_status(db: Session, o: Order, status: str) -> bool:
+    """Moves an order to `status` with its receivables; no commit. True when it just became delivered:
+    the caller sends send_order_delivered_email after committing."""
+    if status not in ORDER_STATUSES:
         raise HTTPException(400, "Invalid status.")
-    o = _find(oid, db)
     old_status = o.status
-    o.status = data.status
+    o.status = status
+    if o.batch and o.batch.status != status:  # moved on its own: it leaves the batch's column, so the batch too
+        o.batch_id = None
     db.flush()
     _sync_installments(db, o, old_status)
+    return status == "delivered" and old_status != "delivered"
+
+
+@router.patch("/{oid}/status", dependencies=[Depends(require_admin)])
+def change_status(oid: int, data: StatusIn, db: Session = Depends(get_db)):
+    o = _find(oid, db)
+    delivered = set_status(db, o, data.status)
     db.commit()
     db.refresh(o)
-    if o.status == "delivered" and old_status != "delivered":
+    if delivered:
+        send_order_delivered_email(o)
+    return full(o)
+
+
+@router.put("/{oid}/batch", dependencies=[Depends(require_admin)])
+def change_batch(oid: int, data: OrderBatchIn, db: Session = Depends(get_db)):
+    """Puts the order in a batch (it follows the batch's column) or takes it out (it stays where it is)."""
+    o = _find(oid, db)
+    delivered = False
+    if data.batch_id is not None:
+        batch = db.get(Batch, data.batch_id)
+        if not batch:
+            raise HTTPException(404, "Lote não encontrado.")
+        delivered = set_status(db, o, batch.status)
+    o.batch_id = data.batch_id
+    db.commit()
+    db.refresh(o)
+    if delivered:
         send_order_delivered_email(o)
     return full(o)
 

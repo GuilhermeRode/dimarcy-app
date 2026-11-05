@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, select, text
+from sqlalchemy.schema import CreateTable
 
 from .config import settings
 from .database import Base, SessionLocal, engine
@@ -13,8 +14,8 @@ from .br_format import extract_state_registration, format_document, format_phone
 from . import clock
 from .lead_import import clear_interrupted
 from .leads import NO_ANSWER, refresh_scores
-from .models import Contact, Customer, Lead, Product, User, size_key
-from .routers import auth, colors, contacts, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
+from .models import Contact, Customer, Lead, Product, SellerCity, User, size_key
+from .routers import auth, batches, colors, contacts, customers, dashboard, finance, leads, orders, products, settings as settings_router, users
 from .security import hash_password
 from .settings_store import get_app_settings
 from .uploads import backfill_thumbs
@@ -32,6 +33,43 @@ def _ensure_columns(table: str, columns: dict[str, str]):
         for name, ddl in columns.items():
             if name not in existing:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+
+
+def _rebuild_sqlite_table(table):
+    """SQLite can't alter a column's NOT NULL or a constraint: recreate the table from the model and copy
+    the rows over (foreign keys aren't enforced, so references keep pointing at the same ids)."""
+    name, columns = table.name, ", ".join(c.name for c in table.columns)
+    with engine.begin() as conn:
+        conn.execute(text(str(CreateTable(table).compile(engine)).replace(f"CREATE TABLE {name}", f"CREATE TABLE {name}_new", 1)))
+        conn.execute(text(f"INSERT INTO {name}_new ({columns}) SELECT {columns} FROM {name}"))
+        conn.execute(text(f"DROP TABLE {name}"))
+        conn.execute(text(f"ALTER TABLE {name}_new RENAME TO {name}"))
+        for index in table.indexes:
+            index.create(conn)
+
+
+def _optional_lead_cnpj():
+    """Leads typed by hand may have no CNPJ. Idempotent."""
+    if next(c for c in inspect(engine).get_columns("leads") if c["name"] == "cnpj")["nullable"]:
+        return
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE leads ALTER COLUMN cnpj DROP NOT NULL"))
+        return
+    _rebuild_sqlite_table(Lead.__table__)
+
+
+def _seller_cities_per_user():
+    """A city may now be in several sellers' regions: unique (city_key, state) became unique per seller
+    (user_id, city_key, state). Idempotent."""
+    if "uq_seller_cities_city" not in {u["name"] for u in inspect(engine).get_unique_constraints("seller_cities")}:
+        return
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE seller_cities DROP CONSTRAINT uq_seller_cities_city"))
+            conn.execute(text("ALTER TABLE seller_cities ADD CONSTRAINT uq_seller_cities_user_city UNIQUE (user_id, city_key, state)"))
+        return
+    _rebuild_sqlite_table(SellerCity.__table__)
 
 
 def _monthly_to_annual_goal(table: str):
@@ -98,12 +136,14 @@ async def lifespan(app: FastAPI):
                               "annual_goal": "NUMERIC(12,2)", "price_table": "VARCHAR(10) DEFAULT 'wholesale'",
                               "quick_quantity": "BOOLEAN DEFAULT TRUE"})
     _ensure_columns("colors", {"hex2": "VARCHAR(7)"})
-    _ensure_columns("customers", {"state_registration": "VARCHAR(30)"})
+    _ensure_columns("customers", {"state_registration": "VARCHAR(30)",
+                                  "price_table": "VARCHAR(10) DEFAULT 'wholesale'"})
     _ensure_columns("financial_entries", {"attachment": "VARCHAR(80)"})
     _tidy_customers()
     _sort_product_sizes()
     _ensure_columns("orders", {"price_table": "VARCHAR(10) DEFAULT 'wholesale'",
-                               "notify_customer": "BOOLEAN DEFAULT TRUE"})
+                               "notify_customer": "BOOLEAN DEFAULT TRUE",
+                               "batch_id": "INTEGER REFERENCES batches(id)"})
     _ensure_columns("app_settings", {"annual_goal": "NUMERIC(12,2) DEFAULT 0",
                                      "retail_markup_percent": "NUMERIC(6,2) DEFAULT 50",
                                      "lead_cnaes": "VARCHAR(200) DEFAULT '4781400'",
@@ -128,7 +168,11 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE app_settings ALTER COLUMN last_lead_import_scope TYPE VARCHAR(500)"))
     _ensure_columns("leads", {"size": "VARCHAR(5) DEFAULT ''", "capital": "NUMERIC(14,2)", "in_debt": "BOOLEAN",
                               "released_at": "TIMESTAMP", "score": "INTEGER", "city_active": "INTEGER",
-                              "edited": "BOOLEAN DEFAULT FALSE"})
+                              "edited": "BOOLEAN DEFAULT FALSE", "notes": "TEXT", "seller_id": "INTEGER",
+                              "discard_notes": "TEXT", "discarded_by_id": "INTEGER", "discarded_at": "TIMESTAMP",
+                              "discarded_from": "VARCHAR(10)"})
+    _optional_lead_cnpj()
+    _seller_cities_per_user()
     _drop_lead_phones()
     _contacted_leads()
     with SessionLocal() as db:
@@ -203,7 +247,7 @@ app.add_middleware(
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-for r in (auth, users, customers, colors, products, orders, dashboard, finance, leads, contacts, settings_router):
+for r in (auth, users, customers, colors, products, orders, batches, dashboard, finance, leads, contacts, settings_router):
     app.include_router(r.router, prefix="/api")
 
 
