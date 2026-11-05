@@ -12,6 +12,7 @@ import OrderDetail from "./pages/OrderDetail";
 import Customers from "./pages/Customers";
 import Leads from "./pages/Leads";
 import FollowUps from "./pages/FollowUps";
+import DiscardedLeads from "./pages/DiscardedLeads";
 import Products from "./pages/Products";
 import TopProducts from "./pages/TopProducts";
 import Colors from "./pages/Colors";
@@ -66,6 +67,7 @@ const router = createHashRouter(createRoutesFromElements(
       <Route path="customers" element={<Customers />} />
       <Route path="leads" element={<Leads />} />
       <Route path="follow-ups" element={<FollowUps />} />
+      <Route path="leads/discarded" element={<DiscardedLeads />} />
       {!EXCLUDE_MAP && (
         <Route path="customers-by-city" element={
           <Protected admin><Suspense fallback={null}><CustomersByCity /></Suspense></Protected>

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..database import get_db
-from ..leads import due_follow_ups, ranked_leads
+from ..leads import due_follow_ups, ranked_leads, unworked_leads
 from ..models import SALE_STATUSES, Order, User, size_key
 from ..sales import late_filter, visible_orders
 from ..security import get_current_user
@@ -60,6 +60,16 @@ def _sales_series(sales: list[Order], start: date, end: date) -> list[dict]:
 def _seller_row(u: User, year_sales: dict[int, float]) -> dict:
     return {"id": u.id, "name": u.name, "avatar_url": u.avatar_url, "goal": _goal(u.annual_goal),
             "goal_value": round(year_sales.get(u.id, 0.0), 2), "orders": 0, "pieces": 0, "value": 0.0}
+
+
+@router.get("/badges")
+def badges(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """The menu badges (Retornos, Oportunidades) and the once-a-day pop-up (Layout): the user's own new leads and
+    follow-ups due today or late (follow_ups_late: the late part of follow_ups_due)."""
+    today = clock.today_br()
+    due = due_follow_ups(db, user, today)
+    return {"new_leads": unworked_leads(db, user), "follow_ups_due": len(due),
+            "follow_ups_late": sum(f["next_action_date"] < today for f in due)}
 
 
 @router.get("")
@@ -170,6 +180,7 @@ def dashboard(start: date | None = None, end: date | None = None, db: Session = 
             "late_orders": len(late),
             "oldest_late_days": max(((today - o.delivery_date).days for o in late), default=None),
             "follow_ups_due": sum(f["next_action_date"] <= today for f in follow_ups),  # same as Retornos
+            "new_leads": unworked_leads(db, user),
         },
         # the Painel's "Retornos pendentes" card: leads to call back, late / today / coming week (customers come from the overview)
         "lead_follow_ups": {

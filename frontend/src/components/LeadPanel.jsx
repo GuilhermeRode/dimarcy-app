@@ -18,6 +18,7 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
   const [waOpened, setWaOpened] = useState(false);
   const [history, setHistory] = useState(0);  // bumped to reload the contact list
   const [waiting, setWaiting] = useState(false);  // "Aguardar": the store asked to be called back later
+  const [adding, setAdding] = useState(false);  // "Registrar contato", next to WhatsApp (released leads)
   async function contactDone() {
     setReleaseError("");
     try {
@@ -53,6 +54,7 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
   }
   const pending = lead.status === "pending";  // the admin only sorts these: on to Primeiro contato, or out
   const releasable = isAdmin && lead.status === "contacted";  // only after the admin's first contact
+  const released = lead.status === "new";  // the seller's: only "Registrar contato", by WhatsApp or a visit
   const { user } = useAuth();
   const firstName = (user?.name || "").split(" ")[0];
   const wa = whatsappUrl(lead.phone, `Olá, tudo bem? Sou ${firstName} da Di Marcy. Gostaria de apresentar nossa `
@@ -71,6 +73,7 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
           {lead.in_debt && <span className="cstatus cstatus-risk">Dívida ativa</span>}
         </div>
       </div>
+      {lead.notes && <section className="lead-section"><h3>Observação</h3><p className="lead-notes">{lead.notes}</p></section>}
       {/* sections, two columns each, so a narrow (notebook) panel never leaves a button squeezed or stranded */}
       {!pending && <section className="lead-section">
         <h3>Contato</h3>
@@ -80,7 +83,8 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
             : <button type="button" className="btn" disabled title="Telefone não cadastrado ou inválido">WhatsApp</button>}
           {waCatalog && <a className="btn" href={waCatalog} target="_blank" rel="noopener noreferrer" onClick={() => setWaOpened(true)}>Enviar catálogo</a>}
           {wa && <button type="button" className="btn" onClick={noAnswer} title="Agenda nova tentativa em 7 dias; na 3ª a loja é descartada">Não respondeu</button>}
-          <button type="button" className="btn" onClick={() => setWaiting(true)} title="A loja pediu para falar depois: escolha quando retornar">Aguardar</button>
+          {!released && <button type="button" className="btn" onClick={() => setWaiting(true)} title="A loja pediu para falar depois: escolha quando retornar">Aguardar</button>}
+          {released && <button type="button" className="btn" onClick={() => setAdding(true)}>Registrar contato</button>}
           {waOpened && <button type="button" className="btn btn-primary" onClick={contactDone}>Contato feito</button>}
         </div>
       </section>}
@@ -116,10 +120,9 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
         {releaseError && <p className="muted" style={{ color: "var(--danger)" }}>{releaseError}</p>}
       </section>
       {/* in Primeiro contato the Contato buttons already log it: no "Registrar contato" */}
-      {!pending && <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} canAdd={lead.status !== "contacted"} />}
+      {!pending && <ContactHistory key={history} target={{ lead_id: lead.id }} onSaved={onContacted} canAdd={!released && lead.status !== "contacted"} />}
       <section className="lead-section">
         <h3>Dados da loja</h3>
-        {lead.notes && <p className="lead-notes">{lead.notes}</p>}
         <dl className="customer-panel-info">
           <dt>CNPJ</dt><dd>{formatCnpj(lead.cnpj) || "A confirmar"}</dd>
           <dt>Aberta em</dt><dd>{lead.opened_at ? dateBR(lead.opened_at) : "—"}</dd>
@@ -135,6 +138,8 @@ export default function LeadPanel({ lead, isAdmin, sellers = [], catalogUrl, onC
       </section>
       {waiting && <ContactModal target={{ lead_id: lead.id }} title="Aguardar retorno" notes="Pediu para retornar depois" requireDate
         onClose={() => setWaiting(false)} onSaved={() => { setWaiting(false); setHistory((n) => n + 1); onContacted?.(); }} />}
+      {adding && <ContactModal target={{ lead_id: lead.id }} channels={["whatsapp", "visit"]} openDate={lead.next_action_date}
+        onClose={() => setAdding(false)} onSaved={() => { setAdding(false); setHistory((n) => n + 1); onContacted?.(); }} />}
     </aside>
   );
 }

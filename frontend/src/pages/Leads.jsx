@@ -11,7 +11,7 @@ const PAGE_SIZE = 50;
 const MAX_BULK = 500;  // the API's limit for release/discard
 export const sellerLabel = (u) => (u.role === "admin" ? `${u.name} (admin)` : u.name);  // admins can get leads too
 // Keys match the backend's DISCARD_REASONS
-const DISCARD_REASONS = { closed: "Loja fechou", not_target: "Não é o nosso público", competitor: "Já compra de concorrente",
+export const DISCARD_REASONS = { closed: "Loja fechou", not_target: "Não é o nosso público", competitor: "Já compra de concorrente",
   not_recommended: "Não recomendada", no_answer: "Não respondeu (3 tentativas)", other: "Outro" };
 const AUTO_REASONS = ["not_recommended", "no_answer"];  // set by the admin's queue / the "Não respondeu" button
 
@@ -218,7 +218,7 @@ export default function Leads() {
         setNotice(`${r.discarded} ${r.discarded === 1 ? "loja tirada" : "lojas tiradas"} da fila. Elas não voltam nas próximas importações.`);
         return;
       }
-      await api.post(`/leads/${discarding.id}/discard`, { reason: discarding.reason });
+      await api.post(`/leads/${discarding.id}/discard`, { reason: discarding.reason, notes: discarding.notes.trim() || null });
       drop(discarding.id);
       setDiscarding(null);
       setNotice("Lead descartado. Ele não volta nas próximas importações.");
@@ -232,7 +232,7 @@ export default function Leads() {
     <div className="page">
       <header className="page-header">
         <div className="leads-title">
-          <h1>Prospecção</h1>
+          <h1>{isAdmin ? "Prospecção" : "Oportunidades"}</h1>
           {isAdmin && statusError && !importCfg && <p className="muted import-status">Não foi possível carregar o status da importação.</p>}
           {isAdmin && importCfg && (
             <p className="muted import-status">
@@ -246,9 +246,9 @@ export default function Leads() {
         </div>
         <div className="header-actions">
           {(isAdmin || myCities.length > 0) && <button className="btn btn-primary" onClick={() => setEditing({ name: "", phone: "", notes: "",
-            cnpj: "", city: "", state: "" })}>+ Novo lead</button>}
+            cnpj: "", city: "", state: "" })}>{isAdmin ? "+ Novo lead" : "+ Nova oportunidade"}</button>}
           {isAdmin && <button className="btn" onClick={importNow} disabled={!!importCfg?.lead_import_started_at}>Atualizar agora</button>}
-          <button className="btn" onClick={() => nav("/follow-ups")}>Retornos</button>
+          <button className="btn" onClick={() => nav("/leads/discarded")}>Descartados</button>
         </div>
       </header>
 
@@ -371,7 +371,8 @@ export default function Leads() {
               }}
               onEdit={() => setEditing({ id: selected.id, name: selected.name, phone: selected.phone || "",
                 email: selected.email || "", address: selected.address || "", notes: selected.notes || "", cnpj: "", noCnpj: !selected.cnpj })}
-              onDiscard={() => setDiscarding({ id: selected.id, name: selected.name, reason: "closed" })}
+              onDiscard={() => setDiscarding({ id: selected.id, name: selected.name, reason: "closed", notes: "",
+                needNotes: selected.status === "new" })}
               onOrder={() => setConverting({
                 ...EMPTY_CUSTOMER, name: selected.name, document: formatCnpj(selected.cnpj),
                 phone: selected.phone || "", email: selected.email || "", city: selected.city,
@@ -446,6 +447,13 @@ export default function Leads() {
                   .map(([k, label]) => <option key={k} value={k}>{label}</option>)}
               </select>
             </Field>
+            {!discarding.ids && (
+              <Field label={discarding.needNotes ? "Explique o motivo" : "Explique o motivo (opcional)"} span={2}>
+                <textarea rows={3} maxLength={500} required={discarding.needNotes}
+                  placeholder="Ex.: a dona disse que só compra da marca X; loja virou outro ramo"
+                  value={discarding.notes} onChange={(e) => setDiscarding({ ...discarding, notes: e.target.value })} />
+              </Field>
+            )}
             <div className="span-2"><ErrorBox msg={discarding.error} /></div>
             <div className="actions span-2"><button className="btn danger" disabled={discarding.busy}>{discarding.ids ? "Tirar da fila" : "Descartar lead"}</button></div>
           </form>

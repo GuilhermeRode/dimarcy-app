@@ -1491,3 +1491,52 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
 .settings-checks { display: flex; gap: 8px 24px; flex-wrap: wrap; }
 .chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .ddd-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; align-items: center; }
+
+/* ---------- Oportunidades / Retornos: menu badges, the day's pop-up, open follow-up, Descartados ---------- */
+.alert-new { border-color: #d9480f; background: #fff1e6; }
+.alert-new .alert-dot { background: #d9480f; }
+/* the day's pop-up (Layout DailyAlert): navy header band, one tile per pending kind */
+.daily-alert { position: relative; padding: 0; width: min(420px, 100%); overflow: hidden; animation: daily-in .22s ease-out; }
+@keyframes daily-in { from { transform: translateY(10px) scale(.98); opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .daily-alert { animation: none; } }
+.daily-alert-x { position: absolute; top: 10px; right: 12px; color: #fff; opacity: .75; z-index: 1; }
+.daily-alert-x:hover { opacity: 1; }
+.daily-alert-head { background: linear-gradient(160deg, var(--navy), #163d73); color: #fff; padding: 26px 24px 22px; text-align: center; }
+.daily-alert-bell { display: inline-grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; margin-bottom: 10px;
+  background: rgba(255,255,255,.12); box-shadow: 0 0 0 6px rgba(255,255,255,.06); color: #ffd166; animation: daily-ring 1.2s ease-in-out .3s 2; }
+@keyframes daily-ring { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-14deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 80% { transform: rotate(4deg); } }
+@media (prefers-reduced-motion: reduce) { .daily-alert-bell { animation: none; } }
+.daily-alert-head h2 { margin: 0; font-size: 1.35rem; color: #fff; }
+.daily-alert-head p { margin: 6px 0 0; font-size: .88rem; color: rgba(255,255,255,.75); }
+.daily-alert-list { display: grid; gap: 10px; padding: 20px 20px 4px; }
+.daily-alert-row { --tone: var(--accent); --tone-bg: var(--accent-light);
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 14px; border-radius: 12px; cursor: pointer;
+  font: inherit; color: var(--ink); text-align: left; background: var(--surface); border: 1px solid var(--line);
+  transition: border-color .15s, box-shadow .15s, transform .15s; }
+.daily-alert-row:hover, .daily-alert-row:focus-visible { border-color: var(--tone); box-shadow: 0 6px 16px -10px var(--tone); transform: translateY(-1px); outline: none; }
+.daily-late { --tone: var(--danger); --tone-bg: var(--danger-light); }
+.daily-new { --tone: #d9480f; --tone-bg: #fff1e6; }
+.daily-alert-count { flex-shrink: 0; width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center;
+  background: var(--tone-bg); color: var(--tone); font-size: 1.3rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.daily-alert-text { display: grid; gap: 2px; min-width: 0; }
+.daily-alert-text strong { font-size: .98rem; }
+.daily-alert-text small { color: var(--muted); font-size: .82rem; }
+.daily-alert-go { margin-left: auto; color: var(--tone); font-size: 1.6rem; line-height: 1; }
+.daily-alert-later { display: block; width: calc(100% - 40px); margin: 14px 20px 20px; }
+.nav-badge { margin-left: auto; background: #d9480f; color: #fff; font-size: .75rem; font-weight: 700; min-width: 20px; height: 20px;
+  border-radius: 10px; display: inline-grid; place-items: center; padding: 0 6px; font-variant-numeric: tabular-nums; }
+.nav-badge-today { background: var(--accent); }
+.nav-badge-late { background: var(--danger); }
+/* the one open follow-up of a lead/customer, above its history and in the contact modal */
+.contact-open { margin: 6px 0; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); color: var(--accent-strong); font-size: 13px; }
+.contact-open.late { color: var(--danger); }
+/* Descartados: the reason, with what the seller wrote under it */
+.discard-why { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 200px; }
+.table-discarded td { vertical-align: top; }
+.table-discarded td:first-child { min-width: 200px; }
+.discard-why small { color: var(--muted); white-space: pre-wrap; }
+.followup-actions .btn-compact { padding: 6px 12px; font-size: 13px; }
+.followup-kind { margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 500; vertical-align: middle; }
+.followup-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.followup-who { color: var(--ink); font-weight: 600; }
+.followup-who::after { content: " · "; color: var(--muted); font-weight: 400; }

@@ -296,6 +296,10 @@ class Lead(Base):
     status: Mapped[str] = mapped_column(String(10), default="new", server_default="new")  # see LEAD_STATUSES
     size: Mapped[str] = mapped_column(String(5), default="", server_default="")  # mei | me | epp | large | ""
     discard_reason: Mapped[str | None] = mapped_column(String(30))  # see DISCARD_REASONS
+    discard_notes: Mapped[str | None] = mapped_column(Text)  # what the seller wrote (required for a released lead)
+    discarded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    discarded_at: Mapped[datetime | None] = mapped_column(DateTime)  # naive UTC; NULL for discards before the history
+    discarded_from: Mapped[str | None] = mapped_column(String(10))  # the status it left (Descartados lists "new" only)
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"))
     seen_at: Mapped[_dt.date] = mapped_column(Date)  # last import that listed this CNPJ
     capital: Mapped[float | None] = mapped_column(Numeric(14, 2))  # capital social (Receita Empresas)

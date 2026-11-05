@@ -71,7 +71,7 @@ with TestClient(app) as c:
     # ---- empty database renders ----
     r = c.get("/api/dashboard", headers=admin)
     assert r.status_code == 200, r.text
-    assert r.json()["alerts"] == {"late_orders": 0, "oldest_late_days": None, "follow_ups_due": 0}
+    assert r.json()["alerts"] == {"late_orders": 0, "oldest_late_days": None, "follow_ups_due": 0, "new_leads": 0}
     assert c.get("/api/customers/overview", headers=admin).json() == []
 
     # ---- catalog ----
@@ -147,7 +147,7 @@ with TestClient(app) as c:
 
     # ---- dashboard alerts agree with the overview ----
     d = c.get("/api/dashboard", headers=seller_a).json()
-    assert d["alerts"] == {"late_orders": 2, "oldest_late_days": 3, "follow_ups_due": 0}, d["alerts"]
+    assert d["alerts"] == {"late_orders": 2, "oldest_late_days": 3, "follow_ups_due": 0, "new_leads": 0}, d["alerts"]
 
     # ---- period validation ----
     assert c.get("/api/dashboard", headers=admin, params={"start": "2026-10-07", "end": "2026-10-01"}).status_code == 400
