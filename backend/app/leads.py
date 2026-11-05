@@ -270,6 +270,15 @@ def released_this_week(db: Session, seller_id: int) -> int:
                      or_(Lead.seller_id.is_(None), Lead.seller_id == seller_id)).count()
 
 
+def unworked_leads(db: Session, user: User) -> int:
+    """Leads released to the user's region that they haven't logged a contact on yet: the Painel's
+    "novas oportunidades" and the Oportunidades badge in the menu. Leads the seller added themselves
+    (no released_at) don't count."""
+    touched = select(Contact.lead_id).where(Contact.user_id == user.id, Contact.lead_id.isnot(None))
+    q = ranked_leads(db, user, seller_id=user.id if user.role == "admin" else None)
+    return q.filter(Lead.released_at.isnot(None), ~Lead.id.in_(touched)).count()
+
+
 def lead_out(lead: Lead, owner: User | None, sellers: list[User] = ()) -> dict:
     """sellers: every seller whose region has the lead's city — the choices for Liberar para. Until it is
     released to one of them, a shared city's lead is named after all of them."""

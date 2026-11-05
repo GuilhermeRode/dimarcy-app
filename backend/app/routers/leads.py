@@ -95,13 +95,35 @@ def release(data: ReleaseToIn, db: Session = Depends(get_db)):
             "skipped_other_seller": other, "skipped_choose": choose, "cities_added": sorted(set(added))}
 
 
-@router.post("/discard", dependencies=[Depends(require_admin)])
-def discard_many(data: BulkDiscardIn, db: Session = Depends(get_db)):
+def _discarded(user: User, reason: str, notes: str | None = None) -> dict:
+    # discarded_from = Lead.status: SQL's SET reads the row before the update, so it's the tab it left
+    return {"status": "discarded", "discard_reason": reason, "discard_notes": (notes or "").strip() or None,
+            "discarded_by_id": user.id, "discarded_at": lead_import.utcnow(), "discarded_from": Lead.status}
+
+
+@router.post("/discard")
+def discard_many(data: BulkDiscardIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     """The admin takes leads out of the queue ("Não recomendar"); the import never brings them back."""
     done = db.query(Lead).filter(Lead.id.in_(data.ids), Lead.status.in_(QUEUE)) \
-             .update({"status": "discarded", "discard_reason": data.reason}, synchronize_session=False)
+             .update(_discarded(user, data.reason, data.notes), synchronize_session=False)
     db.commit()
     return {"discarded": done}
+
+
+@router.get("/discarded")
+def discarded(seller_id: int | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Descartados: released leads (the Liberados tab) someone took out, when and why. The admin sees everyone's
+    (seller_id: one person's), a seller only their own. The admin's queue (Pendentes/Primeiro contato) is left out."""
+    by = seller_id if user.role == "admin" else user.id
+    q = db.query(Lead, User).join(User, User.id == Lead.discarded_by_id) \
+          .filter(Lead.status == "discarded", Lead.discarded_from == "new")
+    if by is not None:
+        q = q.filter(Lead.discarded_by_id == by)
+    # ponytail: newest 300, no paging; add offset when someone needs older ones
+    return [{"id": lead.id, "name": lead.name, "city": lead.city, "state": lead.state, "phone": lead.phone,
+             "reason": lead.discard_reason, "notes": lead.discard_notes, "discarded_at": lead.discarded_at,
+             "user_id": u.id, "user_name": u.name}
+            for lead, u in q.order_by(Lead.discarded_at.desc()).limit(300)]
 
 
 @router.get("/my-cities")
@@ -225,8 +247,7 @@ def no_answer(lid: int, db: Session = Depends(get_db), user: User = Depends(get_
     tries = db.query(Contact).filter(Contact.lead_id == lid, Contact.notes == NO_ANSWER).count()
     discarded = tries >= NO_ANSWER_LIMIT
     if discarded:
-        db.query(Lead).filter(Lead.id == lid).update({"status": "discarded", "discard_reason": "no_answer"},
-                                                     synchronize_session=False)
+        db.query(Lead).filter(Lead.id == lid).update(_discarded(user, "no_answer"), synchronize_session=False)
     db.commit()
     return {"tries": tries, "discarded": discarded, "retry_on": None if discarded else retry}
 
@@ -242,9 +263,10 @@ def move_to_first_contact(lid: int, db: Session = Depends(get_db)):
 
 @router.post("/{lid}/discard", status_code=204)
 def discard(lid: int, data: DiscardIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    visible_lead(db, user, lid)
+    if visible_lead(db, user, lid).status == "new" and not (data.notes or "").strip():
+        raise HTTPException(422, "Escreva o motivo do descarte.")
     done = db.query(Lead).filter(Lead.id == lid, Lead.status.in_(QUEUE)) \
-             .update({"status": "discarded", "discard_reason": data.reason}, synchronize_session=False)
+             .update(_discarded(user, data.reason, data.notes), synchronize_session=False)
     if not done:
         raise HTTPException(409, ALREADY_HANDLED)
     db.commit()

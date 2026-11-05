@@ -204,6 +204,7 @@ class LeadCreateIn(LeadEditIn):
 
 class DiscardIn(BaseModel):
     reason: Literal["closed", "not_target", "competitor", "not_recommended", "no_answer", "other"]  # models.DISCARD_REASONS
+    notes: str | None = Field(None, max_length=500)  # required when discarding a released lead
 
 
 class ReleaseIn(BaseModel):

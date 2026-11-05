@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -31,10 +31,12 @@ def _check_target(db: Session, user: User, lead_id: int | None, customer_id: int
 
 
 @router.get("/due")
-def due(days: int = Query(0, ge=0, le=60), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Late and today's follow-ups; with `days`, also the ones coming up in the next days (Próximos)."""
+def due(days: int = Query(0, ge=0, le=60), all: bool = False,
+        db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Late and today's follow-ups; with `days`, also the ones coming up in the next days; `all`: every future one (Próximos)."""
     today = clock.today_br()
-    return due_follow_ups(db, user, today, everyone=user.role == "admin", until=today + timedelta(days=days))
+    until = date.max if all else today + timedelta(days=days)
+    return due_follow_ups(db, user, today, everyone=user.role == "admin", until=until)
 
 
 @router.get("/done")
