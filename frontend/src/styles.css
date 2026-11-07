@@ -69,7 +69,8 @@ input[type="checkbox"] { width: auto; }
 
 .brand { display: flex; align-items: center; justify-content: center; padding: 10px 8px; }
 .brand-logo { width: 100%; max-width: 100px; height: auto; object-fit: contain; }
-.sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+/* min-height 0 lets the menu shrink and scroll on short screens, so the footer (perfil, Sair) never gets cut off */
+.sidebar nav { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 .nav-link {
   color: #c3d2ef; text-decoration: none; padding: 9px 10px; border-radius: 7px;
   border-left: 3px solid transparent; display: flex; align-items: center; gap: 10px;
