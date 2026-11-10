@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock, lead_import
 from ..database import get_db
-from ..leads import (NO_ANSWER, QUEUE, REGION_ROLES, SHARED_PHONE, active_customers_by_city, check_leads_open, lead_score, city_owners, customer_cnpjs, ensure_scores, lead_out, lead_owner, lead_sellers, normalize_cnpj, rank_order,
+from ..leads import (NO_ANSWER, QUEUE, REGION_ROLES, SHARED_PHONE, active_customers_by_city, check_leads_open, lead_score, city_owners, customer_cnpjs, ensure_scores, lead_out, lead_owner, sees_pending, lead_sellers, normalize_cnpj, rank_order,
                      ranked_leads, released_this_week, visible_lead)
 from ..models import Contact, Lead, SellerCity, User
 from ..sales import _city_key
@@ -31,6 +31,8 @@ def list_leads(city: str = "", search: str = "", seller_id: int | None = None,
                limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
                db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     admin = user.role == "admin"  # only the admin may list pending leads
+    if admin and status == "pending" and not sees_pending(user):
+        raise HTTPException(403, "Só o super admin vê as lojas pendentes.")
     ensure_scores(db, clock.today_br())
     q = ranked_leads(db, user, city, search, seller_id if admin else None, status if admin else "new")
     owners = city_owners(db)
@@ -104,7 +106,8 @@ def _discarded(user: User, reason: str, notes: str | None = None) -> dict:
 @router.post("/discard")
 def discard_many(data: BulkDiscardIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     """The admin takes leads out of the queue ("Não recomendar"); the import never brings them back."""
-    done = db.query(Lead).filter(Lead.id.in_(data.ids), Lead.status.in_(QUEUE)) \
+    statuses = QUEUE if sees_pending(user) else tuple(s for s in QUEUE if s != "pending")
+    done = db.query(Lead).filter(Lead.id.in_(data.ids), Lead.status.in_(statuses)) \
              .update(_discarded(user, data.reason, data.notes), synchronize_session=False)
     db.commit()
     return {"discarded": done}
@@ -190,10 +193,10 @@ def create_lead(data: LeadCreateIn, db: Session = Depends(get_db), user: User = 
     return _out(db, lead)
 
 
-@router.put("/{lid}", dependencies=[Depends(require_admin)])
-def edit_lead(lid: int, data: LeadEditIn, db: Session = Depends(get_db)):
+@router.put("/{lid}")
+def edit_lead(lid: int, data: LeadEditIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     lead = db.get(Lead, lid)
-    if not lead:
+    if not lead or (lead.status == "pending" and not sees_pending(user)):
         raise HTTPException(404, "Lead não encontrado.")
     fields = _typed_fields(data)
     cnpj = fields.pop("cnpj")
@@ -252,9 +255,11 @@ def no_answer(lid: int, db: Session = Depends(get_db), user: User = Depends(get_
     return {"tries": tries, "discarded": discarded, "retry_on": None if discarded else retry}
 
 
-@router.post("/{lid}/first-contact", status_code=204, dependencies=[Depends(require_admin)])
-def move_to_first_contact(lid: int, db: Session = Depends(get_db)):
+@router.post("/{lid}/first-contact", status_code=204)
+def move_to_first_contact(lid: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     """Pendentes -> Primeiro contato by hand: no contact is logged, the admin only sorts the queue."""
+    if not sees_pending(user):
+        raise HTTPException(403, "Só o super admin vê as lojas pendentes.")
     if not db.query(Lead).filter(Lead.id == lid, Lead.status == "pending").update({"status": "contacted"}, synchronize_session=False):
         raise HTTPException(409, ALREADY_HANDLED)
     db.commit()

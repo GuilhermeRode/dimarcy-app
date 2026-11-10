@@ -61,6 +61,11 @@ def leads_open(db: Session, user: User) -> bool:
     return user.role == "admin" or get_app_settings(db).leads_for_sellers
 
 
+def sees_pending(user: User) -> bool:
+    """Pendentes (leads nobody has contacted yet) is the super admin's alone; other admins start at Primeiro contato."""
+    return user.role == "admin" and bool(user.super_admin)
+
+
 def check_leads_open(db: Session, user: User) -> None:
     if not leads_open(db, user):
         raise HTTPException(403, "A Prospecção está desativada para vendedores.")
@@ -70,6 +75,8 @@ def visible_lead(db: Session, user: User, lead_id: int) -> Lead:
     """A seller only reaches leads of their region; an admin reaches every lead."""
     check_leads_open(db, user)
     lead = db.get(Lead, lead_id)
+    if lead and lead.status == "pending" and not sees_pending(user):
+        lead = None
     if lead and user.role != "admin":
         if lead.status in ADMIN_QUEUE:  # awaiting admin release: invisible to sellers
             raise HTTPException(404, "Lead não encontrado.")
@@ -172,7 +179,8 @@ def _follow_up_checker(db: Session, user: User, everyone: bool):
             if lead is None or (open_only and lead.status not in QUEUE):
                 return None
             if lead.status in ADMIN_QUEUE:  # before release: every admin's
-                return (lead, who) if user.role == "admin" and who is not None else None
+                ok = user.role == "admin" and (lead.status != "pending" or sees_pending(user))
+                return (lead, who) if ok and who is not None else None
             if lead.status == "new":
                 who = lead_owner(owners, lead, who) or who
         if who is None or not who.active or (who.id != user.id and not everyone):

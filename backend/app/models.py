@@ -62,6 +62,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(160), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(20), default="seller")  # admin | seller
+    # an admin who also sees Prospecção's Pendentes; only set in the database, never through the API
+    super_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     avatar_url: Mapped[str | None] = mapped_column(String(300))
     theme: Mapped[str] = mapped_column(String(10), default="light")  # light | dark — personal UI preference

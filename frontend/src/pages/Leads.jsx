@@ -34,8 +34,9 @@ function openedText(openedAt) {
 export default function Leads() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const seesPending = isAdmin && user?.super_admin;  // Pendentes is the super admin's alone
   const nav = useNavigate();
-  const [filters, setFilters] = useState({ search: "", city: "", seller: "", tab: "pending" });
+  const [filters, setFilters] = useState({ search: "", city: "", seller: "", tab: seesPending ? "pending" : "contacted" });
   const [searchText, setSearchText] = useState("");
   const [cityText, setCityText] = useState("");
   // Searching is explicit: Enter or the magnifier apply what was typed; picking a city applies it.
@@ -255,7 +256,7 @@ export default function Leads() {
       <section className="leads-controls">
         {isAdmin && (
           <nav className="tabs-underline" aria-label="Status dos leads">
-            {[["pending", "Pendentes"], ["contacted", "Primeiro contato"], ["new", "Liberados"]].map(([k, label]) => (
+            {[...(seesPending ? [["pending", "Pendentes"]] : []), ["contacted", "Primeiro contato"], ["new", "Liberados"]].map(([k, label]) => (
               <button key={k} type="button" className={filters.tab === k ? "active" : ""}
                 onClick={() => { setNotice(""); setFilters({ ...filters, tab: k }); }}>{label}</button>
             ))}
@@ -320,7 +321,8 @@ export default function Leads() {
                     {contactText(l) && <small className="contact-due">{contactText(l)}</small>}</span>
                 </span>
                 <span>{l.phone || "—"}</span>
-                {isAdmin && <span>{l.seller_name?.split(" ")[0] || "Sem vendedor"}</span>}
+                {/* a shared city's lead names all its sellers ("Ana Souza, Bruno Lima") until released: first names of each */}
+                {isAdmin && <span>{l.seller_name?.split(", ").map((n) => n.split(" ")[0]).join(" / ") || "Sem vendedor"}</span>}
                 <span>
                   {isNewStore(l.opened_at)
                     ? <span className="cstatus cstatus-active">Nova · {openedText(l.opened_at)}</span>

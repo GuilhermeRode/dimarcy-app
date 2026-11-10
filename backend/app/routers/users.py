@@ -32,10 +32,14 @@ def create(data: UserIn, db: Session = Depends(get_db)):
 
 
 @router.put("/{uid}", response_model=UserOut)
-def update(uid: int, data: UserIn, db: Session = Depends(get_db)):
+def update(uid: int, data: UserIn, db: Session = Depends(get_db), me: User = Depends(require_admin)):
     u = db.get(User, uid)
     if not u:
         raise HTTPException(404, "User not found.")
+    if u.super_admin and u.id != me.id:  # nobody else may demote, deactivate or reset the super admin's password
+        raise HTTPException(403, "Só o próprio super admin pode alterar esse usuário.")
+    if u.super_admin and (data.role != "admin" or not data.active):
+        raise HTTPException(400, "O super admin precisa continuar administrador e ativo.")
     u.name, u.email, u.role, u.active = data.name, data.email.strip().lower(), data.role, data.active
     u.annual_goal = data.annual_goal
     if data.price_table:
