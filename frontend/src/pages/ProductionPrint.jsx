@@ -42,7 +42,9 @@ function mergeOrders(orders) {
     delivery: deliveries.length ? dateBR(deliveries[0]) : "A definir",
     batch: unique(orders.map((o) => o.batch_name)).join("  •  "),
     items: Object.values(items),
-    notes: orders.filter((o) => o.notes).map((o) => (several ? `${orderNumber(o.id)}: ${o.notes}` : o.notes)).join("\n"),
+    // grouped sheet: each note names its customer, or they all read as one
+    notes: orders.filter((o) => o.notes).map((o) => ({
+      who: several ? `${o.customer_name} (${orderNumber(o.id)})` : null, text: o.notes })),
     several,
   };
 }
@@ -63,10 +65,13 @@ export default function ProductionPrint() {
   }, [ids]);
 
   const s = useMemo(() => orders && mergeOrders(orders), [orders]);
-  const groups = useMemo(() => {
+  // One row per product; on a grouped sheet, one row per product × color, ref repeated on each
+  // (easier to read and tick off on the floor).
+  const rows = useMemo(() => {
     const g = {};
     for (const i of s?.items || []) (g[i.product_id] ||= []).push(i);
-    return Object.values(g);
+    return Object.values(g).flatMap((lines) =>
+      s.several ? unique(lines.map((l) => l.color_id)).map((c) => lines.filter((l) => l.color_id === c)) : [lines]);
   }, [s]);
 
   if (!s) return <div className="standalone-page"><div className="page"><ErrorBox msg={error} /></div></div>;
@@ -113,11 +118,11 @@ export default function ProductionPrint() {
 
       <table className="pp-table">
         <thead>
-          <tr><th>Ref.</th><th>Descrição</th><th>Cores × tamanhos</th><th className="num">Peças</th></tr>
+          <tr><th>Ref.</th><th>Descrição</th><th>{s.several ? "Cor × tamanhos" : "Cores × tamanhos"}</th><th className="num">Peças</th></tr>
         </thead>
         <tbody>
-          {groups.map((lines) => (
-            <tr key={lines[0].product_id}>
+          {rows.map((lines) => (
+            <tr key={`${lines[0].product_id}|${lines[0].color_id}`}>
               <td className="pp-ref">{lines[0].product_reference}</td>
               <td>{lines[0].product_description}</td>
               <td className="pp-colors">{colorSequence(lines)}</td>
@@ -132,7 +137,9 @@ export default function ProductionPrint() {
 
       <div className="pp-notes-box">
         <span className="pp-field-label">Observações</span>
-        {s.notes ? <p className="pp-notes-text">{s.notes}</p> : (
+        {s.notes.length ? s.notes.map((n, k) => (
+          <p key={k} className="pp-notes-text">{n.who && <strong>{n.who}: </strong>}{n.text}</p>
+        )) : (
           <>
             <div className="pp-notes-line" />
             <div className="pp-notes-line" />
