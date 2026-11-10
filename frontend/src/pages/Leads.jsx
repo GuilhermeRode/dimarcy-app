@@ -321,7 +321,8 @@ export default function Leads() {
                     {contactText(l) && <small className="contact-due">{contactText(l)}</small>}</span>
                 </span>
                 <span>{l.phone || "—"}</span>
-                {isAdmin && <span>{l.seller_name?.split(" ")[0] || "Sem vendedor"}</span>}
+                {/* a shared city's lead names all its sellers ("Ana Souza, Bruno Lima") until released: first names of each */}
+                {isAdmin && <span>{l.seller_name?.split(", ").map((n) => n.split(" ")[0]).join(" / ") || "Sem vendedor"}</span>}
                 <span>
                   {isNewStore(l.opened_at)
                     ? <span className="cstatus cstatus-active">Nova · {openedText(l.opened_at)}</span>
