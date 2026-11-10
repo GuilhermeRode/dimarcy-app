@@ -1,0 +1,9 @@
+[Unit]
+Description=Faz a cópia de segurança todo dia de madrugada (antes da importação de leads)
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

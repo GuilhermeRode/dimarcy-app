@@ -1,0 +1,10 @@
+[Unit]
+Description=Di Marcy - cópia de segurança do banco e dos arquivos
+
+[Service]
+Type=oneshot
+User=opc
+WorkingDirectory=/opt/dimarcy/backend
+ExecStart=/usr/bin/python3 scripts/backup.py
+Nice=10
+Environment=PYTHONUNBUFFERED=1

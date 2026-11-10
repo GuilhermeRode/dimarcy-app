@@ -72,6 +72,23 @@ Veja [`CLAUDE.md`](./CLAUDE.md) para essa convenção.
 - Tabela de preços por cliente (atacado/varejo)
 - Estoque e ordem de produção por referência
 
+## Cópia de segurança (backup)
+
+`scripts/backup.py` (em `backend/`, só Python 3) grava em `/opt/dimarcy/backups` um
+`backup-AAAAMMDD-HHMMSS.tar.gz` com o banco (cópia conferida, pode rodar com o app no ar), `uploads/` e
+`private/`. Mantém as 14 mais recentes (`--keep N` muda isso). Na VM:
+
+    sudo cp /opt/dimarcy/backend/deploy/dimarcy-backup.* /etc/systemd/system/
+    sudo systemctl daemon-reload && sudo systemctl enable --now dimarcy-backup.timer
+    sudo systemctl start dimarcy-backup.service && ls -lh /opt/dimarcy/backups   # testa agora
+
+**Copie para fora da VM de vez em quando**: se a VM se perder, as cópias vão junto. Do seu computador:
+
+    scp opc@SEU-SERVIDOR:/opt/dimarcy/backups/backup-*.tar.gz .
+
+Para restaurar: pare o backend, extraia o `.tar.gz` dentro de `backend/` (substitui `dimarcy.db`, `uploads/` e
+`private/`) e suba de novo.
+
 ## Importação de leads (Prospecção)
 
 `python -m app.lead_import` (em `backend/`) baixa os dados abertos de CNPJ da Receita e atualiza a tabela
