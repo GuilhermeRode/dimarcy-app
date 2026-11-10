@@ -44,6 +44,7 @@ class UserIn(UserBase):
 class UserOut(UserBase):
     id: int
     quick_quantity: bool = True  # personal preference, set in Meu perfil (not by the admin's user form)
+    super_admin: bool = False  # read-only: UserIn doesn't take it
 
 
 class CityIn(BaseModel):

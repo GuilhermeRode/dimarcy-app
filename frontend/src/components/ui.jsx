@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { PRICE_TABLES, STATUS, normalize } from "../format";
 import { fileUrl } from "../api";
 import { EyeIcon, EyeOffIcon, WarningIcon } from "./icons";
@@ -32,8 +33,9 @@ export function PhotoZoom({ src, caption, onClose }) {
   );
 }
 
+// on <body>: opened from the sticky side panel, the backdrop would otherwise stay inside it and not cover the page
 export function Modal({ title, onClose, children, wide }) {
-  return (
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal ${wide ? "modal-wide" : ""}`} role="dialog" aria-label={title}>
         <div className="modal-header">
@@ -42,7 +44,8 @@ export function Modal({ title, onClose, children, wide }) {
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -53,7 +56,7 @@ export function ConfirmDialog({ title, message, confirmLabel = "Confirmar", canc
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onCancel]);
-  return (
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
       <div className="modal confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
         <div className={`confirm-icon ${danger ? "danger" : ""}`} aria-hidden="true"><WarningIcon size={26} strokeWidth={2.2} /></div>
@@ -64,7 +67,8 @@ export function ConfirmDialog({ title, message, confirmLabel = "Confirmar", canc
           <button type="button" className={`btn ${danger ? "btn-danger" : "btn-primary"}`} onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

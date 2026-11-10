@@ -733,8 +733,34 @@ def check_sellers_flag(ctx):
     assert c.get("/api/leads", headers=a).status_code == 200
 
 
+def check_super_admin(ctx):
+    """Pendentes is the super admin's alone; another admin starts at Primeiro contato and can't touch the super admin."""
+    c, sup = ctx["c"], ctx["admin"]
+    r = c.post("/api/users", headers=sup, json={"name": "Carla", "email": "carla@t.com", "password": "admin-pass-456", "role": "admin"})
+    assert r.status_code == 201 and r.json()["super_admin"] is False, r.text
+    other = login(c, "carla@t.com", "admin-pass-456")
+    lid = add_lead("11222333000177", "Loja Pendente", status="pending")
+    assert c.get("/api/leads?status=pending", headers=sup).status_code == 200
+    assert c.get("/api/leads?status=pending", headers=other).status_code == 403
+    assert c.get("/api/leads?status=contacted", headers=other).status_code == 200
+    assert c.get(f"/api/contacts?lead_id={lid}", headers=other).status_code == 404
+    assert c.post(f"/api/leads/{lid}/first-contact", headers=other).status_code == 403
+    assert c.post("/api/leads/discard", headers=other, json={"ids": [lid], "reason": "other"}).json() == {"discarded": 0}
+    with SessionLocal() as db:
+        assert db.get(Lead, lid).status == "pending"
+        me = db.query(User).filter_by(email="admin@test.com").one()
+        me_id, body = me.id, {"name": me.name, "email": me.email, "role": "admin", "active": True}
+    assert c.put(f"/api/users/{me_id}", headers=other, json={**body, "password": "hacked-pass-123"}).status_code == 403
+    assert c.put(f"/api/users/{me_id}", headers=sup, json={**body, "role": "seller"}).status_code == 400
+    assert c.put(f"/api/users/{me_id}", headers=sup, json=body).status_code == 200
+    assert c.post(f"/api/leads/{lid}/first-contact", headers=sup).status_code == 204
+
+
 # ---- run ----
 with TestClient(app) as c:
+    with SessionLocal() as db:  # the bootstrap admin plays the super admin (set by hand in production)
+        db.query(User).filter_by(email="admin@test.com").update({"super_admin": True})
+        db.commit()
     ctx = {"c": c, "admin": login(c, "admin@test.com", "admin-pass-123")}
     for key, name in (("a", "Ana"), ("b", "Bruno")):
         r = c.post("/api/users", headers=ctx["admin"], json={
@@ -754,5 +780,6 @@ with TestClient(app) as c:
     check_edit(ctx)
     check_role_change(ctx)
     check_pending_release(ctx)
+    check_super_admin(ctx)
 
 print("test_leads OK")
