@@ -79,6 +79,16 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  // account menu (Meu perfil, Sair) above the user button; a click outside or Esc closes it
+  const [userMenu, setUserMenu] = useState(false);
+  useEffect(() => {
+    if (!userMenu) return;
+    const outside = (e) => { if (!e.target.closest(".sidebar-footer")) setUserMenu(false); };
+    const esc = (e) => { if (e.key === "Escape") setUserMenu(false); };
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", outside); document.removeEventListener("keydown", esc); };
+  }, [userMenu]);
   // Prospecção can be admin-only for now (Configurações); the API refuses it to sellers too.
   const [leadsForSellers, setLeadsForSellers] = useState(false);
   useEffect(() => {
@@ -130,14 +140,20 @@ export default function Layout() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <button className="sidebar-user" onClick={() => { closeMenu(); nav("/profile"); }}>
+          {userMenu && (
+            <div className="user-menu" role="menu">
+              <button type="button" role="menuitem" onClick={() => { setUserMenu(false); closeMenu(); nav("/profile"); }}>Meu perfil</button>
+              <button type="button" role="menuitem" className="user-menu-logout" onClick={logout}>Sair</button>
+            </div>
+          )}
+          <button className="sidebar-user" aria-haspopup="menu" aria-expanded={userMenu} onClick={() => setUserMenu((o) => !o)}>
             <Avatar url={user?.avatar_url} name={user?.name} size="sm" />
             <span>
               <span className="user-name">{user?.name}</span>
-              <span className="user-role">Meu perfil</span>
+              <span className="user-role">{user?.role === "admin" ? "Administrador" : "Vendedor"}</span>
             </span>
+            <span className="user-menu-caret" aria-hidden="true">{userMenu ? "▾" : "▴"}</span>
           </button>
-          <button className="logout-link" onClick={logout}>Sair</button>
         </div>
       </aside>
       <main className="content">
