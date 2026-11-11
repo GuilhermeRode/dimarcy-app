@@ -69,8 +69,7 @@ input[type="checkbox"] { width: auto; }
 
 .brand { display: flex; align-items: center; justify-content: center; padding: 10px 8px; }
 .brand-logo { width: 100%; max-width: 100px; height: auto; object-fit: contain; }
-/* min-height 0 lets the menu shrink and scroll on short screens, so the footer (perfil, Sair) never gets cut off */
-.sidebar nav { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.sidebar nav { display: flex; flex-direction: column; gap: 2px; }
 .nav-link {
   color: #c3d2ef; text-decoration: none; padding: 9px 10px; border-radius: 7px;
   border-left: 3px solid transparent; display: flex; align-items: center; gap: 10px;
@@ -79,7 +78,17 @@ input[type="checkbox"] { width: auto; }
 .nav-link:hover { background: rgba(255,255,255,.08); color: #fff; }
 .nav-link.active { background: rgba(255,255,255,.12); color: #fff; border-left-color: var(--teal); font-weight: 600; }
 .nav-link.active svg { opacity: 1; }
-.sidebar-footer { margin-top: auto; padding: 10px 8px 0; font-size: 0.9rem; border-top: 1px solid rgba(255,255,255,.12); }
+.sidebar-footer { margin-top: auto; padding: 10px 8px 0; font-size: 0.9rem; border-top: 1px solid rgba(255,255,255,.12); position: relative; }
+.user-menu {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 5; display: flex; flex-direction: column;
+  background: var(--surface); border-radius: 10px; padding: 6px; box-shadow: 0 10px 30px rgba(5,12,26,.35);
+}
+.user-menu button {
+  background: none; border: 0; text-align: left; font: inherit; color: var(--ink); padding: 9px 10px; border-radius: 7px; cursor: pointer;
+}
+.user-menu button:hover { background: var(--surface-2); }
+.user-menu .user-menu-logout { color: var(--danger); border-top: 1px solid var(--slate-light); border-radius: 0 0 7px 7px; margin-top: 4px; }
+.user-menu-caret { margin-left: auto; color: #9ab2dc; font-size: 0.8rem; }
 .sidebar-user {
   display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; cursor: pointer;
   padding: 6px; margin: 0 0 6px -6px; border-radius: 8px; text-align: left; font: inherit; color: inherit;
@@ -87,8 +96,6 @@ input[type="checkbox"] { width: auto; }
 .sidebar-user:hover { background: rgba(255,255,255,.08); }
 .user-name { color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-role { color: #9ab2dc; font-size: 0.78rem; display: block; }
-.logout-link { background: none; border: 0; color: #9ab2dc; padding: 0; cursor: pointer; font: inherit; }
-.logout-link:hover { color: #fff; text-decoration: underline; }
 
 .avatar {
   border-radius: 50%; object-fit: cover; flex-shrink: 0; display: block;
@@ -1421,7 +1428,6 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
   .mobile-menu-btn { width: 40px; height: 40px; }
   .hero-eye { padding: 10px; margin: -10px -6px; }
   .back-link { padding: 8px 0; margin-top: -8px; }
-  .logout-link { padding: 8px 0; }
   .password-toggle { padding: 10px; right: 2px; }
 }
 @media screen and (max-width: 600px) {
@@ -1541,3 +1547,11 @@ th[aria-sort="ascending"] .sort-arrow, th[aria-sort="descending"] .sort-arrow { 
 .followup-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .followup-who { color: var(--ink); font-weight: 600; }
 .followup-who::after { content: " · "; color: var(--muted); font-weight: 400; }
+
+/* Short windows (notebooks): a tighter sidebar so the admin's full menu and "Meu perfil" fit without scrolling */
+@media (max-height: 820px) {
+  .sidebar { padding: 14px 16px; gap: 12px; }
+  .brand { padding: 4px 8px; }
+  .brand-logo { max-width: 72px; }
+  .nav-link { padding: 6px 10px; }
+}
