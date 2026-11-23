@@ -284,6 +284,26 @@ export default function OrderForm() {
   const blocker = useBlocker(({ currentLocation, nextLocation }) =>
     unsavedRef.current && currentLocation.pathname !== nextLocation.pathname);
 
+  // New order in progress is kept on this device only (localStorage), so a closed app or a "Sair sem salvar"
+  // doesn't lose it. Nothing goes to the server, so no e-mails. Cleared on save or on "Descartar".
+  const draftKey = !id && user ? `orderDraft:${user.id}` : null;
+  const [pendingDraft, setPendingDraft] = useState(() => {
+    try { return draftKey ? JSON.parse(localStorage.getItem(draftKey)) : null; } catch { return null; }
+  });
+  const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch { /* storage off */ } };
+  useEffect(() => {
+    // While a found draft awaits Restaurar/Descartar, don't overwrite it.
+    if (!draftKey || pendingDraft || !hasUnsavedChanges) return;
+    try { localStorage.setItem(draftKey, JSON.stringify({ header, items, savedAt: Date.now() })); } catch { /* storage full/off */ }
+  }, [draftKey, pendingDraft, hasUnsavedChanges, header, items]);
+  function restoreDraft() {
+    setHeader((h) => ({ ...h, ...pendingDraft.header }));
+    setItems(pendingDraft.items || []);
+    setCustomerKey((k) => k + 1);
+    setPendingDraft(null);
+  }
+  function discardDraft() { clearDraft(); setPendingDraft(null); }
+
   // Warn before closing the window/app with an unsaved order in progress.
   useEffect(() => {
     function handler(e) {
@@ -414,6 +434,7 @@ export default function OrderForm() {
       const { data } = id ? await api.put(`/orders/${id}`, body) : await api.post("/orders", body);
       setSaved(true);
       unsavedRef.current = false;
+      if (draftKey) clearDraft();
       // Sellers don't have access to the order detail screen — send them back to their dashboard.
       // state carries the detail screen's { back } through the edit round-trip.
       nav(isAdmin ? `/orders/${data.id}` : "/", { state: location.state });
@@ -424,13 +445,33 @@ export default function OrderForm() {
     <div className="page">
       {blocker.state === "blocked" && (
         <ConfirmDialog danger title="Sair sem salvar o pedido?"
-          message="Os produtos e dados preenchidos neste pedido serão perdidos."
+          message={draftKey
+            ? "O pedido não será enviado. Ele fica guardado como rascunho neste aparelho e você pode retomá-lo em Novo pedido."
+            : "Os produtos e dados preenchidos neste pedido serão perdidos."}
           cancelLabel="Continuar no pedido" confirmLabel="Sair sem salvar"
           onCancel={() => blocker.reset()} onConfirm={() => blocker.proceed()} />
       )}
       <header className="page-header">
         <h1>{id ? `Editar pedido ${orderNumber(id)}` : "Novo pedido"}</h1>
       </header>
+
+      {pendingDraft && (
+        <div className="alert alert-info" role="status">
+          <span className="alert-dot" aria-hidden="true" />
+          <div>
+            <strong>Você tem um pedido não salvo</strong>
+            <p>
+              {[
+                customers.find((c) => c.id === Number(pendingDraft.header?.customer_id))?.name || "Sem cliente",
+                (() => { const n = (pendingDraft.items || []).reduce((s, i) => s + i.quantity, 0); return `${n} ${n === 1 ? "peça" : "peças"}`; })(),
+                pendingDraft.savedAt && new Date(pendingDraft.savedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
+              ].filter(Boolean).join(" · ")}. Ele ainda não foi enviado.
+            </p>
+            <button type="button" className="btn btn-primary" onClick={restoreDraft}>Continuar pedido</button>{" "}
+            <button type="button" className="link-btn" onClick={discardDraft}>Descartar</button>
+          </div>
+        </div>
+      )}
 
       <section className="panel form-grid form-order">
         <Field label="Cliente" span={2}>
