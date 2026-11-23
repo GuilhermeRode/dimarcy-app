@@ -258,13 +258,25 @@ export default function OrderForm() {
   const [settings, setSettings] = useState({
     allow_price_override: false, max_discount_percent: 0, retail_markup_percent: 0, price_tables: ["wholesale"],
   });
-  const [header, setHeader] = useState({
+  // New order in progress is kept on this device only (localStorage), so a closed app or a "Sair sem salvar"
+  // doesn't lose it: coming back to Novo pedido brings it back filled in. Nothing goes to the server, so no
+  // e-mails. Cleared on save or on "Descartar". Opened from a customer (?customer=) that isn't the draft's:
+  // the draft waits for Continuar/Descartar instead of replacing the customer just picked.
+  const draftKey = !id && user ? `orderDraft:${user.id}` : null;
+  const [initialDraft] = useState(() => {
+    try { return draftKey ? JSON.parse(localStorage.getItem(draftKey)) : null; } catch { return null; }
+  });
+  const draftConflicts = initialDraft && presetCustomer && Number(initialDraft.header?.customer_id) !== presetCustomer;
+  const [pendingDraft, setPendingDraft] = useState(draftConflicts ? initialDraft : null);
+  const [restoredAt, setRestoredAt] = useState(initialDraft && !draftConflicts ? initialDraft.savedAt || Date.now() : null);
+  const emptyHeader = () => ({
     customer_id: "", date: localDate(), delivery_date: "",
     status: "confirmed", payment_method: "", payment_terms: "", price_table: "", discount: 0, notes: "",
     notify_customer: true,
   });
+  const [header, setHeader] = useState(() => (restoredAt ? { ...emptyHeader(), ...initialDraft.header } : emptyHeader()));
   const [customerKey, setCustomerKey] = useState(0); // forces CustomerSearch to resync its label after a save
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(() => (restoredAt ? initialDraft.items || [] : []));
   const [productModal, setProductModal] = useState(false);
   const [modalSearch, setModalSearch] = useState("");
   const [editing, setEditing] = useState(null); // product open in the quantity grid, inside the modal
@@ -284,12 +296,6 @@ export default function OrderForm() {
   const blocker = useBlocker(({ currentLocation, nextLocation }) =>
     unsavedRef.current && currentLocation.pathname !== nextLocation.pathname);
 
-  // New order in progress is kept on this device only (localStorage), so a closed app or a "Sair sem salvar"
-  // doesn't lose it. Nothing goes to the server, so no e-mails. Cleared on save or on "Descartar".
-  const draftKey = !id && user ? `orderDraft:${user.id}` : null;
-  const [pendingDraft, setPendingDraft] = useState(() => {
-    try { return draftKey ? JSON.parse(localStorage.getItem(draftKey)) : null; } catch { return null; }
-  });
   const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch { /* storage off */ } };
   useEffect(() => {
     // While a found draft awaits Restaurar/Descartar, don't overwrite it.
@@ -300,9 +306,18 @@ export default function OrderForm() {
     setHeader((h) => ({ ...h, ...pendingDraft.header }));
     setItems(pendingDraft.items || []);
     setCustomerKey((k) => k + 1);
+    setRestoredAt(pendingDraft.savedAt || Date.now());
     setPendingDraft(null);
   }
   function discardDraft() { clearDraft(); setPendingDraft(null); }
+  function discardRestored() {
+    clearDraft();
+    setHeader({ ...emptyHeader(), customer_id: presetCustomer || "",
+      price_table: settings.price_tables.length === 1 ? settings.price_tables[0] : "" });
+    setItems([]);
+    setCustomerKey((k) => k + 1);
+    setRestoredAt(null);
+  }
 
   // Warn before closing the window/app with an unsaved order in progress.
   useEffect(() => {
@@ -446,7 +461,7 @@ export default function OrderForm() {
       {blocker.state === "blocked" && (
         <ConfirmDialog danger title="Sair sem salvar o pedido?"
           message={draftKey
-            ? "O pedido não será enviado. Ele fica guardado como rascunho neste aparelho e você pode retomá-lo em Novo pedido."
+            ? "O pedido não será enviado. Ele fica guardado neste aparelho e volta preenchido quando você abrir Novo pedido."
             : "Os produtos e dados preenchidos neste pedido serão perdidos."}
           cancelLabel="Continuar no pedido" confirmLabel="Sair sem salvar"
           onCancel={() => blocker.reset()} onConfirm={() => blocker.proceed()} />
@@ -469,6 +484,19 @@ export default function OrderForm() {
             </p>
             <button type="button" className="btn btn-primary" onClick={restoreDraft}>Continuar pedido</button>{" "}
             <button type="button" className="link-btn" onClick={discardDraft}>Descartar</button>
+          </div>
+        </div>
+      )}
+      {restoredAt && (
+        <div className="alert alert-info" role="status">
+          <span className="alert-dot" aria-hidden="true" />
+          <div>
+            <strong>Pedido não salvo recuperado</strong>
+            <p>
+              Começado em {new Date(restoredAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.
+              {" "}Confira e clique em Salvar pedido para enviar.
+            </p>
+            <button type="button" className="link-btn" onClick={discardRestored}>Descartar e começar do zero</button>
           </div>
         </div>
       )}
