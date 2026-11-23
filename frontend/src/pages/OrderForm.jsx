@@ -243,6 +243,28 @@ function CustomerSearch({ customers, value, onSelect }) {
   );
 }
 
+// A draft can be days old. Bring it up to date before showing it: today's date, a customer this seller still
+// sees, and only lines whose product/color/size can still be sold, at today's price (the server prices the
+// order from the catalog anyway, so the screen must show the same). An admin's typed price stays.
+function refreshDraft(header, items, customers, products, settings, isAdmin) {
+  const today = localDate();
+  const h = { ...header,
+    customer_id: customers.some((c) => c.id === Number(header.customer_id)) ? header.customer_id : "",
+    date: !header.date || header.date < today ? today : header.date };
+  const keepPrice = settings.allow_price_override && isAdmin;
+  const fresh = [];
+  for (const i of items || []) {
+    const p = products.find((x) => x.id === i.product_id);
+    if (!p || !p.sizes.includes(i.size) || !p.colors.some((c) => c.id === i.color_id)) continue;
+    fresh.push(keepPrice ? i : { ...i, unit_price: tablePrice(p.price, h.price_table, settings.retail_markup_percent) });
+  }
+  const notes = [];
+  if (header.customer_id && !h.customer_id) notes.push("O cliente do rascunho não está mais na sua lista; escolha de novo.");
+  if (fresh.length < (items || []).length)
+    notes.push(`${(items || []).length - fresh.length} item(ns) saíram porque o produto, a cor ou o tamanho não está mais disponível.`);
+  return { header: h, items: fresh, note: notes.join(" ") };
+}
+
 export default function OrderForm() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -302,9 +324,12 @@ export default function OrderForm() {
     if (!draftKey || pendingDraft || !hasUnsavedChanges) return;
     try { localStorage.setItem(draftKey, JSON.stringify({ header, items, savedAt: Date.now() })); } catch { /* storage full/off */ }
   }, [draftKey, pendingDraft, hasUnsavedChanges, header, items]);
+  const [draftNote, setDraftNote] = useState("");
   function restoreDraft() {
-    setHeader((h) => ({ ...h, ...pendingDraft.header }));
-    setItems(pendingDraft.items || []);
+    const r = refreshDraft(pendingDraft.header, pendingDraft.items, customers, products, settings, isAdmin);
+    setHeader({ ...emptyHeader(), ...r.header });
+    setItems(r.items);
+    setDraftNote(r.note);
     setCustomerKey((k) => k + 1);
     setRestoredAt(pendingDraft.savedAt || Date.now());
     setPendingDraft(null);
@@ -317,6 +342,7 @@ export default function OrderForm() {
     setItems([]);
     setCustomerKey((k) => k + 1);
     setRestoredAt(null);
+    setDraftNote("");
   }
 
   // Warn before closing the window/app with an unsaved order in progress.
@@ -333,21 +359,35 @@ export default function OrderForm() {
   const goBack = () => nav(-1);
 
   useEffect(() => {
-    api.get("/customers").then((r) => {
+    const customersP = api.get("/customers").then((r) => {
       setCustomers(r.data);
       // Accept the preset only if it's in the list this user may see (the server checks again on save).
       if (presetCustomer && r.data.some((c) => c.id === presetCustomer)) {
         setHeader((h) => ({ ...h, customer_id: presetCustomer }));
         setCustomerKey((k) => k + 1);
       }
+      return r.data;
     });
     // New order: only what this user may sell (admins too). Editing: the server checks against the order's seller.
-    api.get("/products", { params: { active_only: true, for_sale: !id } }).then((r) => setProducts(r.data));
-    api.get("/settings").then((r) => {
+    const productsP = api.get("/products", { params: { active_only: true, for_sale: !id } }).then((r) => {
+      setProducts(r.data);
+      return r.data;
+    });
+    const settingsP = api.get("/settings").then((r) => {
       setSettings(r.data);
       // A single table is set for them; with both, the seller must pick one ("Tipo de venda")
       if (!id && r.data.price_tables.length === 1) setHeader((h) => ({ ...h, price_table: r.data.price_tables[0] }));
+      return r.data;
     });
+    // Draft brought back on open: bring it up to date once the lists are in.
+    if (restoredAt) Promise.all([customersP, productsP, settingsP]).then(([c, p, s]) => {
+      const table = s.price_tables.length === 1 ? s.price_tables[0] : initialDraft.header?.price_table || "";
+      const r = refreshDraft({ ...initialDraft.header, price_table: table }, initialDraft.items, c, p, s, isAdmin);
+      setHeader({ ...emptyHeader(), ...r.header });
+      setItems(r.items);
+      setDraftNote(r.note);
+      setCustomerKey((k) => k + 1);
+    }).catch(() => { /* lists failed to load: the form shows its own errors; the server checks on save */ });
     if (isAdmin) api.get("/users").then((r) => setSellers(r.data));
     if (id) api.get(`/orders/${id}`).then(({ data }) => {
       setLoadedCustomerId(data.customer_id);
@@ -482,7 +522,8 @@ export default function OrderForm() {
                 pendingDraft.savedAt && new Date(pendingDraft.savedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
               ].filter(Boolean).join(" · ")}. Ele ainda não foi enviado.
             </p>
-            <button type="button" className="btn btn-primary" onClick={restoreDraft}>Continuar pedido</button>{" "}
+            <button type="button" className="btn btn-primary" onClick={restoreDraft}
+              disabled={!products.length || !customers.length}>Continuar pedido</button>{" "}
             <button type="button" className="link-btn" onClick={discardDraft}>Descartar</button>
           </div>
         </div>
@@ -496,6 +537,7 @@ export default function OrderForm() {
               Começado em {new Date(restoredAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.
               {" "}Confira e clique em Salvar pedido para enviar.
             </p>
+            {draftNote && <p><strong>{draftNote}</strong></p>}
             <button type="button" className="link-btn" onClick={discardRestored}>Descartar e começar do zero</button>
           </div>
         </div>
