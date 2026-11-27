@@ -286,7 +286,10 @@ export default function OrderForm() {
   // the draft waits for Continuar/Descartar instead of replacing the customer just picked.
   const draftKey = !id && user ? `orderDraft:${user.id}` : null;
   const [initialDraft] = useState(() => {
-    try { return draftKey ? JSON.parse(localStorage.getItem(draftKey)) : null; } catch { return null; }
+    try {
+      const d = draftKey ? JSON.parse(localStorage.getItem(draftKey)) : null;
+      return d?.header && typeof d.header === "object" ? d : null;
+    } catch { return null; }
   });
   const draftConflicts = initialDraft && presetCustomer && Number(initialDraft.header?.customer_id) !== presetCustomer;
   const [pendingDraft, setPendingDraft] = useState(draftConflicts ? initialDraft : null);
@@ -320,8 +323,10 @@ export default function OrderForm() {
 
   const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch { /* storage off */ } };
   useEffect(() => {
-    // While a found draft awaits Restaurar/Descartar, don't overwrite it.
-    if (!draftKey || pendingDraft || !hasUnsavedChanges) return;
+    // While a found draft awaits Continuar/Descartar, don't touch it. A form emptied (or a draft left with
+    // nothing after refreshDraft) drops it, so it doesn't come back on every Novo pedido.
+    if (!draftKey || pendingDraft) return;
+    if (!hasUnsavedChanges) return clearDraft();
     try { localStorage.setItem(draftKey, JSON.stringify({ header, items, savedAt: Date.now() })); } catch { /* storage full/off */ }
   }, [draftKey, pendingDraft, hasUnsavedChanges, header, items]);
   const [draftNote, setDraftNote] = useState("");
@@ -489,7 +494,8 @@ export default function OrderForm() {
       const { data } = id ? await api.put(`/orders/${id}`, body) : await api.post("/orders", body);
       setSaved(true);
       unsavedRef.current = false;
-      if (draftKey) clearDraft();
+      // A draft still waiting for Continuar/Descartar belongs to another order: keep it.
+      if (draftKey && !pendingDraft) clearDraft();
       // Sellers don't have access to the order detail screen — send them back to their dashboard.
       // state carries the detail screen's { back } through the edit round-trip.
       nav(isAdmin ? `/orders/${data.id}` : "/", { state: location.state });
@@ -534,7 +540,7 @@ export default function OrderForm() {
           <div>
             <strong>Pedido não salvo recuperado</strong>
             <p>
-              Começado em {new Date(restoredAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.
+              Última alteração em {new Date(restoredAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.
               {" "}Confira e clique em Salvar pedido para enviar.
             </p>
             {draftNote && <p><strong>{draftNote}</strong></p>}
