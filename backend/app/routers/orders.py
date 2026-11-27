@@ -27,7 +27,7 @@ def summary(o: Order) -> dict:
         "id": o.id, "date": o.date, "delivery_date": o.delivery_date, "status": o.status,
         "customer_id": o.customer_id, "customer_name": o.customer.name,
         "customer_city": o.customer.city, "customer_state": o.customer.state,
-        "seller_name": o.seller.name, "seller_avatar_url": o.seller.avatar_url, "pieces": o.pieces,
+        "seller_id": o.seller_id, "seller_name": o.seller.name, "seller_avatar_url": o.seller.avatar_url, "pieces": o.pieces,
         "gross": o.gross, "discount": float(o.discount or 0), "total": o.total, "price_table": o.price_table,
         "batch_id": o.batch_id, "batch_name": o.batch.name if o.batch else None,
     }
@@ -202,6 +202,12 @@ def update(oid: int, data: OrderIn, db: Session = Depends(get_db), user: User = 
     _check_customer(db, data.customer_id, user, complete=data.customer_id != o.customer_id)
     if user.role != "admin":
         data.status = o.status  # only the admin moves an order through its statuses
+        data.seller_id = None  # ...and hands it to another seller
+    if data.seller_id is not None and data.seller_id != o.seller_id:
+        seller = db.get(User, data.seller_id)
+        if not seller or not seller.active:
+            raise HTTPException(400, "Vendedor não encontrado.")
+        o.seller_id = seller.id
     _check_delivery(data.date or o.date, data.delivery_date)
     old_status = o.status
     old_quantities = _quantities(o.items)
