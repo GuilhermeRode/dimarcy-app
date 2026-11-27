@@ -243,6 +243,28 @@ function CustomerSearch({ customers, value, onSelect }) {
   );
 }
 
+// A draft can be days old. Bring it up to date before showing it: today's date, a customer this seller still
+// sees, and only lines whose product/color/size can still be sold, at today's price (the server prices the
+// order from the catalog anyway, so the screen must show the same). An admin's typed price stays.
+function refreshDraft(header, items, customers, products, settings, isAdmin) {
+  const today = localDate();
+  const h = { ...header,
+    customer_id: customers.some((c) => c.id === Number(header.customer_id)) ? header.customer_id : "",
+    date: !header.date || header.date < today ? today : header.date };
+  const keepPrice = settings.allow_price_override && isAdmin;
+  const fresh = [];
+  for (const i of items || []) {
+    const p = products.find((x) => x.id === i.product_id);
+    if (!p || !p.sizes.includes(i.size) || !p.colors.some((c) => c.id === i.color_id)) continue;
+    fresh.push(keepPrice ? i : { ...i, unit_price: tablePrice(p.price, h.price_table, settings.retail_markup_percent) });
+  }
+  const notes = [];
+  if (header.customer_id && !h.customer_id) notes.push("O cliente do rascunho não está mais na sua lista; escolha de novo.");
+  if (fresh.length < (items || []).length)
+    notes.push(`${(items || []).length - fresh.length} item(ns) saíram porque o produto, a cor ou o tamanho não está mais disponível.`);
+  return { header: h, items: fresh, note: notes.join(" ") };
+}
+
 export default function OrderForm() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -258,13 +280,28 @@ export default function OrderForm() {
   const [settings, setSettings] = useState({
     allow_price_override: false, max_discount_percent: 0, retail_markup_percent: 0, price_tables: ["wholesale"],
   });
-  const [header, setHeader] = useState({
+  // New order in progress is kept on this device only (localStorage), so a closed app or a "Sair sem salvar"
+  // doesn't lose it: coming back to Novo pedido brings it back filled in. Nothing goes to the server, so no
+  // e-mails. Cleared on save or on "Descartar". Opened from a customer (?customer=) that isn't the draft's:
+  // the draft waits for Continuar/Descartar instead of replacing the customer just picked.
+  const draftKey = !id && user ? `orderDraft:${user.id}` : null;
+  const [initialDraft] = useState(() => {
+    try {
+      const d = draftKey ? JSON.parse(localStorage.getItem(draftKey)) : null;
+      return d?.header && typeof d.header === "object" ? d : null;
+    } catch { return null; }
+  });
+  const draftConflicts = initialDraft && presetCustomer && Number(initialDraft.header?.customer_id) !== presetCustomer;
+  const [pendingDraft, setPendingDraft] = useState(draftConflicts ? initialDraft : null);
+  const [restoredAt, setRestoredAt] = useState(initialDraft && !draftConflicts ? initialDraft.savedAt || Date.now() : null);
+  const emptyHeader = () => ({
     customer_id: "", date: localDate(), delivery_date: "",
     status: "confirmed", payment_method: "", payment_terms: "", price_table: "", discount: 0, notes: "",
     notify_customer: true,
   });
+  const [header, setHeader] = useState(() => (restoredAt ? { ...emptyHeader(), ...initialDraft.header } : emptyHeader()));
   const [customerKey, setCustomerKey] = useState(0); // forces CustomerSearch to resync its label after a save
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(() => (restoredAt ? initialDraft.items || [] : []));
   const [productModal, setProductModal] = useState(false);
   const [modalSearch, setModalSearch] = useState("");
   const [editing, setEditing] = useState(null); // product open in the quantity grid, inside the modal
@@ -284,6 +321,35 @@ export default function OrderForm() {
   const blocker = useBlocker(({ currentLocation, nextLocation }) =>
     unsavedRef.current && currentLocation.pathname !== nextLocation.pathname);
 
+  const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch { /* storage off */ } };
+  useEffect(() => {
+    // While a found draft awaits Continuar/Descartar, don't touch it. A form emptied (or a draft left with
+    // nothing after refreshDraft) drops it, so it doesn't come back on every Novo pedido.
+    if (!draftKey || pendingDraft) return;
+    if (!hasUnsavedChanges) return clearDraft();
+    try { localStorage.setItem(draftKey, JSON.stringify({ header, items, savedAt: Date.now() })); } catch { /* storage full/off */ }
+  }, [draftKey, pendingDraft, hasUnsavedChanges, header, items]);
+  const [draftNote, setDraftNote] = useState("");
+  function restoreDraft() {
+    const r = refreshDraft(pendingDraft.header, pendingDraft.items, customers, products, settings, isAdmin);
+    setHeader({ ...emptyHeader(), ...r.header });
+    setItems(r.items);
+    setDraftNote(r.note);
+    setCustomerKey((k) => k + 1);
+    setRestoredAt(pendingDraft.savedAt || Date.now());
+    setPendingDraft(null);
+  }
+  function discardDraft() { clearDraft(); setPendingDraft(null); }
+  function discardRestored() {
+    clearDraft();
+    setHeader({ ...emptyHeader(), customer_id: presetCustomer || "",
+      price_table: settings.price_tables.length === 1 ? settings.price_tables[0] : "" });
+    setItems([]);
+    setCustomerKey((k) => k + 1);
+    setRestoredAt(null);
+    setDraftNote("");
+  }
+
   // Warn before closing the window/app with an unsaved order in progress.
   useEffect(() => {
     function handler(e) {
@@ -298,21 +364,35 @@ export default function OrderForm() {
   const goBack = () => nav(-1);
 
   useEffect(() => {
-    api.get("/customers").then((r) => {
+    const customersP = api.get("/customers").then((r) => {
       setCustomers(r.data);
       // Accept the preset only if it's in the list this user may see (the server checks again on save).
       if (presetCustomer && r.data.some((c) => c.id === presetCustomer)) {
         setHeader((h) => ({ ...h, customer_id: presetCustomer }));
         setCustomerKey((k) => k + 1);
       }
+      return r.data;
     });
     // New order: only what this user may sell (admins too). Editing: the server checks against the order's seller.
-    api.get("/products", { params: { active_only: true, for_sale: !id } }).then((r) => setProducts(r.data));
-    api.get("/settings").then((r) => {
+    const productsP = api.get("/products", { params: { active_only: true, for_sale: !id } }).then((r) => {
+      setProducts(r.data);
+      return r.data;
+    });
+    const settingsP = api.get("/settings").then((r) => {
       setSettings(r.data);
       // A single table is set for them; with both, the seller must pick one ("Tipo de venda")
       if (!id && r.data.price_tables.length === 1) setHeader((h) => ({ ...h, price_table: r.data.price_tables[0] }));
+      return r.data;
     });
+    // Draft brought back on open: bring it up to date once the lists are in.
+    if (restoredAt) Promise.all([customersP, productsP, settingsP]).then(([c, p, s]) => {
+      const table = s.price_tables.length === 1 ? s.price_tables[0] : initialDraft.header?.price_table || "";
+      const r = refreshDraft({ ...initialDraft.header, price_table: table }, initialDraft.items, c, p, s, isAdmin);
+      setHeader({ ...emptyHeader(), ...r.header });
+      setItems(r.items);
+      setDraftNote(r.note);
+      setCustomerKey((k) => k + 1);
+    }).catch(() => { /* lists failed to load: the form shows its own errors; the server checks on save */ });
     if (isAdmin) api.get("/users").then((r) => setSellers(r.data));
     if (id) api.get(`/orders/${id}`).then(({ data }) => {
       setLoadedCustomerId(data.customer_id);
@@ -414,6 +494,8 @@ export default function OrderForm() {
       const { data } = id ? await api.put(`/orders/${id}`, body) : await api.post("/orders", body);
       setSaved(true);
       unsavedRef.current = false;
+      // A draft still waiting for Continuar/Descartar belongs to another order: keep it.
+      if (draftKey && !pendingDraft) clearDraft();
       // Sellers don't have access to the order detail screen — send them back to their dashboard.
       // state carries the detail screen's { back } through the edit round-trip.
       nav(isAdmin ? `/orders/${data.id}` : "/", { state: location.state });
@@ -424,13 +506,48 @@ export default function OrderForm() {
     <div className="page">
       {blocker.state === "blocked" && (
         <ConfirmDialog danger title="Sair sem salvar o pedido?"
-          message="Os produtos e dados preenchidos neste pedido serão perdidos."
+          message={draftKey
+            ? "O pedido não será enviado. Ele fica guardado neste aparelho e volta preenchido quando você abrir Novo pedido."
+            : "Os produtos e dados preenchidos neste pedido serão perdidos."}
           cancelLabel="Continuar no pedido" confirmLabel="Sair sem salvar"
           onCancel={() => blocker.reset()} onConfirm={() => blocker.proceed()} />
       )}
       <header className="page-header">
         <h1>{id ? `Editar pedido ${orderNumber(id)}` : "Novo pedido"}</h1>
       </header>
+
+      {pendingDraft && (
+        <div className="alert alert-info" role="status">
+          <span className="alert-dot" aria-hidden="true" />
+          <div>
+            <strong>Você tem um pedido não salvo</strong>
+            <p>
+              {[
+                customers.find((c) => c.id === Number(pendingDraft.header?.customer_id))?.name || "Sem cliente",
+                (() => { const n = (pendingDraft.items || []).reduce((s, i) => s + i.quantity, 0); return `${n} ${n === 1 ? "peça" : "peças"}`; })(),
+                pendingDraft.savedAt && new Date(pendingDraft.savedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
+              ].filter(Boolean).join(" · ")}. Ele ainda não foi enviado.
+            </p>
+            <button type="button" className="btn btn-primary" onClick={restoreDraft}
+              disabled={!products.length || !customers.length}>Continuar pedido</button>{" "}
+            <button type="button" className="link-btn" onClick={discardDraft}>Descartar</button>
+          </div>
+        </div>
+      )}
+      {restoredAt && (
+        <div className="alert alert-info" role="status">
+          <span className="alert-dot" aria-hidden="true" />
+          <div>
+            <strong>Pedido não salvo recuperado</strong>
+            <p>
+              Última alteração em {new Date(restoredAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.
+              {" "}Confira e clique em Salvar pedido para enviar.
+            </p>
+            {draftNote && <p><strong>{draftNote}</strong></p>}
+            <button type="button" className="link-btn" onClick={discardRestored}>Descartar e começar do zero</button>
+          </div>
+        </div>
+      )}
 
       <section className="panel form-grid form-order">
         <Field label="Cliente" span={2}>
