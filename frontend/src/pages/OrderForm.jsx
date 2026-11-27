@@ -405,7 +405,7 @@ export default function OrderForm() {
           const g = data.items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
           return g ? Math.round(data.discount / g * 10000) / 100 : 0;
         })(),
-        notes: data.notes || "", notify_customer: data.notify_customer !== false,
+        notes: data.notes || "", notify_customer: data.notify_customer !== false, seller_id: data.seller_id,
       });
       setItems(data.items);
     });
@@ -572,6 +572,13 @@ export default function OrderForm() {
         <Field label="Data de entrega">
           <input type="date" required min={header.date || undefined} value={header.delivery_date} onChange={(e) => setHeader({ ...header, delivery_date: e.target.value })} />
         </Field>
+        {id && isAdmin && header.seller_id && (
+          <Field label="Vendedor">
+            <select value={header.seller_id} onChange={(e) => setHeader({ ...header, seller_id: Number(e.target.value) })}>
+              {sellers.filter((s) => s.active || s.id === header.seller_id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="Forma de pagamento">
           <select required value={header.payment_method} onChange={(e) => setHeader({ ...header, payment_method: e.target.value })}>
             <option value="">Selecione</option>

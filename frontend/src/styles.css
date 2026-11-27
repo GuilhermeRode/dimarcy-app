@@ -74,7 +74,7 @@ input[type="checkbox"] { width: auto; }
   color: #c3d2ef; text-decoration: none; padding: 9px 10px; border-radius: 7px;
   border-left: 3px solid transparent; display: flex; align-items: center; gap: 10px;
 }
-.nav-link svg { flex-shrink: 0; opacity: .85; }
+.nav-link svg { flex-shrink: 0; opacity: .85; width: 21px; height: 21px; }
 .nav-link:hover { background: rgba(255,255,255,.08); color: #fff; }
 .nav-link.active { background: rgba(255,255,255,.12); color: #fff; border-left-color: var(--teal); font-weight: 600; }
 .nav-link.active svg { opacity: 1; }

@@ -301,6 +301,7 @@ class OrderIn(BaseModel):
     discount: float = Field(default=0, ge=0)
     notes: str | None = None
     notify_customer: bool | None = None  # None = on for a new order, kept on an edit (older cached apps)
+    seller_id: int | None = None  # admin editing an order may hand it to another seller; None = keep
     items: list[OrderItemIn] = Field(min_length=1)
 
 

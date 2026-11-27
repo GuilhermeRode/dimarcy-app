@@ -110,6 +110,12 @@ with TestClient(app) as c:
     c.put(f"/api/orders/{oB}", headers=B, json={**edit, "notify_customer": False})
     c.put(f"/api/orders/{oB}", headers=B, json=edit)
     assert c.get(f"/api/orders/{oB}", headers=B).json()["notify_customer"] is False
+    # only the admin hands an order to another seller; a seller's seller_id is ignored
+    c.put(f"/api/orders/{oB}", headers=B, json={**edit, "seller_id": ids["a"]})
+    assert c.get(f"/api/orders/{oB}", headers=B).json()["seller_id"] == ids["b"]
+    assert c.put(f"/api/orders/{oB}", headers=admin, json={**edit, "seller_id": 9999}).status_code == 400
+    assert c.put(f"/api/orders/{o_admin}", headers=admin, json={**edit, "customer_id": cA["id"], "seller_id": ids["a"]}).json()["seller_id"] == ids["a"]
+    assert c.get(f"/api/orders/{o_admin}", headers=A).status_code == 200  # Ana now sees it
     assert c.put(f"/api/orders/{oB}", headers=B, json={**edit, "customer_id": cA["id"]}).status_code == 400
     from datetime import datetime, timezone  # noqa: E402
     from app.database import SessionLocal  # noqa: E402
